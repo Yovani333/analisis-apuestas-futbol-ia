@@ -1,98 +1,131 @@
 # Análisis de Apuestas de Fútbol con IA
 
-Dashboard web responsive para explorar partidos, revisar la cobertura de datos y preparar análisis deportivos asistidos por IA con criterios de calidad explícitos.
+Dashboard full-stack para consultar partidos de cinco ligas permitidas, revisar calidad de datos y generar análisis prudentes con API-Football y OpenAI.
 
-> **Estado:** prototipo frontend profesional con datos completamente sintéticos. No consulta API-Football, no llama a OpenAI y no representa partidos reales.
+## Estado actual
 
-## Funcionalidad actual
+El proyecto incluye un backend seguro y dos modos:
 
-- Selector limitado a La Liga, Superliga China, Bundesliga, Primeira Liga y Ligue 1.
-- Navegación superior con Dashboard y accesos preparados para análisis guardados, alertas y cuenta.
-- Búsqueda simulada por liga, rango de fechas y estado.
-- Selección visual de partido y revisión de nueve categorías de cobertura.
-- Estados `Disponible`, `Necesita revisión`, `No disponible`, `Completo` y `Procesando`.
-- Generación asíncrona de un análisis JSON simulado por partido.
-- Separación entre datos mock, presentación y capa de servicios.
-- Diseño accesible y responsive para escritorio, tablet y móvil.
-- Valores faltantes conservados como ausentes; las probabilidades se mantienen en `null`.
+- `mock`: funciona sin claves con escenarios completamente sintéticos.
+- `live`: consulta API-Football desde el servidor y utiliza OpenAI para análisis JSON estructurado.
+
+Las claves nunca se envían al navegador. El modo inicial es `mock`.
+
+## Ligas permitidas
+
+- La Liga — España
+- Superliga China — China
+- Bundesliga — Alemania
+- Primeira Liga — Portugal
+- Ligue 1 — Francia
+
+Los IDs fueron verificados contra API-Football el 19 de junio de 2026 y están documentados en la configuración para ahorrar solicitudes del plan gratuito. Deben revalidarse si el proveedor cambia su catálogo. Las temporadas automáticas sí consultan metadatos actuales.
 
 ## Tecnologías
 
-HTML5 semántico, CSS moderno y JavaScript ES Modules, sin dependencias ni proceso de compilación.
-
-## Ejecutar localmente
-
-Los módulos JavaScript requieren servir la carpeta mediante HTTP. Por ejemplo:
-
-```bash
-python -m http.server 8000
-```
-
-Después abre `http://localhost:8000`. Abrir `index.html` directamente con `file://` puede bloquear los módulos según el navegador.
+- HTML, CSS y JavaScript ES Modules.
+- Node.js y Express.
+- API-Football mediante llamadas exclusivas desde el backend.
+- SDK oficial de OpenAI y Responses API con salida estructurada mediante Zod.
+- Helmet, límites de solicitudes, validación de parámetros, timeouts y caché en memoria.
 
 ## Estructura
 
 ```text
-/
-├── index.html       # Estructura semántica del dashboard
-├── styles.css       # Sistema visual y breakpoints responsive
-├── app.js           # Estado, eventos y renderizado seguro
-├── mock-data.js     # Ligas permitidas y escenarios sintéticos
-├── services.js      # Adaptador mock y contrato del backend futuro
-├── .env.example     # Nombres de variables del futuro servidor
-└── README.md
+public/                  Frontend
+server/
+├── config/              Entorno y ligas permitidas
+├── middleware/          Validación y errores
+├── routes/              Rutas /api
+├── schemas/             Contrato estructurado del análisis
+├── services/            API-Football y OpenAI
+├── app.js               Configuración de Express
+└── server.js            Inicio del servidor
+test/                    Pruebas automáticas
+docs/                    Contrato JSON de referencia
 ```
 
-## Cómo funciona la simulación
+## Instalación
 
-Los fixtures usan clubes ficticios y se etiquetan como escenarios sintéticos. `services.js` aplica una latencia artificial, filtra esos fixtures y genera la misma forma de respuesta que consumirá el frontend en producción. La simulación no calcula cuotas, probabilidades ni resultados. Si falta cualquier categoría, el estado es `Necesita revisión`.
+```powershell
+npm install
+Copy-Item .env.example .env
+npm start
+```
 
-## Integración futura con API-Football
+Abre [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
-El navegador debe comunicarse únicamente con rutas propias bajo `/api`. El backend será responsable de:
+Para desarrollo con reinicio automático:
 
-1. Validar liga, temporada, fechas, estado e identificadores.
-2. Consultar fixtures, detalle, standings, estadísticas, head to head, lesiones, sidelined/sanciones, alineaciones y cuotas.
-3. Normalizar respuestas, conservar valores ausentes y registrar frescura/procedencia.
-4. Aplicar caché, límites de uso, timeouts y manejo de errores.
-5. Entregar al frontend solo datos necesarios; nunca `API_FOOTBALL_KEY`.
+```powershell
+npm run dev
+```
 
-Los IDs de liga están intencionalmente en `null`. Deben verificarse contra API-Football al implementar el backend; no se deben asumir IDs definitivos ni aceptar ligas fuera de la lista permitida.
+## Configuración
 
-## Integración futura con OpenAI
-
-El backend construirá el input exclusivamente con el objeto normalizado de API-Football. Debe usar salida estructurada con el contrato documentado en [docs/analysis-contract.json](docs/analysis-contract.json), validar el JSON antes de devolverlo y rechazar cualquier afirmación que no tenga un dato fuente.
-
-Prioridad del análisis: cuotas y valor esperado; xG/xGA; localía; ausencias y alineaciones; forma ajustada; motivación; fatiga; matchup; árbitro/clima; y head to head solo como señal secundaria.
-
-Reglas de calidad:
-
-- No completar lesiones, sanciones, alineaciones, cuotas, estadísticas, noticias, H2H ni jugadores ausentes.
-- Usar `null` cuando no haya base responsable para una probabilidad.
-- Separar datos confirmados, faltantes, inferencias y riesgos.
-- Marcar `Necesita revisión` ante faltantes importantes.
-- No enviar secretos, respuestas internas del proveedor ni trazas al navegador.
-
-## Variables de entorno futuras
-
-Copia los nombres desde `.env.example` solo cuando exista un backend:
+`.env.example` contiene solamente nombres y valores seguros:
 
 ```dotenv
 API_FOOTBALL_KEY=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.5
+DATA_MODE=mock
+PORT=3000
+API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
 ```
 
-No crees ni publiques un `.env` con secretos. El `.gitignore` bloquea archivos de entorno excepto el ejemplo.
+Para activar datos reales, completa un `.env` local y cambia `DATA_MODE=live`. Confirma que `OPENAI_MODEL` sea un identificador disponible en tu proyecto de OpenAI.
 
-## Próximos pasos
+La interfaz incluye temporadas 2022–2024 porque son las habilitadas por el plan gratuito detectado durante la integración. Planes con cobertura actual pueden usar la opción automática.
 
-1. Crear el backend y sus validaciones.
-2. Verificar los IDs y disponibilidad real de endpoints según el plan de API-Football.
-3. Añadir caché y observabilidad de calidad/frescura.
-4. Implementar salida estructurada y validación de esquema para OpenAI.
-5. Incorporar pruebas unitarias, integración y end-to-end.
+Nunca publiques `.env`, claves, respuestas internas del proveedor ni registros con secretos.
 
-## Apuesta responsable
+## Rutas principales
 
-Este proyecto es únicamente informativo. Ningún análisis garantiza resultados ni ganancias. No apuestes dinero que no puedas permitirte perder y utiliza límites de tiempo y gasto.
+```text
+GET  /api/health
+GET  /api/leagues
+GET  /api/fixtures
+GET  /api/fixtures/:fixtureId
+GET  /api/fixtures/:fixtureId/statistics
+GET  /api/fixtures/:fixtureId/standings
+GET  /api/fixtures/:fixtureId/head-to-head
+GET  /api/fixtures/:fixtureId/injuries
+GET  /api/fixtures/:fixtureId/lineups
+GET  /api/fixtures/:fixtureId/odds
+GET  /api/head-to-head?fixtureId=123
+POST /api/fixtures/:fixtureId/analysis
+```
+
+`sidelined` responde como no verificado hasta confirmar que el plan contratado ofrece cobertura adecuada. No se inventa ni se sustituye esa información.
+
+## Flujo de datos
+
+1. El frontend consulta rutas propias bajo `/api`.
+2. El backend valida liga, fechas, temporada, estado e ID de fixture.
+3. API-Football entrega los datos deportivos.
+4. El backend conserva vacíos como `No disponible` y agrega procedencia y fecha de consulta.
+5. Solo ese dataset se envía a OpenAI.
+6. Zod valida el JSON antes de responder al navegador.
+
+En esta fase se muestran como máximo cinco fixtures por liga y búsqueda para proteger el rendimiento y el cupo del proveedor.
+
+Si falta información importante, el análisis debe indicar `Necesita revisión`. Las probabilidades permanecen en `null` cuando no pueden estimarse responsablemente.
+
+## Pruebas
+
+```powershell
+npm test
+```
+
+Las pruebas verifican ligas permitidas, rangos de fechas e identificadores de fixture.
+
+## Seguridad y uso responsable
+
+- El frontend no recibe claves API.
+- Las consultas se limitan por frecuencia y tamaño.
+- Solo se permiten las cinco ligas configuradas.
+- Las llamadas externas tienen timeout y caché temporal.
+- El sistema no debe prometer resultados ni ganancias.
+
+Este proyecto es únicamente informativo. Ningún análisis garantiza resultados ni ganancias. Apuesta con responsabilidad.

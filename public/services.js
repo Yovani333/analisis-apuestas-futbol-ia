@@ -56,12 +56,52 @@ export const footballDataService = {
 
   async generateMockAnalysis(fixture) {
     await wait(900);
-    return buildMockAnalysis(fixture);
+    return { ...buildMockAnalysis(fixture), _source: "mock" };
+  },
+
+  async getRuntime() {
+    try {
+      return await requestJson("/api/health");
+    } catch {
+      return { mode: "mock", liveReady: false };
+    }
+  },
+
+  async searchFixtures(filters) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return this.searchMockFixtures(filters);
+    const payload = await requestJson(`/api/fixtures?${new URLSearchParams({
+      leagues: filters.leagues.join(","), season: filters.season || "auto",
+      dateFrom: filters.dateFrom, dateTo: filters.dateTo, status: filters.status
+    })}`);
+    return payload.fixtures.map((fixture) => ({ ...fixture, dataSource: "api-football" }));
+  },
+
+  async getFixtureData(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return fixture;
+    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}`);
+    return { ...fixture, ...payload.fixture, dataSource: "api-football" };
+  },
+
+  async generateAnalysis(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return this.generateMockAnalysis(fixture);
+    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/analysis`, { method: "POST" });
+    return { ...payload.analysis, _source: "openai" };
   }
 };
 
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...options.headers } });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error?.message || "No fue posible completar la solicitud.");
+  return payload;
+}
+
 // Contrato previsto para la siguiente fase. Estas rutas pertenecen a un backend propio.
 export const backendApi = {
+  health: () => fetch("/api/health"),
   allowedLeagues: () => fetch("/api/leagues"),
   fixtures: (query) => fetch(`/api/fixtures?${new URLSearchParams(query)}`),
   fixture: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}`),

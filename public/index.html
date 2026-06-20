@@ -36,8 +36,8 @@
     </header>
 
     <div class="demo-strip">
-      <span class="status-badge status-badge--demo">Modo demostración</span>
-      <span>Todos los equipos, partidos y datos mostrados son sintéticos.</span>
+      <span id="runtime-mode" class="status-badge status-badge--demo">Modo demostración</span>
+      <span id="runtime-description">Todos los equipos, partidos y datos mostrados son sintéticos.</span>
     </div>
     <div id="app-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
 
@@ -62,18 +62,21 @@
           <div class="field">
             <label for="season">Temporada</label>
             <select id="season" name="season">
-              <option value="demo">Temporada de demostración</option>
+              <option value="2024">2024/2025</option>
+              <option value="2023">2023/2024</option>
+              <option value="2022">2022/2023</option>
+              <option value="auto">Automática (requiere cobertura actual)</option>
             </select>
           </div>
 
           <div class="date-fields">
             <div class="field">
               <label for="date-from">Desde</label>
-              <input id="date-from" name="dateFrom" type="date" value="2026-07-01" />
+              <input id="date-from" name="dateFrom" type="date" value="2025-05-01" />
             </div>
             <div class="field">
               <label for="date-to">Hasta</label>
-              <input id="date-to" name="dateTo" type="date" value="2026-07-31" />
+              <input id="date-to" name="dateTo" type="date" value="2025-05-31" />
             </div>
           </div>
 

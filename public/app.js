@@ -15,6 +15,7 @@ const elements = {
   leagueCount: document.querySelector("#league-count"),
   dateFrom: document.querySelector("#date-from"),
   dateTo: document.querySelector("#date-to"),
+  season: document.querySelector("#season"),
   status: document.querySelector("#match-status"),
   filterError: document.querySelector("#filter-error"),
   searchFeedback: document.querySelector("#search-feedback"),
@@ -109,7 +110,7 @@ function renderMatches() {
   `).join("") + `
     <div class="matches-footer">
       <span>Mostrando ${state.fixtures.length} de ${state.fixtures.length} partidos</span>
-      <span>Fuente: demostración sintética</span>
+      <span>Fuente: ${state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "demostración sintética"}</span>
     </div>`;
 }
 
@@ -126,7 +127,8 @@ function renderFixtureData() {
   elements.dataStatus.className = `status-badge status-badge--${statusClass(overall)}`;
   elements.dataStatus.textContent = overall;
   elements.selectedSummary.className = "selected-summary";
-  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · escenario sintético</span>`;
+  const sourceLabel = fixture.dataSource === "api-football" ? "API-Football" : "escenario sintético";
+  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${sourceLabel}</span>`;
   elements.dataGrid.innerHTML = DATA_CATEGORIES.map((category) => `
     <article class="data-card">
       <h3>${escapeHtml(category.label)}</h3>
@@ -169,7 +171,7 @@ function renderAnalysis(analysis) {
         <p><strong>Parlay:</strong> ${escapeHtml(analysis.apto_para_parlay.respuesta)}. ${escapeHtml(analysis.apto_para_parlay.razonamiento)}</p>
       </section>
     </div>
-    <p class="analysis-warning">${escapeHtml(analysis.advertencia)} Esta salida usa datos sintéticos y no debe utilizarse para apostar.</p>
+    <p class="analysis-warning">${escapeHtml(analysis.advertencia)}${analysis._source === "mock" ? " Esta salida usa datos sintéticos y no debe utilizarse para apostar." : ""}</p>
   `;
 }
 
@@ -183,7 +185,17 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
   if (state.isAnalyzing) return;
   state.selectedFixtureId = fixtureId;
   renderMatches();
-  renderFixtureData();
+  const fixtureIndex = state.fixtures.findIndex((fixture) => fixture.id === fixtureId);
+
+  try {
+    const detailedFixture = await footballDataService.getFixtureData(selectedFixture());
+    if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
+    renderFixtureData();
+  } catch (error) {
+    elements.filterError.hidden = false;
+    elements.filterError.textContent = error.message;
+    return;
+  }
 
   if (!generateAnalysis) {
     const saved = state.analysisByFixture.get(fixtureId);
@@ -197,9 +209,13 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
   elements.analysisContent.innerHTML = '<div class="empty-state"><div class="loading-spinner" aria-hidden="true"></div><h3>Evaluando cobertura</h3><p>Generando una respuesta JSON simulada sin completar datos ausentes…</p></div>';
 
   try {
-    const analysis = await footballDataService.generateMockAnalysis(selectedFixture());
+    const analysis = await footballDataService.generateAnalysis(selectedFixture());
     state.analysisByFixture.set(fixtureId, analysis);
     renderAnalysis(analysis);
+  } catch (error) {
+    elements.analysisStatus.className = "status-badge status-badge--review";
+    elements.analysisStatus.textContent = "Necesita revisión";
+    elements.analysisContent.innerHTML = `<div class="empty-state"><h3>No se pudo generar el análisis</h3><p>${escapeHtml(error.message)}</p></div>`;
   } finally {
     state.isAnalyzing = false;
   }
@@ -221,11 +237,12 @@ async function searchFixtures(event) {
   state.isSearching = true;
   const submitButton = elements.form.querySelector('button[type="submit"]');
   submitButton.disabled = true;
-  elements.searchFeedback.textContent = "Buscando escenarios sintéticos…";
+  elements.searchFeedback.textContent = "Buscando partidos…";
 
   try {
-    state.fixtures = await footballDataService.searchMockFixtures({
+    state.fixtures = await footballDataService.searchFixtures({
       leagues: selectedLeagueSlugs(),
+      season: elements.season.value,
       dateFrom: elements.dateFrom.value,
       dateTo: elements.dateTo.value,
       status: elements.status.value
@@ -233,13 +250,19 @@ async function searchFixtures(event) {
     if (!state.fixtures.some((fixture) => fixture.id === state.selectedFixtureId)) {
       state.selectedFixtureId = state.fixtures[0]?.id || null;
     }
-    elements.searchFeedback.textContent = `Búsqueda simulada completada · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
+    const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
+    elements.searchFeedback.textContent = `Búsqueda ${source} completada · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
     renderMatches();
     if (state.selectedFixtureId) {
       renderFixtureData();
       const saved = state.analysisByFixture.get(state.selectedFixtureId);
       saved ? renderAnalysis(saved) : showAnalysisEmpty();
     }
+  } catch (error) {
+    elements.filterError.hidden = false;
+    elements.filterError.textContent = error.message;
+    state.fixtures = [];
+    renderMatches();
   } finally {
     state.isSearching = false;
     submitButton.disabled = false;
@@ -258,7 +281,7 @@ elements.matchesList.addEventListener("click", (event) => {
 document.querySelectorAll("[data-nav-label]").forEach((button) => {
   button.addEventListener("click", () => {
     const notice = document.querySelector("#app-notice");
-    notice.textContent = `${button.dataset.navLabel} estará disponible cuando se conecte el backend en una fase posterior.`;
+    notice.textContent = `${button.dataset.navLabel} es un módulo preparado, pero todavía no está habilitado.`;
     notice.hidden = false;
     window.clearTimeout(Number(notice.dataset.timeoutId || 0));
     const timeoutId = window.setTimeout(() => { notice.hidden = true; }, 3500);
@@ -266,6 +289,17 @@ document.querySelectorAll("[data-nav-label]").forEach((button) => {
   });
 });
 
-renderLeagueOptions();
-updateLeagueCount();
-elements.form.requestSubmit();
+async function initializeApp() {
+  renderLeagueOptions();
+  updateLeagueCount();
+  const runtime = await footballDataService.getRuntime();
+  if (runtime.mode === "live") {
+    document.querySelector("#runtime-mode").textContent = runtime.liveReady ? "Datos reales" : "Configuración pendiente";
+    document.querySelector("#runtime-description").textContent = runtime.liveReady
+      ? "API-Football y OpenAI están configurados en el backend."
+      : `Faltan variables del servidor: ${(runtime.missing || []).join(", ")}.`;
+  }
+  elements.form.requestSubmit();
+}
+
+initializeApp();
