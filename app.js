@@ -1,346 +1,271 @@
-const mockMatches = [
-  {
-    id: 1,
-    league: "La Liga (España)",
-    home: "Real Madrid",
-    away: "Sevilla",
-    date: "18/05/2025",
-    time: "21:00",
-    status: "Programado",
-    dataStatus: {
-      form: "Disponible",
-      injuries: "Necesita revisión",
-      lineups: "Disponible",
-      odds: "Disponible",
-      standings: "Disponible",
-      h2h: "Disponible"
-    },
-    analysis: {
-      summary:
-        "Real Madrid llega con mejor contexto jugando como local. Sevilla muestra irregularidad fuera de casa, por lo que el análisis favorece una lectura prudente hacia el local.",
-      suggestedMarkets: [
-        { market: "Doble oportunidad local (1X)", confidence: "Media" },
-        { market: "Under 3.5 goles", confidence: "Media" },
-        { market: "Ambos anotan: No", confidence: "Media-baja" }
-      ],
-      risks: [
-        "Posible rotación de jugadores por calendario.",
-        "Sevilla puede cerrarse y buscar el empate."
-      ],
-      prediction: "Victoria o empate del local con menos de 3.5 goles.",
-      parlay: "Sí"
-    }
-  },
-  {
-    id: 2,
-    league: "Bundesliga (Alemania)",
-    home: "Bayern München",
-    away: "Leverkusen",
-    date: "17/05/2025",
-    time: "15:30",
-    status: "Programado",
-    dataStatus: {
-      form: "Disponible",
-      injuries: "Disponible",
-      lineups: "Necesita revisión",
-      odds: "Disponible",
-      standings: "Disponible",
-      h2h: "Disponible"
-    },
-    analysis: {
-      summary:
-        "Partido de alta exigencia entre dos equipos fuertes. El riesgo principal está en la igualdad competitiva y en posibles cambios de alineación.",
-      suggestedMarkets: [
-        { market: "Over 1.5 goles", confidence: "Media" },
-        { market: "Ambos anotan: Sí", confidence: "Media" },
-        { market: "Evitar 1X2 directo", confidence: "Media-baja" }
-      ],
-      risks: [
-        "Partido parejo con alta varianza.",
-        "La alineación debe confirmarse antes de tomar decisión."
-      ],
-      prediction: "Partido con goles, pero sin favorito claro con los datos actuales.",
-      parlay: "Solo con baja exposición"
-    }
-  },
-  {
-    id: 3,
-    league: "Ligue 1 (Francia)",
-    home: "PSG",
-    away: "Marseille",
-    date: "18/05/2025",
-    time: "20:45",
-    status: "Programado",
-    dataStatus: {
-      form: "Disponible",
-      injuries: "Necesita revisión",
-      lineups: "Necesita revisión",
-      odds: "Disponible",
-      standings: "Disponible",
-      h2h: "Disponible"
-    },
-    analysis: {
-      summary:
-        "Clásico francés con alta carga emocional. Aunque PSG puede partir con ventaja, el mercado puede estar afectado por narrativa y popularidad.",
-      suggestedMarkets: [
-        { market: "PSG empate no acción", confidence: "Media" },
-        { market: "Más de 3.5 tarjetas", confidence: "Media" },
-        { market: "Evitar cuota baja del favorito", confidence: "Media-baja" }
-      ],
-      risks: [
-        "Partido de rivalidad con alta posibilidad de tarjetas.",
-        "Faltan alineaciones y reporte completo de ausencias."
-      ],
-      prediction: "Ligera ventaja local, pero con cautela por contexto de clásico.",
-      parlay: "No"
-    }
-  },
-  {
-    id: 4,
-    league: "Primeira Liga (Portugal)",
-    home: "Porto",
-    away: "Braga",
-    date: "18/05/2025",
-    time: "18:00",
-    status: "Programado",
-    dataStatus: {
-      form: "Disponible",
-      injuries: "Disponible",
-      lineups: "Disponible",
-      odds: "Disponible",
-      standings: "Disponible",
-      h2h: "Disponible"
-    },
-    analysis: {
-      summary:
-        "Porto tiene ventaja contextual como local, pero Braga suele competir bien ante equipos grandes. El análisis sugiere evitar exceso de confianza.",
-      suggestedMarkets: [
-        { market: "Doble oportunidad Porto o empate", confidence: "Media" },
-        { market: "Under 3.5 goles", confidence: "Media" },
-        { market: "Porto empate no acción", confidence: "Media-baja" }
-      ],
-      risks: [
-        "Braga puede competir tácticamente.",
-        "El partido puede cerrarse si el marcador tarda en abrirse."
-      ],
-      prediction: "Porto con ligera ventaja, pero partido potencialmente cerrado.",
-      parlay: "Solo con baja exposición"
-    }
-  },
-  {
-    id: 5,
-    league: "Superliga China",
-    home: "Shanghai Port",
-    away: "Beijing Guoan",
-    date: "19/05/2025",
-    time: "13:35",
-    status: "Programado",
-    dataStatus: {
-      form: "Disponible",
-      injuries: "No disponible",
-      lineups: "No disponible",
-      odds: "Disponible",
-      standings: "Disponible",
-      h2h: "Disponible"
-    },
-    analysis: {
-      summary:
-        "Shanghai Port puede tener ventaja como local, pero faltan datos importantes de lesiones y alineaciones. El análisis requiere revisión antes de apostar.",
-      suggestedMarkets: [
-        { market: "Over 1.5 goles", confidence: "Media-baja" },
-        { market: "Shanghai Port empate no acción", confidence: "Media-baja" },
-        { market: "Evitar parlay fuerte", confidence: "Baja" }
-      ],
-      risks: [
-        "Faltan lesiones y alineaciones.",
-        "Cobertura de datos limitada para análisis profundo."
-      ],
-      prediction: "Ventaja local moderada, pero con baja confianza por falta de datos.",
-      parlay: "No"
-    }
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js";
+import { footballDataService } from "./services.js";
+
+const state = {
+  fixtures: [],
+  selectedFixtureId: null,
+  analysisByFixture: new Map(),
+  isSearching: false,
+  isAnalyzing: false
+};
+
+const elements = {
+  form: document.querySelector("#filters-form"),
+  leagueOptions: document.querySelector("#league-options"),
+  leagueCount: document.querySelector("#league-count"),
+  dateFrom: document.querySelector("#date-from"),
+  dateTo: document.querySelector("#date-to"),
+  status: document.querySelector("#match-status"),
+  filterError: document.querySelector("#filter-error"),
+  searchFeedback: document.querySelector("#search-feedback"),
+  matchCount: document.querySelector("#match-count"),
+  matchesList: document.querySelector("#matches-list"),
+  selectedSummary: document.querySelector("#selected-match-summary"),
+  dataStatus: document.querySelector("#data-overall-status"),
+  dataGrid: document.querySelector("#data-grid"),
+  analysisStatus: document.querySelector("#analysis-status"),
+  analysisContent: document.querySelector("#analysis-content")
+};
+
+function escapeHtml(value = "") {
+  return String(value).replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+  })[character]);
+}
+
+function statusClass(status) {
+  return {
+    "Disponible": "available",
+    "Programado": "available",
+    "Completo": "complete",
+    "Necesita revisión": "review",
+    "Procesando": "processing",
+    "No disponible": "unavailable"
+  }[status] || "unavailable";
+}
+
+function statusBadge(status) {
+  return `<span class="status-badge status-badge--${statusClass(status)}">${escapeHtml(status)}</span>`;
+}
+
+function renderLeagueOptions() {
+  elements.leagueOptions.innerHTML = ALLOWED_LEAGUES.map((league) => `
+    <label class="checkbox-row">
+      <input type="checkbox" name="league" value="${escapeHtml(league.slug)}" checked />
+      <span>${escapeHtml(league.name)} — ${escapeHtml(league.country)}</span>
+    </label>
+  `).join("");
+}
+
+function selectedLeagueSlugs() {
+  return [...elements.form.querySelectorAll('input[name="league"]:checked')].map((input) => input.value);
+}
+
+function updateLeagueCount() {
+  elements.leagueCount.textContent = `${selectedLeagueSlugs().length} de ${ALLOWED_LEAGUES.length}`;
+}
+
+function formatDate(isoDate) {
+  return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${isoDate}T00:00:00Z`));
+}
+
+function renderMatches() {
+  elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
+
+  if (!state.fixtures.length) {
+    elements.matchesList.innerHTML = '<div class="empty-results">No hay escenarios de demostración para estos filtros.</div>';
+    return;
   }
-];
 
-const matchButtons = document.querySelectorAll(".match-card .primary-btn");
-const viewButtons = document.querySelectorAll(".match-card .outline-btn");
+  const groups = ALLOWED_LEAGUES.map((league) => ({
+    league,
+    fixtures: state.fixtures.filter((fixture) => fixture.leagueSlug === league.slug)
+  })).filter((group) => group.fixtures.length);
 
-function setText(selector, text) {
-  const element = document.querySelector(selector);
-  if (element) element.textContent = text;
+  elements.matchesList.innerHTML = groups.map(({ league, fixtures }) => `
+    <section class="league-group" aria-labelledby="league-${escapeHtml(league.slug)}">
+      <h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</h3>
+      ${fixtures.map((fixture) => {
+        const selected = state.selectedFixtureId === fixture.id;
+        return `
+          <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" ${selected ? 'aria-current="true"' : ""}>
+            <span class="match-card__favorite" aria-hidden="true">☆</span>
+            <div class="match-card__teams">
+              <strong>${escapeHtml(fixture.home)}</strong>
+              <span class="match-card__versus">vs</span>
+              <strong>${escapeHtml(fixture.away)}</strong>
+            </div>
+            <div class="match-card__meta">
+              <time datetime="${escapeHtml(fixture.date)}T${escapeHtml(fixture.time)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)}</time>
+              ${statusBadge(fixture.statusLabel)}
+            </div>
+            <div class="match-card__actions">
+              <button class="button button--secondary" type="button" data-action="view">Ver datos</button>
+              <button class="button button--primary" type="button" data-action="analyze">Generar análisis IA</button>
+            </div>
+          </article>`;
+      }).join("")}
+    </section>
+  `).join("") + `
+    <div class="matches-footer">
+      <span>Mostrando ${state.fixtures.length} de ${state.fixtures.length} partidos</span>
+      <span>Fuente: demostración sintética</span>
+    </div>`;
 }
 
-function getStatusClass(status) {
-  if (status === "Disponible") return "green";
-  if (status === "Necesita revisión") return "orange";
-  return "orange";
+function selectedFixture() {
+  return state.fixtures.find((fixture) => fixture.id === state.selectedFixtureId) || MOCK_FIXTURES.find((fixture) => fixture.id === state.selectedFixtureId);
 }
 
-function updateDataCards(match) {
-  const dataCards = document.querySelectorAll(".data-card");
+function renderFixtureData() {
+  const fixture = selectedFixture();
+  if (!fixture) return;
 
-  const items = [
-    {
-      title: "📈 Forma reciente",
-      value: match.dataStatus.form
-    },
-    {
-      title: "🏥 Lesiones / sanciones",
-      value: match.dataStatus.injuries
-    },
-    {
-      title: "👥 Alineaciones",
-      value: match.dataStatus.lineups
-    },
-    {
-      title: "💰 Cuotas",
-      value: match.dataStatus.odds
-    },
-    {
-      title: "🏆 Standings",
-      value: match.dataStatus.standings
-    },
-    {
-      title: "🤝 Head to Head",
-      value: match.dataStatus.h2h
-    }
-  ];
-
-  dataCards.forEach((card, index) => {
-    const item = items[index];
-    if (!item) return;
-
-    card.innerHTML = `
-      <strong>${item.title}</strong>
-      <span class="${getStatusClass(item.value)}">${item.value}</span>
-    `;
-  });
+  const statuses = Object.values(fixture.dataAvailability);
+  const overall = statuses.some((status) => status !== "Disponible") ? "Necesita revisión" : "Disponible";
+  elements.dataStatus.className = `status-badge status-badge--${statusClass(overall)}`;
+  elements.dataStatus.textContent = overall;
+  elements.selectedSummary.className = "selected-summary";
+  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · escenario sintético</span>`;
+  elements.dataGrid.innerHTML = DATA_CATEGORIES.map((category) => `
+    <article class="data-card">
+      <h3>${escapeHtml(category.label)}</h3>
+      ${statusBadge(fixture.dataAvailability[category.key] || "No disponible")}
+    </article>
+  `).join("");
 }
 
-function updateAnalysis(match) {
-  const analysisPanel = document.querySelector(".analysis");
+function renderAnalysis(analysis) {
+  elements.analysisStatus.className = `status-badge status-badge--${statusClass(analysis.estado_analisis)}`;
+  elements.analysisStatus.textContent = analysis.estado_analisis;
+  const list = (items, fallback) => items.length ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p>${escapeHtml(fallback)}</p>`;
 
-  if (!analysisPanel) return;
-
-  const missingCount = Object.values(match.dataStatus).filter(
-    (value) => value !== "Disponible"
-  ).length;
-
-  const confirmedCount = Object.values(match.dataStatus).filter(
-    (value) => value === "Disponible"
-  ).length;
-
-  const analysisStatus = missingCount >= 2 ? "Necesita revisión" : "Completo";
-  const statusClass = analysisStatus === "Completo" ? "success" : "warning-badge";
-
-  analysisPanel.innerHTML = `
-    <div class="panel-title-row">
-      <h2>✨ Análisis IA</h2>
-      <span class="badge ${statusClass}">${analysisStatus}</span>
+  elements.analysisContent.innerHTML = `
+    <div class="analysis-hero">
+      <h3>${escapeHtml(analysis.partido.local)} vs ${escapeHtml(analysis.partido.visitante)}</h3>
+      <p>${escapeHtml(analysis.resumen_partido)}</p>
     </div>
-
-    <div class="selected-match">
-      <strong>${match.home} vs ${match.away}</strong>
-      <span>${match.league} · ${match.date} · ${match.time}</span>
-    </div>
-
     <div class="analysis-grid">
-      <div class="analysis-box">
-        <h4>Estado del análisis</h4>
-        <p class="${analysisStatus === "Completo" ? "green" : "orange"}">${analysisStatus}</p>
-
-        <h4>Resumen del partido</h4>
-        <p>${match.analysis.summary}</p>
-
-        <div class="stats-row">
-          <span>Datos confirmados</span>
-          <strong class="green">${confirmedCount} / 6</strong>
-        </div>
-
-        <div class="stats-row">
-          <span>Datos faltantes</span>
-          <strong class="${missingCount > 0 ? "orange" : "green"}">${missingCount} / 6</strong>
-        </div>
-      </div>
-
-      <div class="analysis-box">
-        <h4>Mercados sugeridos</h4>
-
-        ${match.analysis.suggestedMarkets
-          .map(
-            (item) => `
-              <div class="market">
-                <span>${item.market}</span>
-                <strong>${item.confidence}</strong>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
+      <section class="analysis-card">
+        <h3>Datos confirmados</h3>
+        ${list(analysis.datos_confirmados, "No hay datos confirmados.")}
+      </section>
+      <section class="analysis-card">
+        <h3>Datos faltantes</h3>
+        ${list(analysis.datos_faltantes, "No se detectaron faltantes en la simulación.")}
+      </section>
+      <section class="analysis-card">
+        <h3>Riesgos principales</h3>
+        ${list(analysis.riesgos_principales, "Sin riesgos adicionales identificados.")}
+      </section>
+      <section class="analysis-card">
+        <h3>Mercados sugeridos</h3>
+        ${analysis.mercados_sugeridos.map((market) => `<div class="market-row"><span>${escapeHtml(market.seleccion)}</span><strong>${escapeHtml(market.confianza)}</strong></div>`).join("")}
+      </section>
+      <section class="analysis-card analysis-card--wide">
+        <h3>Predicción prudente · ${escapeHtml(analysis.prediccion_prudente.confianza)}</h3>
+        <p><strong>${escapeHtml(analysis.prediccion_prudente.seleccion)}</strong></p>
+        <p>${escapeHtml(analysis.prediccion_prudente.razonamiento)}</p>
+        <p><strong>Parlay:</strong> ${escapeHtml(analysis.apto_para_parlay.respuesta)}. ${escapeHtml(analysis.apto_para_parlay.razonamiento)}</p>
+      </section>
     </div>
-
-    <div class="bottom-analysis">
-      <div class="mini-box">
-        <h4>⚠️ Riesgos principales</h4>
-        ${match.analysis.risks.map((risk) => `<p>${risk}</p>`).join("")}
-      </div>
-
-      <div class="mini-box">
-        <h4>🛡️ Predicción prudente</h4>
-        <p>${match.analysis.prediction}</p>
-      </div>
-
-      <div class="mini-box center">
-        <h4>Apto para parlay</h4>
-        <p class="big-check">${match.analysis.parlay}</p>
-      </div>
-    </div>
-
-    <div class="warning">
-      ⚠️ Advertencia: Este análisis es únicamente informativo. No garantiza resultados ni ganancias. Apuesta con responsabilidad.
-    </div>
+    <p class="analysis-warning">${escapeHtml(analysis.advertencia)} Esta salida usa datos sintéticos y no debe utilizarse para apostar.</p>
   `;
 }
 
-function selectMatch(matchId, shouldGenerateAnalysis = false) {
-  const match = mockMatches.find((item) => item.id === matchId);
+function showAnalysisEmpty() {
+  elements.analysisStatus.className = "status-badge status-badge--unavailable";
+  elements.analysisStatus.textContent = "No disponible";
+  elements.analysisContent.innerHTML = '<div class="empty-state"><span class="empty-state__icon" aria-hidden="true">✦</span><h3>Partido seleccionado</h3><p>Pulsa “Generar análisis IA” para ejecutar la simulación.</p></div>';
+}
 
-  if (!match) return;
+async function selectFixture(fixtureId, generateAnalysis = false) {
+  if (state.isAnalyzing) return;
+  state.selectedFixtureId = fixtureId;
+  renderMatches();
+  renderFixtureData();
 
-  updateDataCards(match);
+  if (!generateAnalysis) {
+    const saved = state.analysisByFixture.get(fixtureId);
+    saved ? renderAnalysis(saved) : showAnalysisEmpty();
+    return;
+  }
 
-  if (shouldGenerateAnalysis) {
-    const analysisPanel = document.querySelector(".analysis");
+  state.isAnalyzing = true;
+  elements.analysisStatus.className = "status-badge status-badge--processing";
+  elements.analysisStatus.textContent = "Procesando";
+  elements.analysisContent.innerHTML = '<div class="empty-state"><div class="loading-spinner" aria-hidden="true"></div><h3>Evaluando cobertura</h3><p>Generando una respuesta JSON simulada sin completar datos ausentes…</p></div>';
 
-    if (analysisPanel) {
-      analysisPanel.innerHTML = `
-        <div class="panel-title-row">
-          <h2>✨ Análisis IA</h2>
-          <span class="badge warning-badge">Procesando</span>
-        </div>
-
-        <div class="loading-box">
-          <div class="loader"></div>
-          <p>Generando análisis con IA para ${match.home} vs ${match.away}...</p>
-        </div>
-      `;
-    }
-
-    setTimeout(() => {
-      updateAnalysis(match);
-    }, 900);
+  try {
+    const analysis = await footballDataService.generateMockAnalysis(selectedFixture());
+    state.analysisByFixture.set(fixtureId, analysis);
+    renderAnalysis(analysis);
+  } finally {
+    state.isAnalyzing = false;
   }
 }
 
-matchButtons.forEach((button, index) => {
+function validateFilters() {
+  if (!selectedLeagueSlugs().length) return "Selecciona al menos una liga.";
+  if (elements.dateFrom.value && elements.dateTo.value && elements.dateFrom.value > elements.dateTo.value) return "La fecha inicial no puede ser posterior a la fecha final.";
+  return "";
+}
+
+async function searchFixtures(event) {
+  event.preventDefault();
+  const error = validateFilters();
+  elements.filterError.hidden = !error;
+  elements.filterError.textContent = error;
+  if (error || state.isSearching) return;
+
+  state.isSearching = true;
+  const submitButton = elements.form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  elements.searchFeedback.textContent = "Buscando escenarios sintéticos…";
+
+  try {
+    state.fixtures = await footballDataService.searchMockFixtures({
+      leagues: selectedLeagueSlugs(),
+      dateFrom: elements.dateFrom.value,
+      dateTo: elements.dateTo.value,
+      status: elements.status.value
+    });
+    if (!state.fixtures.some((fixture) => fixture.id === state.selectedFixtureId)) {
+      state.selectedFixtureId = state.fixtures[0]?.id || null;
+    }
+    elements.searchFeedback.textContent = `Búsqueda simulada completada · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
+    renderMatches();
+    if (state.selectedFixtureId) {
+      renderFixtureData();
+      const saved = state.analysisByFixture.get(state.selectedFixtureId);
+      saved ? renderAnalysis(saved) : showAnalysisEmpty();
+    }
+  } finally {
+    state.isSearching = false;
+    submitButton.disabled = false;
+  }
+}
+
+elements.form.addEventListener("change", updateLeagueCount);
+elements.form.addEventListener("submit", searchFixtures);
+elements.matchesList.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  const card = event.target.closest("[data-fixture-id]");
+  if (!button || !card) return;
+  selectFixture(card.dataset.fixtureId, button.dataset.action === "analyze");
+});
+
+document.querySelectorAll("[data-nav-label]").forEach((button) => {
   button.addEventListener("click", () => {
-    selectMatch(mockMatches[index].id, true);
+    const notice = document.querySelector("#app-notice");
+    notice.textContent = `${button.dataset.navLabel} estará disponible cuando se conecte el backend en una fase posterior.`;
+    notice.hidden = false;
+    window.clearTimeout(Number(notice.dataset.timeoutId || 0));
+    const timeoutId = window.setTimeout(() => { notice.hidden = true; }, 3500);
+    notice.dataset.timeoutId = String(timeoutId);
   });
 });
 
-viewButtons.forEach((button, index) => {
-  button.addEventListener("click", () => {
-    selectMatch(mockMatches[index].id, false);
-  });
-});
-
-selectMatch(1, false);
+renderLeagueOptions();
+updateLeagueCount();
+elements.form.requestSubmit();

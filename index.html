@@ -1,324 +1,150 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Análisis de Apuestas de Fútbol</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
+    <title>Análisis de Apuestas de Fútbol con IA</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
 
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="app">
-
-    <!-- HEADER -->
-    <header class="header">
+    <header class="app-header">
       <div class="brand">
-        <div class="logo">⚽</div>
+        <span class="brand__mark" aria-hidden="true"><span>⚽</span><i>↗</i></span>
         <div>
           <h1>Análisis de Apuestas de Fútbol</h1>
           <p>Busca partidos por liga y genera análisis con IA</p>
         </div>
       </div>
 
-      <nav class="nav">
-        <a class="active" href="#">Dashboard</a>
-        <a href="#">Análisis guardados</a>
-        <a href="#">Alertas</a>
-        <a href="#">Mi cuenta</a>
+      <nav class="main-nav" aria-label="Navegación principal">
+        <a class="main-nav__item main-nav__item--active" href="#contenido-principal" aria-current="page">
+          <span aria-hidden="true">▦</span> Dashboard
+        </a>
+        <button class="main-nav__item" type="button" data-nav-label="Análisis guardados">
+          <span aria-hidden="true">▣</span> Análisis guardados
+        </button>
+        <button class="main-nav__item" type="button" data-nav-label="Alertas">
+          <span aria-hidden="true">♧</span> Alertas
+        </button>
+        <button class="main-nav__item" type="button" data-nav-label="Mi cuenta">
+          <span aria-hidden="true">◎</span> Mi cuenta <span aria-hidden="true">⌄</span>
+        </button>
       </nav>
     </header>
 
-    <!-- MAIN LAYOUT -->
-    <main class="dashboard">
+    <div class="demo-strip">
+      <span class="status-badge status-badge--demo">Modo demostración</span>
+      <span>Todos los equipos, partidos y datos mostrados son sintéticos.</span>
+    </div>
+    <div id="app-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
 
-      <!-- FILTERS -->
-      <aside class="panel filters">
-        <div class="panel-title-row">
-          <h2>Selecciona ligas</h2>
-          <span class="badge success">5/5</span>
+    <main id="contenido-principal" class="dashboard">
+      <aside class="panel filters" aria-labelledby="filters-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Filtros</p>
+            <h2 id="filters-title">Selecciona ligas</h2>
+          </div>
+          <span id="league-count" class="count-badge">5 de 5</span>
         </div>
 
-        <label class="checkbox-row">
-          <input type="checkbox" checked />
-          <span>La Liga (España)</span>
-        </label>
+        <form id="filters-form">
+          <fieldset class="league-selector">
+            <legend>Ligas</legend>
+            <div id="league-options"></div>
+          </fieldset>
 
-        <label class="checkbox-row">
-          <input type="checkbox" checked />
-          <span>Superliga China</span>
-        </label>
+          <div class="form-divider"></div>
 
-        <label class="checkbox-row">
-          <input type="checkbox" checked />
-          <span>Bundesliga (Alemania)</span>
-        </label>
+          <div class="field">
+            <label for="season">Temporada</label>
+            <select id="season" name="season">
+              <option value="demo">Temporada de demostración</option>
+            </select>
+          </div>
 
-        <label class="checkbox-row">
-          <input type="checkbox" checked />
-          <span>Primeira Liga (Portugal)</span>
-        </label>
+          <div class="date-fields">
+            <div class="field">
+              <label for="date-from">Desde</label>
+              <input id="date-from" name="dateFrom" type="date" value="2026-07-01" />
+            </div>
+            <div class="field">
+              <label for="date-to">Hasta</label>
+              <input id="date-to" name="dateTo" type="date" value="2026-07-31" />
+            </div>
+          </div>
 
-        <label class="checkbox-row">
-          <input type="checkbox" checked />
-          <span>Ligue 1 (Francia)</span>
-        </label>
+          <div class="field">
+            <label for="match-status">Estado</label>
+            <select id="match-status" name="status">
+              <option value="all">Todos</option>
+              <option value="scheduled">Programados</option>
+              <option value="finished">Finalizados</option>
+            </select>
+          </div>
 
-        <hr />
-
-        <div class="field">
-          <label>Temporada</label>
-          <select>
-            <option>2024/2025</option>
-            <option>2025/2026</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Fecha desde</label>
-          <input type="date" value="2025-05-01" />
-        </div>
-
-        <div class="field">
-          <label>Fecha hasta</label>
-          <input type="date" value="2025-05-31" />
-        </div>
-
-        <div class="field">
-          <label>Estado del partido</label>
-          <select>
-            <option>Todos</option>
-            <option>Próximos</option>
-            <option>En vivo</option>
-            <option>Finalizados</option>
-          </select>
-        </div>
-
-        <button class="primary-btn">🔍 Buscar partidos</button>
-
-        <p class="small-note">Se mostrarán los próximos y recientes partidos.</p>
+          <p id="filter-error" class="form-error" role="alert" hidden></p>
+          <button class="button button--primary button--full" type="submit">
+            <span aria-hidden="true">⌕</span> Buscar partidos
+          </button>
+          <p class="helper-text">La búsqueda actual usa escenarios sintéticos y no representa partidos reales.</p>
+        </form>
       </aside>
 
-      <!-- MATCHES -->
-      <section class="panel matches">
-        <div class="panel-title-row">
-          <h2>Partidos encontrados</h2>
-          <span>5 partidos</span>
+      <section class="panel matches-panel" aria-labelledby="matches-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Calendario</p>
+            <h2 id="matches-title"><span aria-hidden="true">▣</span> Partidos encontrados</h2>
+          </div>
+          <span id="match-count" class="muted-text">0 partidos</span>
         </div>
 
-        <div class="league-group">
-          <h3>🇪🇸 La Liga (España)</h3>
-
-          <article class="match-card">
-            <div class="favorite">☆</div>
-            <div class="team">Real Madrid</div>
-            <div class="vs">vs</div>
-            <div class="team">Sevilla</div>
-            <div class="match-date">
-              <strong>18/05/2025</strong>
-              <span>21:00</span>
-            </div>
-            <span class="badge success">Programado</span>
-            <button class="outline-btn">Ver datos</button>
-            <button class="primary-btn small">Generar análisis IA</button>
-          </article>
-        </div>
-
-        <div class="league-group">
-          <h3>🇩🇪 Bundesliga (Alemania)</h3>
-
-          <article class="match-card">
-            <div class="favorite">☆</div>
-            <div class="team">Bayern München</div>
-            <div class="vs">vs</div>
-            <div class="team">Leverkusen</div>
-            <div class="match-date">
-              <strong>17/05/2025</strong>
-              <span>15:30</span>
-            </div>
-            <span class="badge success">Programado</span>
-            <button class="outline-btn">Ver datos</button>
-            <button class="primary-btn small">Generar análisis IA</button>
-          </article>
-        </div>
-
-        <div class="league-group">
-          <h3>🇫🇷 Ligue 1 (Francia)</h3>
-
-          <article class="match-card">
-            <div class="favorite">☆</div>
-            <div class="team">PSG</div>
-            <div class="vs">vs</div>
-            <div class="team">Marseille</div>
-            <div class="match-date">
-              <strong>18/05/2025</strong>
-              <span>20:45</span>
-            </div>
-            <span class="badge success">Programado</span>
-            <button class="outline-btn">Ver datos</button>
-            <button class="primary-btn small">Generar análisis IA</button>
-          </article>
-        </div>
-
-        <div class="league-group">
-          <h3>🇵🇹 Primeira Liga (Portugal)</h3>
-
-          <article class="match-card">
-            <div class="favorite">☆</div>
-            <div class="team">Porto</div>
-            <div class="vs">vs</div>
-            <div class="team">Braga</div>
-            <div class="match-date">
-              <strong>18/05/2025</strong>
-              <span>18:00</span>
-            </div>
-            <span class="badge success">Programado</span>
-            <button class="outline-btn">Ver datos</button>
-            <button class="primary-btn small">Generar análisis IA</button>
-          </article>
-        </div>
-
-        <div class="league-group">
-          <h3>🇨🇳 Superliga China</h3>
-
-          <article class="match-card">
-            <div class="favorite">☆</div>
-            <div class="team">Shanghai Port</div>
-            <div class="vs">vs</div>
-            <div class="team">Beijing Guoan</div>
-            <div class="match-date">
-              <strong>19/05/2025</strong>
-              <span>13:35</span>
-            </div>
-            <span class="badge success">Programado</span>
-            <button class="outline-btn">Ver datos</button>
-            <button class="primary-btn small">Generar análisis IA</button>
-          </article>
-        </div>
-
-        <div class="updated">
-          <span>Mostrando 5 de 5 partidos</span>
-          <span>Actualizado: 17/05/2025 09:45</span>
-        </div>
+        <div id="search-feedback" class="search-feedback" role="status" aria-live="polite"></div>
+        <div id="matches-list" class="matches-list"></div>
       </section>
 
-      <!-- DETAILS + ANALYSIS -->
-      <section class="right-column">
-
-        <div class="panel">
-          <div class="panel-title-row">
-            <h2>Datos del partido</h2>
-            <span class="status-dot">● Disponible</span>
+      <section class="insights-column" aria-label="Información y análisis del partido">
+        <section class="panel" aria-labelledby="data-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Cobertura</p>
+              <h2 id="data-title">Datos del partido</h2>
+            </div>
+            <span id="data-overall-status" class="status-badge status-badge--unavailable">No disponible</span>
           </div>
+          <div id="selected-match-summary" class="selected-summary selected-summary--empty">
+            Selecciona un partido para revisar la cobertura de datos.
+          </div>
+          <div id="data-grid" class="data-grid"></div>
+        </section>
 
-          <div class="data-grid">
-            <div class="data-card">
-              <strong>📈 Forma reciente</strong>
-              <span class="green">Disponible</span>
+        <section id="analysis-panel" class="panel analysis-panel" aria-labelledby="analysis-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Evaluación responsable</p>
+              <h2 id="analysis-title"><span aria-hidden="true">✦</span> Análisis IA</h2>
             </div>
-
-            <div class="data-card">
-              <strong>🏥 Lesiones / sanciones</strong>
-              <span class="orange">Necesita revisión</span>
-            </div>
-
-            <div class="data-card">
-              <strong>👥 Alineaciones</strong>
-              <span class="green">Disponible</span>
-            </div>
-
-            <div class="data-card">
-              <strong>💰 Cuotas</strong>
-              <span class="green">Disponible</span>
-            </div>
-
-            <div class="data-card">
-              <strong>🏆 Standings</strong>
-              <span class="green">Disponible</span>
-            </div>
-
-            <div class="data-card">
-              <strong>🤝 Head to Head</strong>
-              <span class="green">Disponible</span>
+            <span id="analysis-status" class="status-badge status-badge--unavailable">No disponible</span>
+          </div>
+          <div id="analysis-content" aria-live="polite">
+            <div class="empty-state">
+              <span class="empty-state__icon" aria-hidden="true">✦</span>
+              <h3>Aún no hay análisis</h3>
+              <p>Elige un partido y pulsa “Generar análisis IA”.</p>
             </div>
           </div>
-        </div>
-
-        <div class="panel analysis">
-          <div class="panel-title-row">
-            <h2>✨ Análisis IA</h2>
-            <span class="badge success">Completo</span>
-          </div>
-
-          <div class="analysis-grid">
-            <div class="analysis-box">
-              <h4>Estado del análisis</h4>
-              <p class="green">Completo</p>
-
-              <h4>Resumen del partido</h4>
-              <p>
-                Real Madrid llega en buena forma jugando en casa.
-                Sevilla ha mostrado irregularidad fuera de casa,
-                pero suele ser competitivo.
-              </p>
-
-              <div class="stats-row">
-                <span>Datos confirmados</span>
-                <strong class="green">6 / 6</strong>
-              </div>
-
-              <div class="stats-row">
-                <span>Datos faltantes</span>
-                <strong class="orange">1 / 6</strong>
-              </div>
-            </div>
-
-            <div class="analysis-box">
-              <h4>Mercados sugeridos</h4>
-
-              <div class="market">
-                <span>Doble oportunidad local (1X)</span>
-                <strong>Media</strong>
-              </div>
-
-              <div class="market">
-                <span>Under 3.5 goles</span>
-                <strong>Media</strong>
-              </div>
-
-              <div class="market">
-                <span>Ambos anotan: No</span>
-                <strong>Media-baja</strong>
-              </div>
-            </div>
-          </div>
-
-          <div class="bottom-analysis">
-            <div class="mini-box">
-              <h4>⚠️ Riesgos principales</h4>
-              <p>Posible rotación de jugadores por calendario.</p>
-              <p>El visitante puede cerrarse y buscar el empate.</p>
-            </div>
-
-            <div class="mini-box">
-              <h4>🛡️ Predicción prudente</h4>
-              <p>Victoria o empate del local con menos de 3.5 goles.</p>
-            </div>
-
-            <div class="mini-box center">
-              <h4>Apto para parlay</h4>
-              <p class="big-check">✅ Sí</p>
-            </div>
-          </div>
-
-          <div class="warning">
-            ⚠️ Advertencia: Este análisis es únicamente informativo. No garantiza resultados ni ganancias. Apuesta con responsabilidad.
-          </div>
-        </div>
-
+        </section>
       </section>
     </main>
-  </div>
 
-  <script src="app.js"></script>
-</body>
+    <footer class="app-footer">
+      <p>Herramienta informativa. No garantiza resultados ni ganancias. Apuesta con responsabilidad.</p>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+  </body>
 </html>

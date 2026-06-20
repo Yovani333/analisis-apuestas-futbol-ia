@@ -1,0 +1,55 @@
+{
+  "estado_analisis": "Completo | Necesita revisión",
+  "liga": "",
+  "partido": {
+    "local": "",
+    "visitante": "",
+    "fecha": "",
+    "estadio": "",
+    "pais": ""
+  },
+  "resumen_partido": "",
+  "datos_confirmados": [],
+  "datos_faltantes": [],
+  "alertas_de_calidad_de_datos": [],
+  "analisis_cuantitativo": {
+    "forma_reciente": "",
+    "rendimiento_local_visitante": "",
+    "fortaleza_ofensiva": "",
+    "fortaleza_defensiva": "",
+    "xg_xga": "",
+    "lesiones_sanciones": "",
+    "alineaciones_rotacion": "",
+    "motivacion_competitiva": "",
+    "fatiga_calendario": "",
+    "matchup_tactico": "",
+    "cuotas_valor_esperado": ""
+  },
+  "probabilidad_estimativa": {
+    "local": null,
+    "empate": null,
+    "visitante": null,
+    "nota": "Usar null si no hay datos suficientes para estimar con responsabilidad."
+  },
+  "mercados_sugeridos": [{
+    "mercado": "",
+    "seleccion": "",
+    "razonamiento": "",
+    "nivel_riesgo": "Bajo | Medio | Alto",
+    "confianza": "Baja | Media-baja | Media | Media-alta | Alta",
+    "requiere_revision": true
+  }],
+  "mercados_a_evitar": [{ "mercado": "", "razonamiento": "" }],
+  "prediccion_prudente": {
+    "seleccion": "",
+    "razonamiento": "",
+    "confianza": "Baja | Media-baja | Media | Media-alta | Alta"
+  },
+  "apto_para_parlay": {
+    "respuesta": "Sí | No | Solo con baja exposición",
+    "razonamiento": ""
+  },
+  "riesgos_principales": [],
+  "conclusion": "",
+  "advertencia": "Este análisis es únicamente informativo. No garantiza resultados ni ganancias. Apuesta con responsabilidad."
+}
