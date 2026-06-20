@@ -298,6 +298,9 @@ async function initializeApp() {
     document.querySelector("#runtime-description").textContent = runtime.liveReady
       ? "API-Football y OpenAI están configurados en el backend."
       : `Faltan variables del servidor: ${(runtime.missing || []).join(", ")}.`;
+  } else if (window.location.hostname.endsWith("github.io")) {
+    document.querySelector("#runtime-mode").textContent = "Demo pública sin APIs";
+    document.querySelector("#runtime-description").textContent = "GitHub Pages no ejecuta el backend; los partidos y análisis mostrados son sintéticos.";
   }
   elements.form.requestSubmit();
 }

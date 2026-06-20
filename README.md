@@ -7,6 +7,8 @@ Dashboard full-stack para consultar partidos de cinco ligas permitidas, revisar 
 - [Demo visual en GitHub Pages](https://yovani333.github.io/analisis-apuestas-futbol-ia/) — funciona en modo mock porque GitHub Pages es hosting estático.
 - Aplicación full-stack local: `http://127.0.0.1:3000` después de ejecutar `npm start`.
 
+> GitHub Pages no ejecuta Node.js ni puede leer `.env`. Para usar API-Football y OpenAI en internet debe desplegarse la aplicación full-stack en un hosting compatible con Node y configurar allí sus variables secretas.
+
 ## Estado actual
 
 El proyecto incluye un backend seguro y dos modos:
