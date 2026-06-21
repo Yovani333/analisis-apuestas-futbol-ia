@@ -1,4 +1,4 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-efficient-analysis";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-advanced-data";
 
 const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
@@ -34,7 +34,7 @@ function buildMockAnalysis(fixture) {
     apto_para_parlay: { respuesta: "No", razonamiento: "No hay una ventaja cuantificable y verificada." },
     riesgos_principales: ["Datos sintéticos.", ...missing.slice(0, 3)],
     conclusion: "Necesita validación con fuentes reales antes de cualquier decisión.",
-    advertencia: "Este análisis es únicamente informativo. No garantiza resultados ni ganancias. Apuesta con responsabilidad."
+    advertencia: "Este análisis es únicamente informativo. No garantiza resultados ni beneficios. Las apuestas implican riesgo y deben hacerse con responsabilidad."
   };
 }
 
@@ -88,6 +88,7 @@ export const footballDataService = {
       preMatch: payload.preMatch || null,
       marketAnalysis: payload.marketAnalysis || [],
       dataQuality: payload.dataQuality || null,
+      researchData: payload.researchData || null,
       unavailableData: payload.unavailable || [],
       qualityAlerts: payload.qualityAlerts || [],
       fetchedAt: payload.fetchedAt,
@@ -100,6 +101,14 @@ export const footballDataService = {
     if (runtime.mode !== "live") return this.generateMockAnalysis(fixture);
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/analysis`, { method: "POST" });
     return { ...payload.analysis, _source: "openai" };
+  },
+
+  async getResearchData(fixtureId, refresh = false) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return null;
+    const query = refresh ? "?refresh=true" : "";
+    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/research${query}`);
+    return payload.researchData || null;
   },
 
   async getFixtureResult(fixtureId) {
@@ -121,6 +130,7 @@ export const backendApi = {
   allowedLeagues: () => fetch("/api/leagues"),
   fixtures: (query) => fetch(`/api/fixtures?${new URLSearchParams(query)}`),
   fixture: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}`),
+  research: (fixtureId, refresh = false) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/research${refresh ? "?refresh=true" : ""}`),
   fixtureResult: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`),
   standings: (query) => fetch(`/api/standings?${new URLSearchParams(query)}`),
   statistics: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/statistics`),

@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-clean-start";
-import { footballDataService } from "./services.js?v=20260620-efficient-analysis";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-advanced-data";
+import { footballDataService } from "./services.js?v=20260621-advanced-data";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -13,7 +13,8 @@ const state = {
   savedParlays: loadSavedParlays(),
   hasSearched: false,
   isSearching: false,
-  isAnalyzing: false
+  isAnalyzing: false,
+  isRefreshingResearch: false
 };
 
 const elements = {
@@ -31,6 +32,9 @@ const elements = {
   selectedSummary: document.querySelector("#selected-match-summary"),
   dataStatus: document.querySelector("#data-overall-status"),
   dataGrid: document.querySelector("#data-grid"),
+  researchSummary: document.querySelector("#research-summary"),
+  researchGrid: document.querySelector("#research-grid"),
+  refreshResearch: document.querySelector("#refresh-research"),
   dataDialog: document.querySelector("#data-detail-dialog"),
   dataDialogTitle: document.querySelector("#data-detail-title"),
   dataDialogSubtitle: document.querySelector("#data-detail-subtitle"),
@@ -63,11 +67,41 @@ function statusClass(status) {
     "Disponible": "available",
     "Programado": "available",
     "Completo": "complete",
+    "Parcial": "partial",
+    "Falló": "failed",
     "Necesita revisión": "review",
     "Procesando": "processing",
     "No disponible": "unavailable"
   }[status] || "unavailable";
 }
+
+const RESEARCH_MODULES = Object.freeze([
+  { key: "injuriesSuspensions", label: "Lesiones / sanciones" },
+  { key: "lineups", label: "Alineaciones" },
+  { key: "statsForm", label: "Estadísticas / forma" },
+  { key: "xgXga", label: "xG / xGA" },
+  { key: "contextCalendar", label: "Contexto / calendario" },
+  { key: "standings", label: "Clasificación" },
+  { key: "odds", label: "Cuotas" },
+  { key: "h2h", label: "Head to head" },
+  { key: "weatherPitch", label: "Clima / cancha" }
+]);
+
+const SUPPORTING_MODULES = Object.freeze([
+  { key: "teamSeasonStatistics", label: "Estadísticas de temporada", use: "Contexto prepartido" },
+  { key: "fixtureEvents", label: "Eventos del partido", use: "Solo auditoría posterior" },
+  { key: "playerPerformance", label: "Rendimiento de jugadores", use: "Solo auditoría posterior" }
+]);
+
+const researchStatusLabels = Object.freeze({
+  available: "Disponible",
+  partial: "Parcial",
+  not_available: "No disponible",
+  failed: "Falló",
+  needs_review: "Necesita revisión"
+});
+
+const analysisStatusLabels = Object.freeze({ complete: "Completo", partial: "Parcial", needs_review: "Necesita revisión" });
 
 function statusBadge(status) {
   return `<span class="status-badge status-badge--${statusClass(status)}">${escapeHtml(status)}</span>`;
@@ -170,6 +204,153 @@ function renderFixtureData() {
       <span class="data-card__action">Ver detalle <span aria-hidden="true">→</span></span>
     </button>
   `).join("");
+  renderResearchData(fixture.researchData);
+}
+
+function researchStatusLabel(status) {
+  return researchStatusLabels[status] || "No disponible";
+}
+
+function formatUpdatedAt(value) {
+  if (!value) return "Sin actualización registrada";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin actualización registrada";
+  return new Intl.DateTimeFormat("es-MX", { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+
+function researchSourceLabel(moduleKey, module) {
+  if (module?.source) return "API-Football";
+  if (["xgXga", "weatherPitch"].includes(moduleKey)) return "Sin fuente configurada";
+  return "API-Football consultada sin datos";
+}
+
+function renderResearchData(research) {
+  elements.refreshResearch.disabled = !research || state.isRefreshingResearch;
+  if (!research) {
+    elements.researchSummary.className = "research-empty";
+    elements.researchSummary.textContent = "Este partido todavía no tiene una investigación normalizada disponible.";
+    elements.researchGrid.innerHTML = "";
+    return;
+  }
+
+  const score = Math.max(0, Math.min(100, Number(research.totalConfidenceScore) || 0));
+  const analysisLabel = analysisStatusLabels[research.analysisStatus] || "Necesita revisión";
+  const critical = (research.criticalMissingData || []).map((item) => item.label).filter(Boolean);
+  elements.researchSummary.className = "research-summary";
+  elements.researchSummary.innerHTML = `
+    <div class="confidence-score confidence-score--${score >= 75 ? "high" : score >= 45 ? "medium" : "low"}">
+      <strong>${score}</strong><span>/100</span>
+    </div>
+    <div class="research-summary__content">
+      <div><strong>Nivel de confianza del análisis</strong>${statusBadge(analysisLabel)}</div>
+      <div class="confidence-track" role="progressbar" aria-label="Nivel de confianza" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${score}"><span style="width:${score}%"></span></div>
+      <p>${critical.length ? `<strong>Datos críticos faltantes:</strong> ${escapeHtml(critical.join(", "))}` : "No se detectaron tres o más faltantes críticos."}</p>
+      <small>Última actualización: ${escapeHtml(formatUpdatedAt(research.lastUpdated))}</small>
+    </div>`;
+
+  const primaryCards = RESEARCH_MODULES.map(({ key, label }) => {
+    const module = research[key] || { status: "not_available" };
+    const status = researchStatusLabel(module.status);
+    const source = researchSourceLabel(key, module);
+    const message = module.message || (module.status === "available" ? "Datos encontrados y normalizados." : "Cobertura parcial; revisa el detalle.");
+    return `<article class="research-card research-card--${escapeHtml(module.status || "not_available")}">
+      <div class="research-card__heading"><h3>${escapeHtml(label)}</h3>${statusBadge(status)}</div>
+      <dl><div><dt>Fuente</dt><dd>${escapeHtml(source)}</dd></div><div><dt>Actualizado</dt><dd>${escapeHtml(formatUpdatedAt(module.updatedAt))}</dd></div></dl>
+      <p>${escapeHtml(message)}</p>
+      <div class="research-card__footer"><span>Aporta ${displayValue(research.moduleScores?.[key], 0)} puntos</span><button class="button button--secondary button--compact" type="button" data-research-module="${escapeHtml(key)}">Ver detalle</button></div>
+    </article>`;
+  }).join("");
+  const supportingCards = SUPPORTING_MODULES.map(({ key, label, use }) => {
+    const module = research.supportingData?.[key] || { status: "not_available", source: "api-football" };
+    return `<article class="supporting-card">
+      <div><h4>${escapeHtml(label)}</h4><span>${escapeHtml(use)}</span></div>
+      ${statusBadge(researchStatusLabel(module.status))}
+      <button class="button button--secondary button--compact" type="button" data-supporting-module="${escapeHtml(key)}">Ver detalle</button>
+    </article>`;
+  }).join("");
+  elements.researchGrid.innerHTML = `${primaryCards}<section class="research-supporting"><div class="research-supporting__heading"><div><h3>Datos complementarios</h3><p>Amplían el contexto, pero no modifican por sí solos el puntaje de confianza.</p></div></div><div class="supporting-grid">${supportingCards}</div></section>`;
+}
+
+function researchMeta(moduleKey, module) {
+  return `<div class="research-detail-meta"><div><span>Estado</span>${statusBadge(researchStatusLabel(module.status))}</div><div><span>Fuente</span><strong>${escapeHtml(researchSourceLabel(moduleKey, module))}</strong></div><div><span>Actualización</span><strong>${escapeHtml(formatUpdatedAt(module.updatedAt))}</strong></div></div>${module.message ? `<div class="detail-note"><strong>Observación</strong><span>${escapeHtml(module.message)}</span></div>` : ""}`;
+}
+
+function researchTeamStats(title, values) {
+  return `<section class="team-stat-card"><h3>${escapeHtml(title)}</h3>${values.map(([label, value]) => `<div class="stat-row"><span>${escapeHtml(label)}</span><strong>${displayValue(value)}</strong></div>`).join("")}</section>`;
+}
+
+function renderResearchModuleDetail(moduleKey, research) {
+  const module = research?.[moduleKey];
+  if (!module) return emptyDetail("No existe información normalizada para este módulo.");
+  let content = "";
+  if (moduleKey === "standings") {
+    content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Posición", module.home?.rank], ["Puntos", module.home?.points], ["Partidos", module.home?.played], ["Diferencia de gol", module.home?.goalDifference], ["Forma", module.home?.form]])}${researchTeamStats(research.awayTeam.name, [["Posición", module.away?.rank], ["Puntos", module.away?.points], ["Partidos", module.away?.played], ["Diferencia de gol", module.away?.goalDifference], ["Forma", module.away?.form]])}</div>`;
+  } else if (moduleKey === "h2h") {
+    const rows = (module.matches || []).map((match) => [displayValue(match.date), displayValue(match.homeTeam), `<strong>${displayValue(match.homeGoals)} – ${displayValue(match.awayGoals)}</strong>`, displayValue(match.awayTeam)]);
+    content = `<div class="research-kpis"><span>Victorias ${escapeHtml(research.homeTeam.name)} <strong>${displayValue(module.homeWins)}</strong></span><span>Empates <strong>${displayValue(module.draws)}</strong></span><span>Victorias ${escapeHtml(research.awayTeam.name)} <strong>${displayValue(module.awayWins)}</strong></span></div>${rows.length ? detailTable(["Fecha", "Local", "Marcador", "Visitante"], rows) : emptyDetail("No hay enfrentamientos disponibles.")}`;
+  } else if (moduleKey === "odds") {
+    const rows = (module.markets || []).map((market) => [displayValue(market.market), displayValue(market.selection), displayValue(market.decimalOdds), `${displayValue(market.impliedProbabilityPct)}%`, `${displayValue(market.estimatedProbabilityPct)}%`, `${displayValue(market.expectedValuePct)}%`, market.requiresReview ? "Revisar" : "Verificado"]);
+    content = rows.length ? detailTable(["Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Control"], rows) : emptyDetail("No hay cuotas principales verificables.");
+  } else if (moduleKey === "contextCalendar") {
+    content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
+  } else if (moduleKey === "statsForm") {
+    const matchRows = (team, matches) => (matches || []).map((match) => [escapeHtml(team), displayValue(match.date), displayValue(match.opponent), displayValue(match.venue), `<strong>${displayValue(match.goalsFor)}–${displayValue(match.goalsAgainst)}</strong>`, displayValue(match.result)]);
+    content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Goles a favor", module.homeGoalsFor], ["Goles en contra", module.homeGoalsAgainst], ["Tasa de victoria", module.homeWinRate === null ? null : `${module.homeWinRate}%`], ["Porterías a cero", module.homeCleanSheets]])}${researchTeamStats(research.awayTeam.name, [["Goles a favor", module.awayGoalsFor], ["Goles en contra", module.awayGoalsAgainst], ["Tasa de victoria", module.awayWinRate === null ? null : `${module.awayWinRate}%`], ["Porterías a cero", module.awayCleanSheets]])}</div>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "Marcador", "Resultado"], [...matchRows(research.homeTeam.name, module.homeLastMatches), ...matchRows(research.awayTeam.name, module.awayLastMatches)])}`;
+  } else if (moduleKey === "injuriesSuspensions") {
+    const absenceRows = (team, side) => ["injuries", "suspensions", "doubts"].flatMap((kind) => (side?.[kind] || []).map((player) => [escapeHtml(team), kind === "injuries" ? "Lesión" : kind === "suspensions" ? "Sanción" : "Duda", displayValue(player.name), displayValue(player.reason || player.type)]));
+    const rows = [...absenceRows(research.homeTeam.name, module.home), ...absenceRows(research.awayTeam.name, module.away)];
+    content = rows.length ? detailTable(["Equipo", "Tipo", "Jugador", "Motivo"], rows) : emptyDetail("No se recibieron registros. Esto no confirma que no existan bajas.");
+  } else if (moduleKey === "lineups") {
+    const playerList = (team, formation, players) => `<section class="lineup-card"><h3>${escapeHtml(team)} · ${displayValue(formation)}</h3>${players?.length ? `<ol class="player-list">${players.map((player) => `<li><span>${displayValue(player.number)}</span>${displayValue(player.name)}<small>${displayValue(player.position)}</small></li>`).join("")}</ol>` : `<p class="muted-text">Sin once inicial disponible.</p>`}</section>`;
+    content = `<div class="detail-note"><strong>${module.confirmed ? "Alineaciones confirmadas" : "Sin confirmación completa"}</strong><span>La confirmación exige once inicial para ambos equipos.</span></div><div class="lineups-grid">${playerList(research.homeTeam.name, module.homeFormation, module.homeStartingXI)}${playerList(research.awayTeam.name, module.awayFormation, module.awayStartingXI)}</div>`;
+  } else if (moduleKey === "xgXga") {
+    content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["xG", module.homeXG], ["xGA", module.homeXGA], ["npxG", module.homeNPXG]])}${researchTeamStats(research.awayTeam.name, [["xG", module.awayXG], ["xGA", module.awayXGA], ["npxG", module.awayNPXG]])}</div>`;
+  } else if (moduleKey === "weatherPitch") {
+    content = `${researchTeamStats("Clima y cancha", [["Temperatura", module.temperature], ["Probabilidad de lluvia", module.rainProbability], ["Viento", module.windSpeed], ["Humedad", module.humidity], ["Condición", module.condition], ["Cancha", module.pitchNotes]])}`;
+  }
+  return `${researchMeta(moduleKey, module)}${content || emptyDetail("No hay detalle adicional disponible.")}`;
+}
+
+function openResearchDetail(moduleKey) {
+  const fixture = selectedFixture();
+  const research = fixture?.researchData;
+  const config = RESEARCH_MODULES.find((item) => item.key === moduleKey);
+  if (!research || !config) return;
+  elements.dataDialogTitle.textContent = config.label;
+  elements.dataDialogSubtitle.textContent = `${fixture.home} vs ${fixture.away} · Investigación normalizada`;
+  elements.dataDialogContent.innerHTML = renderResearchModuleDetail(moduleKey, research);
+  elements.dataDialog.showModal();
+}
+
+function renderSupportingDetail(moduleKey, research) {
+  const module = research?.supportingData?.[moduleKey];
+  if (!module) return emptyDetail("No existe información complementaria para este módulo.");
+  const caution = module.analysisUse === "post_match_audit_only"
+    ? '<div class="detail-note"><strong>Solo auditoría posterior</strong><span>Estos datos no se envían como evidencia a OpenAI para justificar una predicción prepartido.</span></div>'
+    : `<div class="detail-note detail-note--info"><strong>Corte temporal protegido</strong><span>Estadísticas consultadas hasta ${displayValue(module.cutoffDate)}, antes del fixture.</span></div>`;
+  let content = "";
+  if (moduleKey === "fixtureEvents") {
+    const rows = (module.events || []).map((event) => [`${displayValue(event.elapsed)}${event.extra ? `+${displayValue(event.extra)}` : ""}'`, displayValue(event.team), displayValue(event.player), displayValue(event.type), displayValue(event.detail)]);
+    content = `<div class="research-kpis"><span>Goles <strong>${displayValue(module.summary?.goals, 0)}</strong></span><span>Tarjetas <strong>${displayValue(module.summary?.cards, 0)}</strong></span><span>Cambios <strong>${displayValue(module.summary?.substitutions, 0)}</strong></span></div>${rows.length ? detailTable(["Minuto", "Equipo", "Jugador", "Tipo", "Detalle"], rows) : emptyDetail("No hay eventos publicados para este fixture.")}`;
+  } else if (moduleKey === "playerPerformance") {
+    const rows = (module.teams || []).flatMap((team) => (team.players || []).map((player) => [displayValue(team.team), displayValue(player.name), displayValue(player.position), displayValue(player.minutes), displayValue(player.rating), displayValue(player.shotsOnTarget), displayValue(player.goals), displayValue(player.assists), displayValue(player.keyPasses), displayValue(player.tackles)])).sort((a, b) => Number(b[4] || 0) - Number(a[4] || 0)).slice(0, 30);
+    content = rows.length ? detailTable(["Equipo", "Jugador", "Pos.", "Min.", "Rating", "Tiros arco", "Goles", "Asist.", "Pases clave", "Entradas"], rows) : emptyDetail("No hay rendimiento individual publicado.");
+  } else if (moduleKey === "teamSeasonStatistics") {
+    const seasonCard = (teamName, data) => researchTeamStats(teamName, [["Forma", data?.form], ["Partidos", data?.played], ["G / E / P", data ? `${displayValue(data.wins)} / ${displayValue(data.draws)} / ${displayValue(data.losses)}` : null], ["Goles a favor", data?.goalsFor], ["Goles en contra", data?.goalsAgainst], ["Promedio GF / GC", data ? `${displayValue(data.averageGoalsFor)} / ${displayValue(data.averageGoalsAgainst)}` : null], ["Porterías a cero", data?.cleanSheets], ["Sin marcar", data?.failedToScore], ["Formación más usada", data?.commonLineups?.[0]?.formation]]);
+    content = `<div class="team-stat-grid">${seasonCard(research.homeTeam.name, module.home)}${seasonCard(research.awayTeam.name, module.away)}</div>`;
+  }
+  return `${researchMeta(moduleKey, module)}${caution}${content || emptyDetail("No hay detalle complementario disponible.")}`;
+}
+
+function openSupportingDetail(moduleKey) {
+  const fixture = selectedFixture();
+  const research = fixture?.researchData;
+  const config = SUPPORTING_MODULES.find((item) => item.key === moduleKey);
+  if (!research || !config) return;
+  elements.dataDialogTitle.textContent = config.label;
+  elements.dataDialogSubtitle.textContent = `${fixture.home} vs ${fixture.away} · ${config.use}`;
+  elements.dataDialogContent.innerHTML = renderSupportingDetail(moduleKey, research);
+  elements.dataDialog.showModal();
 }
 
 function displayValue(value, fallback = "—") {
@@ -576,6 +757,27 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
   }
 }
 
+async function refreshResearchData() {
+  const fixture = selectedFixture();
+  if (!fixture || state.isRefreshingResearch) return;
+  state.isRefreshingResearch = true;
+  elements.refreshResearch.disabled = true;
+  elements.refreshResearch.textContent = "Actualizando…";
+  try {
+    const researchData = await footballDataService.getResearchData(fixture.id, true);
+    const fixtureIndex = state.fixtures.findIndex((item) => item.id === fixture.id);
+    if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = { ...state.fixtures[fixtureIndex], researchData };
+    renderResearchData(researchData);
+    showNotice("Datos de investigación actualizados desde API-Football.");
+  } catch (error) {
+    showNotice(error.message || "No fue posible actualizar la investigación.");
+  } finally {
+    state.isRefreshingResearch = false;
+    elements.refreshResearch.disabled = !selectedFixture()?.researchData;
+    elements.refreshResearch.textContent = "Actualizar datos";
+  }
+}
+
 function validateFilters() {
   if (!selectedLeagueSlugs().length) return "Selecciona al menos una liga.";
   if (!elements.dateFrom.value || !elements.dateTo.value) return "Selecciona las fechas desde y hasta.";
@@ -650,6 +852,16 @@ elements.dataGrid.addEventListener("click", (event) => {
   const card = event.target.closest("[data-category]");
   if (card) openDataDetail(card.dataset.category);
 });
+elements.researchGrid.addEventListener("click", (event) => {
+  const supportingButton = event.target.closest("[data-supporting-module]");
+  if (supportingButton) {
+    openSupportingDetail(supportingButton.dataset.supportingModule);
+    return;
+  }
+  const button = event.target.closest("[data-research-module]");
+  if (button) openResearchDetail(button.dataset.researchModule);
+});
+elements.refreshResearch.addEventListener("click", refreshResearchData);
 elements.dataDialogClose.addEventListener("click", () => elements.dataDialog.close());
 elements.dataDialog.addEventListener("click", (event) => {
   if (event.target === elements.dataDialog) elements.dataDialog.close();

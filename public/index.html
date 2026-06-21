@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260620-efficient-analysis" />
+    <link rel="stylesheet" href="styles.css?v=20260621-advanced-data" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -126,6 +126,20 @@
           <div id="data-grid" class="data-grid"></div>
         </section>
 
+        <section id="research-panel" class="panel research-panel" aria-labelledby="research-title">
+          <div class="panel-heading research-heading">
+            <div>
+              <p class="eyebrow">Transparencia de datos</p>
+              <h2 id="research-title">Análisis de fuentes</h2>
+            </div>
+            <button id="refresh-research" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button>
+          </div>
+          <div id="research-summary" class="research-empty">
+            Selecciona un partido para consultar el nivel de confianza y las fuentes utilizadas.
+          </div>
+          <div id="research-grid" class="research-grid"></div>
+        </section>
+
         <section id="analysis-panel" class="panel analysis-panel" aria-labelledby="analysis-title">
           <div class="panel-heading">
             <div>
@@ -162,7 +176,7 @@
     </main>
 
     <footer class="app-footer">
-      <p>Herramienta informativa. No garantiza resultados ni ganancias. Apuesta con responsabilidad.</p>
+      <p>Este análisis es únicamente informativo. No garantiza resultados ni beneficios. Las apuestas implican riesgo y deben hacerse con responsabilidad.</p>
     </footer>
 
     <dialog id="data-detail-dialog" class="data-dialog" aria-labelledby="data-detail-title">
@@ -201,6 +215,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260620-clean-start"></script>
+    <script type="module" src="app.js?v=20260621-advanced-data"></script>
   </body>
 </html>

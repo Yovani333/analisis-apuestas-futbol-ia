@@ -49,11 +49,24 @@ apiRouter.get("/fixtures/:fixtureId", requireLiveMode, asyncRoute(async (req, re
   res.json(await getFixtureDataset(parseFixtureId(req.params.fixtureId)));
 }));
 
+const researchLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });
+apiRouter.get("/fixtures/:fixtureId/research", requireLiveMode, researchLimiter, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
+  res.json({
+    source: dataset.source,
+    fetchedAt: dataset.fetchedAt,
+    refreshed: forceRefresh,
+    researchData: dataset.researchData
+  });
+}));
+
 apiRouter.get("/fixtures/:fixtureId/result", requireLiveMode, asyncRoute(async (req, res) => {
   res.json({ source: "api-football", result: await getFixtureResult(parseFixtureId(req.params.fixtureId)) });
 }));
 
-for (const [route, key] of [["statistics", "statistics"], ["standings", "standings"], ["head-to-head", "h2h"], ["injuries", "injuries"], ["lineups", "lineups"], ["odds", "odds"]]) {
+for (const [route, key] of [["statistics", "statistics"], ["standings", "standings"], ["head-to-head", "h2h"], ["injuries", "injuries"], ["lineups", "lineups"], ["odds", "odds"], ["events", "events"], ["players", "players"], ["team-statistics", "teamStatistics"]]) {
   apiRouter.get(`/fixtures/:fixtureId/${route}`, requireLiveMode, asyncRoute(async (req, res) => {
     const dataset = await getFixtureDataset(parseFixtureId(req.params.fixtureId));
     res.json({ source: dataset.source, fetchedAt: dataset.fetchedAt, data: dataset.confirmed[key] });

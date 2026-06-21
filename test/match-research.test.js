@@ -31,7 +31,14 @@ function datasetFixture() {
         { team: { id: 10 }, player: { id: 1, name: "Jugador A", type: "Knee injury", reason: "Injury" } },
         { team: { id: 20 }, player: { id: 2, name: "Jugador B", type: "Suspended", reason: "Red card" } }
       ],
-      lineups: [lineup(10, "Equipo Local"), lineup(20, "Equipo Visitante")]
+      lineups: [lineup(10, "Equipo Local"), lineup(20, "Equipo Visitante")],
+      events: [{ time: { elapsed: 25 }, team: { id: 10, name: "Equipo Local" }, player: { id: 1, name: "Jugador Secreto" }, type: "Goal", detail: "Normal Goal" }],
+      players: [{ team: { id: 10, name: "Equipo Local" }, players: [{ player: { id: 1, name: "Jugador Secreto" }, statistics: [{ games: { minutes: 90, position: "F", rating: "7.5" }, shots: { total: 3, on: 2 }, goals: { total: 1, assists: 0 }, passes: { total: 20, key: 2 }, tackles: { total: 1, interceptions: 0 }, cards: { yellow: 0, red: 0 } }] }] }],
+      teamStatistics: {
+        cutoffDate: "2026-06-21",
+        home: { team: { id: 10, name: "Equipo Local" }, form: "WWD", fixtures: { played: { total: 3 }, wins: { total: 2 }, draws: { total: 1 }, loses: { total: 0 } }, goals: { for: { total: { total: 6 }, average: { total: "2.0" } }, against: { total: { total: 2 }, average: { total: "0.7" } } }, clean_sheet: { total: 2 }, failed_to_score: { total: 0 }, penalty: { scored: { total: 1 }, missed: { total: 0 } }, lineups: [{ formation: "4-3-3", played: 2 }] },
+        away: { team: { id: 20, name: "Equipo Visitante" }, form: "LDW", fixtures: { played: { total: 3 }, wins: { total: 1 }, draws: { total: 1 }, loses: { total: 1 } }, goals: { for: { total: { total: 3 }, average: { total: "1.0" } }, against: { total: { total: 4 }, average: { total: "1.3" } } }, clean_sheet: { total: 1 }, failed_to_score: { total: 1 }, penalty: { scored: { total: 0 }, missed: { total: 0 } }, lineups: [] }
+      }
     },
     preMatch: {
       home: { team: "Equipo Local", played: 5, goalsFor: 10, goalsAgainst: 4, winRate: 80, restDays: 4, matches: recent("Equipo Local", "Rival A") },
@@ -71,6 +78,10 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.lineups.confirmed, true);
   assert.equal(normalized.xgXga.status, DATA_STATUS.NOT_AVAILABLE);
   assert.equal(normalized.weatherPitch.status, DATA_STATUS.NOT_AVAILABLE);
+  assert.equal(normalized.supportingData.fixtureEvents.summary.goals, 1);
+  assert.equal(normalized.supportingData.playerPerformance.teams[0].players[0].rating, 7.5);
+  assert.equal(normalized.supportingData.teamSeasonStatistics.home.played, 3);
+  assert.equal(normalized.supportingData.teamSeasonStatistics.cutoffDate, "2026-06-21");
   assert.ok(normalized.missingData.some((item) => item.module === "xgXga"));
   assert.equal(normalized.analysisStatus, ANALYSIS_STATUS.COMPLETE);
 });
@@ -82,6 +93,9 @@ test("el constructor para OpenAI usa solo matchData normalizado", () => {
   assert.match(prompt.instructions, /No inventes datos deportivos/);
   assert.match(prompt.input, /"matchData"/);
   assert.doesNotMatch(prompt.input, /INTERNAL_TEST/);
+  assert.doesNotMatch(prompt.input, /Jugador Secreto/);
+  assert.match(prompt.input, /Detalle excluido del análisis prepartido/);
+  assert.match(prompt.input, /teamSeasonStatistics/);
 });
 
 test("un módulo fallido no impide normalizar los demás", () => {

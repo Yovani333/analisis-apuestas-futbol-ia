@@ -183,6 +183,93 @@ export function getWeatherPitchData(dataset) {
   };
 }
 
+export function getFixtureEventsData(dataset) {
+  if (dataset.advancedFailures?.events) {
+    return { ...moduleBase(DATA_STATUS.FAILED, dataset.fetchedAt, SOURCE, "API-Football no pudo entregar los eventos del fixture."), analysisUse: "post_match_audit_only", events: [], summary: { goals: 0, cards: 0, substitutions: 0 } };
+  }
+  const rows = Array.isArray(dataset.confirmed?.events) ? dataset.confirmed.events : [];
+  const events = rows.slice(0, 100).map((event) => ({
+    elapsed: event.time?.elapsed ?? null, extra: event.time?.extra ?? null,
+    teamId: event.team?.id || null, team: event.team?.name || "",
+    playerId: event.player?.id || null, player: event.player?.name || "",
+    assist: event.assist?.name || "", type: event.type || "", detail: event.detail || "", comments: event.comments || ""
+  }));
+  const count = (pattern) => events.filter((event) => pattern.test(`${event.type} ${event.detail}`)).length;
+  return {
+    ...moduleBase(events.length ? DATA_STATUS.AVAILABLE : DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, SOURCE,
+      events.length ? "Datos posteriores al inicio; se usan solo para auditar el resultado, nunca para predecirlo." : "No hay eventos publicados para este fixture."),
+    analysisUse: "post_match_audit_only", events,
+    summary: { goals: count(/goal/i), cards: count(/card/i), substitutions: count(/subst/i) }
+  };
+}
+
+function compactPlayerTeam(entry = {}) {
+  return {
+    teamId: entry.team?.id || null, team: entry.team?.name || "",
+    players: (entry.players || []).slice(0, 40).map((item) => {
+      const statistics = item.statistics?.[0] || {};
+      const rating = Number.parseFloat(statistics.games?.rating);
+      return {
+        playerId: item.player?.id || null, name: item.player?.name || "",
+        position: statistics.games?.position || "", minutes: statistics.games?.minutes ?? null,
+        rating: Number.isFinite(rating) ? Number(rating.toFixed(1)) : null,
+        captain: Boolean(statistics.games?.captain), substitute: Boolean(statistics.games?.substitute),
+        shots: statistics.shots?.total ?? null, shotsOnTarget: statistics.shots?.on ?? null,
+        goals: statistics.goals?.total ?? null, assists: statistics.goals?.assists ?? null,
+        passes: statistics.passes?.total ?? null, keyPasses: statistics.passes?.key ?? null,
+        tackles: statistics.tackles?.total ?? null, interceptions: statistics.tackles?.interceptions ?? null,
+        yellowCards: statistics.cards?.yellow ?? null, redCards: statistics.cards?.red ?? null
+      };
+    })
+  };
+}
+
+export function getPlayerPerformanceData(dataset) {
+  if (dataset.advancedFailures?.players) {
+    return { ...moduleBase(DATA_STATUS.FAILED, dataset.fetchedAt, SOURCE, "API-Football no pudo entregar el rendimiento de jugadores."), analysisUse: "post_match_audit_only", teams: [] };
+  }
+  const rows = Array.isArray(dataset.confirmed?.players) ? dataset.confirmed.players : [];
+  const teams = rows.map(compactPlayerTeam).filter((entry) => entry.players.length);
+  const homeAvailable = teams.some((entry) => entry.teamId === dataset.fixture.homeTeamId);
+  const awayAvailable = teams.some((entry) => entry.teamId === dataset.fixture.awayTeamId);
+  const status = statusForSides(homeAvailable, awayAvailable);
+  return {
+    ...moduleBase(status, dataset.fetchedAt, SOURCE,
+      teams.length ? "Rendimiento posterior al partido; disponible solo para evaluación retrospectiva." : "No hay estadísticas de jugadores publicadas para este fixture."),
+    analysisUse: "post_match_audit_only", teams
+  };
+}
+
+function compactTeamSeasonStatistics(data) {
+  if (!data || Array.isArray(data) || !data.team) return null;
+  return {
+    teamId: data.team.id || null, team: data.team.name || "", form: data.form || "",
+    played: data.fixtures?.played?.total ?? null, wins: data.fixtures?.wins?.total ?? null,
+    draws: data.fixtures?.draws?.total ?? null, losses: data.fixtures?.loses?.total ?? null,
+    goalsFor: data.goals?.for?.total?.total ?? null, goalsAgainst: data.goals?.against?.total?.total ?? null,
+    averageGoalsFor: data.goals?.for?.average?.total ?? null, averageGoalsAgainst: data.goals?.against?.average?.total ?? null,
+    cleanSheets: data.clean_sheet?.total ?? null, failedToScore: data.failed_to_score?.total ?? null,
+    penaltiesScored: data.penalty?.scored?.total ?? null, penaltiesMissed: data.penalty?.missed?.total ?? null,
+    commonLineups: (data.lineups || []).slice(0, 3).map((lineup) => ({ formation: lineup.formation || "", played: lineup.played ?? null }))
+  };
+}
+
+export function getTeamSeasonStatisticsData(dataset) {
+  const failedHome = Boolean(dataset.advancedFailures?.homeTeamStatistics);
+  const failedAway = Boolean(dataset.advancedFailures?.awayTeamStatistics);
+  const home = compactTeamSeasonStatistics(dataset.confirmed?.teamStatistics?.home);
+  const away = compactTeamSeasonStatistics(dataset.confirmed?.teamStatistics?.away);
+  const homeHasSample = Number(home?.played || 0) > 0;
+  const awayHasSample = Number(away?.played || 0) > 0;
+  const status = failedHome && failedAway ? DATA_STATUS.FAILED : statusForSides(homeHasSample, awayHasSample);
+  return {
+    ...moduleBase(status, dataset.fetchedAt, SOURCE,
+      status === DATA_STATUS.AVAILABLE ? "Estadísticas de temporada con corte anterior al fixture." : status === DATA_STATUS.FAILED ? "API-Football no pudo entregar estadísticas agregadas de los equipos." : status === DATA_STATUS.PARTIAL ? "Solo uno de los equipos tiene muestra previa al fixture." : "No existen partidos de temporada anteriores al corte para construir esta muestra."),
+    analysisUse: "pre_match_context", cutoffDate: dataset.confirmed?.teamStatistics?.cutoffDate || "",
+    home, away, failedSides: { home: failedHome, away: failedAway }
+  };
+}
+
 function failedModule(name, error, updatedAt) {
   console.error(`[match-research] No fue posible normalizar ${name}:`, error?.message || error);
   return { ...moduleBase(DATA_STATUS.FAILED, updatedAt, "", "El módulo no pudo procesarse."), errorCode: "MODULE_NORMALIZATION_FAILED" };
@@ -214,6 +301,11 @@ export function normalizeMatchResearchData(dataset) {
     lineups: safeModule("lineups", getLineupsData, dataset),
     xgXga: safeModule("xgXga", getXgXgaData, dataset),
     weatherPitch: safeModule("weatherPitch", getWeatherPitchData, dataset),
+    supportingData: {
+      fixtureEvents: safeModule("fixtureEvents", getFixtureEventsData, dataset),
+      playerPerformance: safeModule("playerPerformance", getPlayerPerformanceData, dataset),
+      teamSeasonStatistics: safeModule("teamSeasonStatistics", getTeamSeasonStatisticsData, dataset)
+    },
     missingData: [], moduleScores: {}, totalConfidenceScore: 0,
     analysisStatus: "needs_review", lastUpdated: updatedAt
   };
@@ -235,11 +327,21 @@ No inventes datos deportivos, lesiones, sanciones, alineaciones, xG, xGA, clima,
 Separa datos confirmados, datos parciales o probables, inferencias y datos faltantes.
 Si analysisStatus es "needs_review", advierte que el pronóstico no es fuerte.
 No generes picks agresivos cuando falten datos críticos.
+Los datos marcados como post_match_audit_only no deben usarse para justificar predicciones prepartido.
 No presentes ningún pronóstico como garantizado, fijo, seguro o sin riesgo.
 La respuesta debe mantener la advertencia de juego responsable.
 `;
 
 export function buildOpenAIPromptFromMatchData(matchData) {
   const safeData = JSON.parse(JSON.stringify(matchData, (key, value) => key === "errorCode" ? undefined : value));
+  for (const key of ["fixtureEvents", "playerPerformance"]) {
+    const module = safeData.supportingData?.[key];
+    if (!module) continue;
+    safeData.supportingData[key] = {
+      status: module.status, source: module.source, updatedAt: module.updatedAt,
+      analysisUse: "post_match_audit_only",
+      message: "Detalle excluido del análisis prepartido para evitar fuga de información posterior al inicio."
+    };
+  }
   return { instructions: OPENAI_ANALYSIS_INSTRUCTIONS.trim(), input: JSON.stringify({ matchData: safeData }) };
 }

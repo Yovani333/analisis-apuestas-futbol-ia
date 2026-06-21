@@ -175,8 +175,10 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   const homeId = base.teams.home.id;
   const awayId = base.teams.away.id;
   const season = base.league.season;
+  const statisticsCutoffDate = new Date(Date.parse(base.fixture.date) - 86400000).toISOString().slice(0, 10);
   const safe = (promise) => promise.catch(() => []);
-  const [statistics, standings, h2h, injuries, lineups, odds, homeRecentRows, awayRecentRows] = await Promise.all([
+  const safeAdvanced = (promise) => promise.then((data) => ({ data, failed: false })).catch(() => ({ data: null, failed: true }));
+  const [statistics, standings, h2h, injuries, lineups, odds, homeRecentRows, awayRecentRows, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
     safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })),
     safe(apiRequest("/standings", { league: base.league.id, season })),
     safe(apiRequest("/fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 })),
@@ -184,7 +186,11 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })),
     safe(apiRequest("/odds", { fixture: fixtureId })),
     safe(apiRequest("/fixtures", { team: homeId, last: 8, timezone: "UTC" })),
-    safe(apiRequest("/fixtures", { team: awayId, last: 8, timezone: "UTC" }))
+    safe(apiRequest("/fixtures", { team: awayId, last: 8, timezone: "UTC" })),
+    safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })),
+    safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })),
+    safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: homeId, date: statisticsCutoffDate })),
+    safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: awayId, date: statisticsCutoffDate }))
   ]);
 
   const fixture = normalizeFixture(base, leagueConfig);
@@ -213,7 +219,15 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     source: "api-football",
     fetchedAt: new Date().toISOString(),
     fixture,
-    confirmed: { statistics, standings, h2h, injuries, lineups, odds },
+    confirmed: {
+      statistics, standings, h2h, injuries, lineups, odds,
+      events: eventsResult.data || [], players: playersResult.data || [],
+      teamStatistics: { home: homeTeamStatsResult.data || null, away: awayTeamStatsResult.data || null, cutoffDate: statisticsCutoffDate }
+    },
+    advancedFailures: {
+      events: eventsResult.failed, players: playersResult.failed,
+      homeTeamStatistics: homeTeamStatsResult.failed, awayTeamStatistics: awayTeamStatsResult.failed
+    },
     preMatch,
     marketAnalysis,
     dataQuality,

@@ -28,5 +28,5 @@ export const AnalysisSchema = z.object({
   prediccion_prudente: z.object({ seleccion: z.string(), razonamiento: z.string(), confianza: confidence }),
   apto_para_parlay: z.object({ respuesta: z.enum(["Sí", "No", "Solo con baja exposición"]), razonamiento: z.string() }),
   riesgos_principales: z.array(z.string()), conclusion: z.string(),
-  advertencia: z.literal("Este análisis es únicamente informativo. No garantiza resultados ni ganancias. Apuesta con responsabilidad.")
+  advertencia: z.literal("Este análisis es únicamente informativo. No garantiza resultados ni beneficios. Las apuestas implican riesgo y deben hacerse con responsabilidad.")
 });

@@ -48,6 +48,10 @@ Pesos de confianza: lesiones/sanciones 18, alineaciones 18, forma 17, xG/xGA 17,
 
 También existe una ruta específica para consultar la investigación sin generar análisis ni consumir créditos de OpenAI: `GET /api/fixtures/:fixtureId/research`. Puede añadirse `?refresh=true` para invalidar la caché del fixture y solicitar datos actualizados a API-Football; esta operación está limitada para proteger el cupo del proveedor.
 
+La sección **Análisis de fuentes** muestra el nivel de confianza de 0 a 100, el estado general, los datos críticos faltantes y los nueve módulos evaluados. Cada tarjeta identifica estado, fuente, última actualización, puntos aportados y explicación del faltante. **Ver detalle** abre los datos normalizados y **Actualizar datos** renueva la investigación desde API-Football sin ejecutar OpenAI ni consumir sus créditos.
+
+La misma sección incluye tres módulos complementarios: estadísticas agregadas de temporada, eventos del fixture y rendimiento individual de jugadores. Las estadísticas de temporada se consultan con corte al día anterior del partido. Eventos y rendimiento del mismo fixture se etiquetan `post_match_audit_only`, se muestran para evaluación retrospectiva y su detalle se elimina del paquete enviado a OpenAI para evitar fuga de información posterior al inicio.
+
 GitHub Pages publica exclusivamente `public/` mediante `.github/workflows/deploy-pages.yml`. Las APIs reales requieren ejecutar el servidor Node localmente o desplegarlo en un proveedor compatible con backend.
 
 ## Ligas permitidas
@@ -135,13 +139,16 @@ GET  /api/fixtures/:fixtureId/head-to-head
 GET  /api/fixtures/:fixtureId/injuries
 GET  /api/fixtures/:fixtureId/lineups
 GET  /api/fixtures/:fixtureId/odds
+GET  /api/fixtures/:fixtureId/events
+GET  /api/fixtures/:fixtureId/players
+GET  /api/fixtures/:fixtureId/team-statistics
 GET  /api/head-to-head?fixtureId=123
 POST /api/fixtures/:fixtureId/analysis
 ```
 
 `sidelined` responde como no verificado hasta confirmar que el plan contratado ofrece cobertura adecuada. No se inventa ni se sustituye esa información.
 
-API-Football está integrado actualmente para fixtures, estadísticas del fixture, clasificación, H2H, lesiones, alineaciones y cuotas. La cobertura real comprobada también incluye eventos y jugadores, pero esos endpoints aún no alimentan el análisis normalizado. `teams/statistics` requiere tratamiento específico porque responde con un objeto agregado. Clima/cancha y xG/xGA acumulado permanecen `not_available` cuando API-Football no los entrega en un formato prepartido verificable. No hay APIs meteorológicas ni scrapers adicionales configurados.
+API-Football está integrado para fixtures, estadísticas del fixture, clasificación, H2H, lesiones, alineaciones, cuotas, eventos, rendimiento de jugadores y estadísticas agregadas de equipos. Los tres últimos se normalizan como datos complementarios y no alteran los pesos principales. Clima/cancha y xG/xGA acumulado permanecen `not_available` cuando API-Football no los entrega en un formato prepartido verificable. No hay APIs meteorológicas ni scrapers adicionales configurados.
 
 ## Flujo de datos
 
@@ -151,9 +158,10 @@ API-Football está integrado actualmente para fixtures, estadísticas del fixtur
 4. El backend normaliza cada módulo, registra su estado y detecta datos críticos faltantes.
 5. El evaluador calcula un nivel de confianza de 0 a 100 con pesos documentados.
 6. Un módulo determinista calcula probabilidad implícita, margen, cuota justa y valor esperado.
-7. Solo el objeto normalizado y verificado se envía a OpenAI; las respuestas numéricas y el estado final quedan sometidos a las reglas del servidor.
-8. Zod valida el JSON antes de responder al navegador.
-9. Los resultados finales pueden actualizarse desde API-Football sin volver a ejecutar OpenAI.
+7. El backend excluye del prompt los eventos y rendimientos posteriores al inicio, conservando únicamente contexto temporalmente válido.
+8. Solo el objeto normalizado y verificado se envía a OpenAI; las respuestas numéricas y el estado final quedan sometidos a las reglas del servidor.
+9. Zod valida el JSON antes de responder al navegador.
+10. Los resultados finales pueden actualizarse desde API-Football sin volver a ejecutar OpenAI.
 
 En esta fase se muestran como máximo cinco fixtures por liga y búsqueda para proteger el rendimiento y el cupo del proveedor.
 

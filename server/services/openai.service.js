@@ -3,22 +3,22 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { env } from "../config/env.js";
 import { AppError } from "../errors.js";
 import { AnalysisSchema } from "../schemas/analysis.schema.js";
+import { ANALYSIS_STATUS } from "../constants/match-research.js";
+import { buildOpenAIPromptFromMatchData } from "./match-research.service.js";
 
-const SYSTEM_INSTRUCTIONS = `Eres un analista cuantitativo prudente de fútbol.
-Analiza exclusivamente el JSON proporcionado, procedente de API-Football.
-No inventes resultados, lesiones, sanciones, alineaciones, cuotas, estadísticas, noticias, head to head ni jugadores.
-Separa datos confirmados, datos faltantes, inferencias razonadas y riesgos.
-Si falta cualquier dato importante, usa "Necesita revisión" y probabilidades null cuando no puedan estimarse responsablemente.
-No presentes apuestas como seguras, no prometas ganancias y no fuerces mercados sugeridos sin valor esperado verificable.
-Head to head es una señal secundaria. Cuotas y valor esperado tienen prioridad.
-Solo puedes sugerir double_chance, over_under_2_5 o btts incluidos en verifiedMarketCalculations.
-Copia exactamente codigo_mercado, codigo_seleccion, cuota_decimal, estimatedProbabilityPct y expectedValuePct de esos cálculos.
-No sugieras mercados sin valor esperado positivo ni más de tres selecciones.
-Si dataQuality.canSuggest es false, devuelve mercados_sugeridos vacío y apto_para_parlay No.`;
+const MARKET_INSTRUCTIONS = `
+Solo puedes sugerir double_chance, over_under_2_5 o btts incluidos en matchData.odds.markets.
+Usa marketKey como codigo_mercado, selectionKey como codigo_seleccion, decimalOdds como cuota_decimal, estimatedProbabilityPct como probabilidad_modelo y expectedValuePct como valor_esperado.
+No sugieras mercados sin positiveValue=true, con requiresReview=true ni más de tres selecciones.
+Si matchData.analysisStatus es needs_review, devuelve mercados_sugeridos vacío y apto_para_parlay No.
+Head to head es una señal secundaria. Cuotas y valor esperado tienen prioridad.`;
 
-function finalizeAnalysis(parsed, dataset) {
+export function applyResearchGuardrails(parsed, dataset) {
   const quality = dataset.dataQuality;
   const calculations = dataset.marketAnalysis || [];
+  const research = dataset.researchData;
+  const researchBlocksMarkets = research?.analysisStatus === ANALYSIS_STATUS.NEEDS_REVIEW;
+  const researchIsPartial = research?.analysisStatus === ANALYSIS_STATUS.PARTIAL;
   const verifiedMarkets = (parsed.mercados_sugeridos || []).slice(0, 3).map((market) => {
     const calculation = calculations.find((item) => item.marketKey === market.codigo_mercado && item.selectionKey === market.codigo_seleccion);
     if (!calculation) {
@@ -31,17 +31,31 @@ function finalizeAnalysis(parsed, dataset) {
       cuota_decimal: calculation.decimalOdds,
       probabilidad_modelo: calculation.estimatedProbabilityPct,
       valor_esperado: calculation.expectedValuePct,
-      requiere_revision: market.requiere_revision || calculation.requiresReview || !calculation.positiveValue || !quality.canSuggest
+      requiere_revision: market.requiere_revision || calculation.requiresReview || !calculation.positiveValue || !quality.canSuggest || researchIsPartial || researchBlocksMarkets
     };
   });
-  const usableMarkets = quality.canSuggest ? verifiedMarkets : [];
+  const usableMarkets = quality.canSuggest && !researchBlocksMarkets ? verifiedMarkets : [];
+  const normalizedMissing = (research?.missingData || []).map((item) => `${item.label}: ${item.message || item.status}`);
+  const datosFaltantes = [...new Set([...(parsed.datos_faltantes || []), ...normalizedMissing])];
+  const researchComplete = research?.analysisStatus === ANALYSIS_STATUS.COMPLETE;
   return {
     ...parsed,
+    estado_analisis: researchComplete ? parsed.estado_analisis : "Necesita revisión",
+    datos_faltantes: datosFaltantes,
     mercados_sugeridos: usableMarkets,
-    apto_para_parlay: quality.canSuggest && usableMarkets.some((market) => !market.requiere_revision)
+    apto_para_parlay: researchComplete && quality.canSuggest && usableMarkets.some((market) => !market.requiere_revision)
       ? parsed.apto_para_parlay
-      : { respuesta: "No", razonamiento: "La cobertura o el valor esperado verificado no alcanzan el umbral para agregar selecciones al parlay." },
-    _context: { quality, preMatch: dataset.preMatch, marketAnalysis: calculations }
+      : { respuesta: "No", razonamiento: "La cobertura normalizada, los datos críticos o el valor esperado verificado no alcanzan el umbral para agregar selecciones al parlay." },
+    _context: {
+      quality, preMatch: dataset.preMatch, marketAnalysis: calculations,
+      research: research ? {
+        totalConfidenceScore: research.totalConfidenceScore,
+        analysisStatus: research.analysisStatus,
+        moduleScores: research.moduleScores,
+        criticalMissingData: research.criticalMissingData,
+        missingData: research.missingData
+      } : null
+    }
   };
 }
 
@@ -49,14 +63,15 @@ export async function generateAnalysis(dataset) {
   if (!env.openaiApiKey || !env.openaiModel) throw new AppError("OpenAI no está configurado.", 503, "OPENAI_NOT_CONFIGURED");
   const client = new OpenAI({ apiKey: env.openaiApiKey, timeout: 45000, maxRetries: 1 });
   try {
+    const prompt = buildOpenAIPromptFromMatchData(dataset.researchData);
     const response = await client.responses.parse({
       model: env.openaiModel,
-      instructions: SYSTEM_INSTRUCTIONS,
-      input: JSON.stringify(dataset.analysisInput || dataset),
+      instructions: `${prompt.instructions}\n${MARKET_INSTRUCTIONS}`,
+      input: prompt.input,
       text: { format: zodTextFormat(AnalysisSchema, "football_analysis") }
     });
     if (!response.output_parsed) throw new AppError("OpenAI no devolvió un análisis estructurado.", 502, "OPENAI_INVALID_OUTPUT");
-    return finalizeAnalysis(response.output_parsed, dataset);
+    return applyResearchGuardrails(response.output_parsed, dataset);
   } catch (error) {
     if (error instanceof AppError) throw error;
     if (error?.code === "insufficient_quota") {

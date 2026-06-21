@@ -23,6 +23,11 @@
   "lineups": { "status": "not_available", "confirmed": false, "homeFormation": "", "awayFormation": "", "homeStartingXI": [], "awayStartingXI": [], "homeSubstitutes": [], "awaySubstitutes": [], "probableHomeXI": [], "probableAwayXI": [], "source": "", "updatedAt": "", "message": "" },
   "xgXga": { "status": "not_available", "homeXG": null, "homeXGA": null, "awayXG": null, "awayXGA": null, "homeNPXG": null, "awayNPXG": null, "source": "", "updatedAt": "", "message": "" },
   "weatherPitch": { "status": "not_available", "temperature": null, "rainProbability": null, "windSpeed": null, "humidity": null, "condition": "", "pitchNotes": "Sin reporte reciente de estado de cancha.", "source": "", "updatedAt": "", "message": "" },
+  "supportingData": {
+    "fixtureEvents": { "status": "not_available", "analysisUse": "post_match_audit_only", "events": [], "summary": { "goals": 0, "cards": 0, "substitutions": 0 }, "source": "api-football", "updatedAt": "", "message": "" },
+    "playerPerformance": { "status": "not_available", "analysisUse": "post_match_audit_only", "teams": [], "source": "api-football", "updatedAt": "", "message": "" },
+    "teamSeasonStatistics": { "status": "not_available", "analysisUse": "pre_match_context", "cutoffDate": "", "home": null, "away": null, "failedSides": { "home": false, "away": false }, "source": "api-football", "updatedAt": "", "message": "" }
+  },
   "missingData": [],
   "criticalMissingData": [],
   "moduleScores": {},
