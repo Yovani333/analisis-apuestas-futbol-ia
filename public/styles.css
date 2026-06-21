@@ -337,7 +337,12 @@ button { touch-action: manipulation; }
 .parlay-slip__header .eyebrow { color: #dcfce7; }
 .parlay-slip__header h2 { margin: 2px 0 0; font-size: 1rem; }
 .parlay-slip__header h2 span { display: inline-grid; min-width: 22px; height: 22px; place-items: center; margin-left: 4px; color: #166534; font-size: .7rem; background: white; border-radius: 999px; }
-.parlay-slip__close { color: white; font-size: 1.35rem; background: transparent; border: 0; cursor: pointer; }
+.parlay-slip__controls { display: flex; align-items: flex-start; gap: 3px; }
+.parlay-slip__control { display: grid; width: 30px; height: 30px; place-items: center; color: white; font-size: 1.2rem; background: rgb(255 255 255 / 10%); border: 0; border-radius: 7px; cursor: pointer; }
+.parlay-slip__control:hover, .parlay-slip__control:focus-visible { background: rgb(255 255 255 / 22%); outline: 0; }
+.parlay-slip--minimized { width: min(320px, calc(100% - 24px)); overflow: hidden; }
+.parlay-slip--minimized .parlay-slip__header { position: static; }
+.parlay-slip--minimized .parlay-draft-list, .parlay-slip--minimized .parlay-slip__footer { display: none; }
 .parlay-draft-list { display: grid; gap: 9px; padding: 12px; background: #f1f5f2; }
 .parlay-draft-leg { display: grid; grid-template-columns: 25px 1fr 25px; gap: 9px; padding: 11px; background: white; border: 1px solid #d9e5de; border-radius: 11px; }
 .parlay-draft-leg__number { display: grid; width: 24px; height: 24px; place-items: center; color: white; font-size: .68rem; font-weight: 800; background: #16a34a; border-radius: 50%; }

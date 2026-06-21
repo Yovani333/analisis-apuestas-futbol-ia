@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260620-parlays" />
+    <link rel="stylesheet" href="styles.css?v=20260620-parlay-minimize" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -179,7 +179,10 @@
           <p class="eyebrow">Cupón en preparación</p>
           <h2 id="parlay-slip-title">Mi parlay <span id="parlay-leg-count">0</span></h2>
         </div>
-        <button id="parlay-slip-close" class="parlay-slip__close" type="button" aria-label="Ocultar cupón">×</button>
+        <div class="parlay-slip__controls">
+          <button id="parlay-slip-minimize" class="parlay-slip__control" type="button" aria-label="Minimizar cupón" aria-expanded="true">−</button>
+          <button id="parlay-slip-close" class="parlay-slip__control" type="button" aria-label="Ocultar cupón">×</button>
+        </div>
       </div>
       <div id="parlay-draft-list" class="parlay-draft-list"></div>
       <div class="parlay-slip__footer">
@@ -194,6 +197,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260620-parlays"></script>
+    <script type="module" src="app.js?v=20260620-parlay-minimize"></script>
   </body>
 </html>

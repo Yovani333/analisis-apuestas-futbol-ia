@@ -38,6 +38,7 @@ const elements = {
   analysisStatus: document.querySelector("#analysis-status"),
   analysisContent: document.querySelector("#analysis-content"),
   parlaySlip: document.querySelector("#parlay-slip"),
+  parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
   parlayLegCount: document.querySelector("#parlay-leg-count"),
   parlayFab: document.querySelector("#open-parlay-slip"),
@@ -303,8 +304,18 @@ function renderParlayDraft(open = false) {
     </article>
   `).join("");
 
-  if (open) elements.parlaySlip.hidden = false;
+  if (open) {
+    elements.parlaySlip.hidden = false;
+    setParlayMinimized(false);
+  }
   elements.parlayFab.hidden = !elements.parlaySlip.hidden;
+}
+
+function setParlayMinimized(minimized) {
+  elements.parlaySlip.classList.toggle("parlay-slip--minimized", minimized);
+  elements.parlayMinimize.textContent = minimized ? "+" : "−";
+  elements.parlayMinimize.setAttribute("aria-expanded", String(!minimized));
+  elements.parlayMinimize.setAttribute("aria-label", minimized ? "Expandir cupón" : "Minimizar cupón");
 }
 
 function addMarketToParlay(analysis, marketIndex) {
@@ -580,6 +591,9 @@ elements.parlayDraftList.addEventListener("click", (event) => {
 document.querySelector("#parlay-slip-close").addEventListener("click", () => {
   elements.parlaySlip.hidden = true;
   elements.parlayFab.hidden = state.parlayDraft.length === 0;
+});
+elements.parlayMinimize.addEventListener("click", () => {
+  setParlayMinimized(!elements.parlaySlip.classList.contains("parlay-slip--minimized"));
 });
 elements.parlayFab.addEventListener("click", () => renderParlayDraft(true));
 elements.saveParlay.addEventListener("click", saveCurrentParlay);
