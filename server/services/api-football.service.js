@@ -5,9 +5,11 @@ import {
   buildAnalysisInput, calculateDataQuality, calculateMarketAnalysis,
   normalizeOdds, summarizeRecentFixtures
 } from "./market-analysis.service.js";
+import { normalizeMatchResearchData } from "./match-research.service.js";
 
 const leagueCache = new Map();
 const requestCache = new Map();
+const datasetCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 
 function getCached(key) {
@@ -112,6 +114,7 @@ function normalizeFixture(item, league) {
     status: ["FT", "AET", "PEN"].includes(item.fixture.status.short) ? "finished" : "scheduled",
     statusLabel: statusLabel(item.fixture.status.short),
     stadium: item.fixture.venue?.name || "No disponible",
+    city: item.fixture.venue?.city || "",
     country: league.countryLabel,
     score: { home: item.goals?.home ?? null, away: item.goals?.away ?? null },
     dataAvailability: {
@@ -143,6 +146,8 @@ function availability(value) {
 }
 
 export async function getFixtureDataset(fixtureId) {
+  const cachedDataset = datasetCache.get(fixtureId);
+  if (cachedDataset?.expiresAt > Date.now()) return cachedDataset.value;
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: "UTC" });
   const base = fixtureRows[0];
   if (!base) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
@@ -202,7 +207,9 @@ export async function getFixtureDataset(fixtureId) {
     unavailable: ["weather", "news", "referee_details", "travel", "sidelined_not_verified"],
     qualityAlerts: ["Los datos vacíos se conservan como no disponibles; no se completan por inferencia."]
   };
+  dataset.researchData = normalizeMatchResearchData(dataset);
   dataset.analysisInput = buildAnalysisInput(dataset);
+  datasetCache.set(fixtureId, { value: dataset, expiresAt: Date.now() + CACHE_TTL });
   return dataset;
 }
 

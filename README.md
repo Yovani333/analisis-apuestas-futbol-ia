@@ -24,6 +24,28 @@ Los mercados sugeridos por un análisis real pueden agregarse a un cupón de par
 
 Antes de llamar a OpenAI, el backend construye una ficha prepartido con los últimos cinco encuentros por equipo, forma, goles, rendimiento local/visitante, descanso y cuotas principales. Calcula probabilidad implícita, margen de la casa, cuota justa y valor esperado con un método descriptivo y transparente. La primera versión cuantitativa se limita a doble oportunidad, Over/Under 2.5 y ambos equipos anotan. OpenAI explica esos cálculos, pero no puede reemplazarlos ni crear cifras nuevas.
 
+### Investigación normalizada — etapa 1
+
+El backend incorpora `normalizeMatchResearchData()` y agrega `researchData` a la respuesta de `GET /api/fixtures/:fixtureId`. El contrato completo está documentado en `docs/match-research-contract.json`.
+
+Módulos normalizados de forma independiente:
+
+- `getStandingsData()`
+- `getH2HData()`
+- `getOddsData()`
+- `getContextCalendarData()`
+- `getStatsFormData()`
+- `getInjuriesSuspensionsData()`
+- `getLineupsData()`
+- `getXgXgaData()`
+- `getWeatherPitchData()`
+
+Cada módulo usa `available`, `partial`, `not_available` o `failed`, conserva fuente y timestamp y explica los faltantes. Una respuesta vacía de lesiones no se interpreta como confirmación de que no existen bajas.
+
+Pesos de confianza: lesiones/sanciones 18, alineaciones 18, forma 17, xG/xGA 17, contexto 10, clasificación 8, cuotas 7, H2H 3 y clima/cancha 2. Un módulo parcial aporta la mitad. Si faltan al menos tres de los cuatro módulos críticos —lesiones, alineaciones, forma y xG/xGA— el estado siempre será `needs_review`.
+
+`buildOpenAIPromptFromMatchData()` ya prepara instrucciones estrictas y elimina códigos internos, pero todavía no sustituye el flujo activo de OpenAI; esa conexión corresponde a la etapa siguiente para mantener el cambio aislado y verificable.
+
 GitHub Pages publica exclusivamente `public/` mediante `.github/workflows/deploy-pages.yml`. Las APIs reales requieren ejecutar el servidor Node localmente o desplegarlo en un proveedor compatible con backend.
 
 ## Ligas permitidas
@@ -115,6 +137,8 @@ POST /api/fixtures/:fixtureId/analysis
 ```
 
 `sidelined` responde como no verificado hasta confirmar que el plan contratado ofrece cobertura adecuada. No se inventa ni se sustituye esa información.
+
+API-Football está integrado actualmente para fixtures, estadísticas del fixture, clasificación, H2H, lesiones, alineaciones y cuotas. La cobertura real comprobada también incluye eventos y jugadores, pero esos endpoints aún no alimentan el análisis normalizado. `teams/statistics` requiere tratamiento específico porque responde con un objeto agregado. Clima/cancha y xG/xGA acumulado permanecen `not_available` cuando API-Football no los entrega en un formato prepartido verificable. No hay APIs meteorológicas ni scrapers adicionales configurados.
 
 ## Flujo de datos
 
