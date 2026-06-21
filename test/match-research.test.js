@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { ANALYSIS_STATUS, DATA_STATUS, MODULE_WEIGHTS } from "../server/constants/match-research.js";
 import { calculateMatchConfidenceScore, detectMissingCriticalData, scoreModule } from "../server/services/match-confidence.service.js";
 import { buildOpenAIPromptFromMatchData, normalizeMatchResearchData } from "../server/services/match-research.service.js";
+import { applyResearchGuardrails } from "../server/services/openai.service.js";
 
 function lineup(teamId, name) {
   return { team: { id: teamId, name }, formation: "4-3-3", startXI: [{ player: { id: teamId * 10, name: `${name} 1`, number: 1, pos: "G" } }], substitutes: [] };
@@ -90,4 +91,36 @@ test("un módulo fallido no impide normalizar los demás", () => {
   assert.equal(normalized.standings.status, DATA_STATUS.FAILED);
   assert.equal(normalized.statsForm.status, DATA_STATUS.AVAILABLE);
   assert.equal(normalized.standings.message, "El módulo no pudo procesarse.");
+});
+
+test("OpenAI no puede convertir un research parcial en análisis completo", () => {
+  const researchData = normalizeMatchResearchData(datasetFixture());
+  researchData.analysisStatus = ANALYSIS_STATUS.PARTIAL;
+  researchData.missingData = [{ label: "xG / xGA", status: DATA_STATUS.NOT_AVAILABLE, message: "No disponible" }];
+  const dataset = {
+    researchData,
+    dataQuality: { canSuggest: true }, preMatch: {},
+    marketAnalysis: [{ marketKey: "btts", selectionKey: "btts_yes", market: "Ambos anotan", selection: "Sí", decimalOdds: 1.9, estimatedProbabilityPct: 55, expectedValuePct: 4.5, positiveValue: true, requiresReview: false }]
+  };
+  const parsed = {
+    estado_analisis: "Completo", datos_faltantes: [],
+    mercados_sugeridos: [{ codigo_mercado: "btts", codigo_seleccion: "btts_yes", mercado: "Otro", seleccion: "Otra", cuota_decimal: 9, probabilidad_modelo: 99, valor_esperado: 999, requiere_revision: false }],
+    apto_para_parlay: { respuesta: "Sí", razonamiento: "Prueba" }
+  };
+  const guarded = applyResearchGuardrails(parsed, dataset);
+  assert.equal(guarded.estado_analisis, "Necesita revisión");
+  assert.equal(guarded.mercados_sugeridos[0].cuota_decimal, 1.9);
+  assert.equal(guarded.mercados_sugeridos[0].requiere_revision, true);
+  assert.equal(guarded.apto_para_parlay.respuesta, "No");
+  assert.match(guarded.datos_faltantes[0], /xG/);
+});
+
+test("research needs_review elimina mercados aunque el modelo los sugiera", () => {
+  const researchData = normalizeMatchResearchData(datasetFixture());
+  researchData.analysisStatus = ANALYSIS_STATUS.NEEDS_REVIEW;
+  const guarded = applyResearchGuardrails({ estado_analisis: "Completo", datos_faltantes: [], mercados_sugeridos: [{ codigo_mercado: "btts", codigo_seleccion: "btts_yes" }], apto_para_parlay: { respuesta: "Sí", razonamiento: "" } }, {
+    researchData, dataQuality: { canSuggest: true }, preMatch: {}, marketAnalysis: []
+  });
+  assert.equal(guarded.mercados_sugeridos.length, 0);
+  assert.equal(guarded.apto_para_parlay.respuesta, "No");
 });

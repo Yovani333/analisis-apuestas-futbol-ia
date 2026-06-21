@@ -145,7 +145,20 @@ function availability(value) {
   return Array.isArray(value) && value.length ? "Disponible" : "No disponible";
 }
 
-export async function getFixtureDataset(fixtureId) {
+export function invalidateFixtureCache(fixtureId) {
+  const cachedDataset = datasetCache.get(fixtureId)?.value;
+  const relatedTeamIds = new Set([cachedDataset?.fixture?.homeTeamId, cachedDataset?.fixture?.awayTeamId].filter(Boolean).map(String));
+  datasetCache.delete(fixtureId);
+  for (const cacheKey of requestCache.keys()) {
+    const url = new URL(cacheKey);
+    const sameFixture = url.searchParams.get("fixture") === String(fixtureId) || url.searchParams.get("id") === String(fixtureId);
+    const sameTeam = relatedTeamIds.has(url.searchParams.get("team"));
+    if (sameFixture || sameTeam) requestCache.delete(cacheKey);
+  }
+}
+
+export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}) {
+  if (forceRefresh) invalidateFixtureCache(fixtureId);
   const cachedDataset = datasetCache.get(fixtureId);
   if (cachedDataset?.expiresAt > Date.now()) return cachedDataset.value;
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: "UTC" });

@@ -24,7 +24,7 @@ Los mercados sugeridos por un análisis real pueden agregarse a un cupón de par
 
 Antes de llamar a OpenAI, el backend construye una ficha prepartido con los últimos cinco encuentros por equipo, forma, goles, rendimiento local/visitante, descanso y cuotas principales. Calcula probabilidad implícita, margen de la casa, cuota justa y valor esperado con un método descriptivo y transparente. La primera versión cuantitativa se limita a doble oportunidad, Over/Under 2.5 y ambos equipos anotan. OpenAI explica esos cálculos, pero no puede reemplazarlos ni crear cifras nuevas.
 
-### Investigación normalizada — etapa 1
+### Investigación normalizada — etapas 1 y 2
 
 El backend incorpora `normalizeMatchResearchData()` y agrega `researchData` a la respuesta de `GET /api/fixtures/:fixtureId`. El contrato completo está documentado en `docs/match-research-contract.json`.
 
@@ -44,7 +44,9 @@ Cada módulo usa `available`, `partial`, `not_available` o `failed`, conserva fu
 
 Pesos de confianza: lesiones/sanciones 18, alineaciones 18, forma 17, xG/xGA 17, contexto 10, clasificación 8, cuotas 7, H2H 3 y clima/cancha 2. Un módulo parcial aporta la mitad. Si faltan al menos tres de los cuatro módulos críticos —lesiones, alineaciones, forma y xG/xGA— el estado siempre será `needs_review`.
 
-`buildOpenAIPromptFromMatchData()` ya prepara instrucciones estrictas y elimina códigos internos, pero todavía no sustituye el flujo activo de OpenAI; esa conexión corresponde a la etapa siguiente para mantener el cambio aislado y verificable.
+`buildOpenAIPromptFromMatchData()` alimenta el flujo activo de OpenAI exclusivamente con `researchData`. OpenAI no recibe respuestas crudas del proveedor. Después de validar la respuesta estructurada, el servidor vuelve a imponer el estado de confianza, los datos faltantes y los cálculos deterministas, por lo que el modelo no puede convertir un estudio parcial en completo ni sustituir probabilidades, cuotas justas o valor esperado.
+
+También existe una ruta específica para consultar la investigación sin generar análisis ni consumir créditos de OpenAI: `GET /api/fixtures/:fixtureId/research`. Puede añadirse `?refresh=true` para invalidar la caché del fixture y solicitar datos actualizados a API-Football; esta operación está limitada para proteger el cupo del proveedor.
 
 GitHub Pages publica exclusivamente `public/` mediante `.github/workflows/deploy-pages.yml`. Las APIs reales requieren ejecutar el servidor Node localmente o desplegarlo en un proveedor compatible con backend.
 
@@ -125,6 +127,7 @@ GET  /api/health
 GET  /api/leagues
 GET  /api/fixtures
 GET  /api/fixtures/:fixtureId
+GET  /api/fixtures/:fixtureId/research
 GET  /api/fixtures/:fixtureId/result
 GET  /api/fixtures/:fixtureId/statistics
 GET  /api/fixtures/:fixtureId/standings
@@ -145,11 +148,12 @@ API-Football está integrado actualmente para fixtures, estadísticas del fixtur
 1. El frontend consulta rutas propias bajo `/api`.
 2. El backend valida liga, fechas, temporada, estado e ID de fixture.
 3. API-Football entrega los datos deportivos.
-4. El backend resume forma reciente, localía/visita, descanso y cuotas principales.
-5. Un módulo determinista calcula probabilidad implícita, margen, cuota justa y valor esperado.
-6. El paquete reducido y verificado se envía a OpenAI; las respuestas numéricas se sustituyen por los cálculos del servidor.
-7. Zod valida el JSON antes de responder al navegador.
-8. Los resultados finales pueden actualizarse desde API-Football sin volver a ejecutar OpenAI.
+4. El backend normaliza cada módulo, registra su estado y detecta datos críticos faltantes.
+5. El evaluador calcula un nivel de confianza de 0 a 100 con pesos documentados.
+6. Un módulo determinista calcula probabilidad implícita, margen, cuota justa y valor esperado.
+7. Solo el objeto normalizado y verificado se envía a OpenAI; las respuestas numéricas y el estado final quedan sometidos a las reglas del servidor.
+8. Zod valida el JSON antes de responder al navegador.
+9. Los resultados finales pueden actualizarse desde API-Football sin volver a ejecutar OpenAI.
 
 En esta fase se muestran como máximo cinco fixtures por liga y búsqueda para proteger el rendimiento y el cupo del proveedor.
 
@@ -161,7 +165,7 @@ Si falta información importante, el análisis debe indicar `Necesita revisión`
 npm test
 ```
 
-Las pruebas verifican ligas permitidas, rangos de fechas e identificadores de fixture.
+Las pruebas verifican ligas permitidas, rangos de fechas, identificadores de fixture, normalización, puntuación de confianza, detección de datos críticos y las barreras posteriores a OpenAI.
 
 ## Seguridad y uso responsable
 
@@ -171,4 +175,4 @@ Las pruebas verifican ligas permitidas, rangos de fechas e identificadores de fi
 - Las llamadas externas tienen timeout y caché temporal.
 - El sistema no debe prometer resultados ni ganancias.
 
-Este proyecto es únicamente informativo. Ningún análisis garantiza resultados ni ganancias. Apuesta con responsabilidad.
+Este análisis es únicamente informativo. No garantiza resultados ni beneficios. Las apuestas implican riesgo y deben hacerse con responsabilidad.

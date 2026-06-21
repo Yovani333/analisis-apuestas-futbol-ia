@@ -65,7 +65,10 @@ export function getOddsData(dataset) {
     marketKey: market.marketKey, selectionKey: market.selectionKey, market: market.market,
     selection: market.selection, decimalOdds: market.decimalOdds, bookmaker: dataset.preMatch?.odds?.bookmaker || "",
     impliedProbabilityPct: market.impliedProbabilityPct, noVigImpliedProbabilityPct: market.noVigImpliedProbabilityPct,
-    bookmakerMarginPct: market.bookmakerMarginPct, updatedAt: dataset.preMatch?.odds?.updatedAt || dataset.fetchedAt
+    bookmakerMarginPct: market.bookmakerMarginPct, estimatedProbabilityPct: market.estimatedProbabilityPct,
+    fairOdds: market.fairOdds, expectedValuePct: market.expectedValuePct, positiveValue: market.positiveValue,
+    requiresReview: market.requiresReview, method: market.method,
+    updatedAt: dataset.preMatch?.odds?.updatedAt || dataset.fetchedAt
   }));
   const status = markets.length >= 4 ? DATA_STATUS.AVAILABLE : markets.length ? DATA_STATUS.PARTIAL : DATA_STATUS.NOT_AVAILABLE;
   return {
