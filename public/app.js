@@ -1,4 +1,4 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-efficient-analysis";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-clean-start";
 import { footballDataService } from "./services.js?v=20260620-efficient-analysis";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
@@ -11,6 +11,7 @@ const state = {
   analysisByFixture: new Map(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
+  hasSearched: false,
   isSearching: false,
   isAnalyzing: false
 };
@@ -84,7 +85,7 @@ function showNotice(message) {
 function renderLeagueOptions() {
   elements.leagueOptions.innerHTML = ALLOWED_LEAGUES.map((league) => `
     <label class="checkbox-row">
-      <input type="checkbox" name="league" value="${escapeHtml(league.slug)}" ${league.defaultSelected === false ? "" : "checked"} />
+      <input type="checkbox" name="league" value="${escapeHtml(league.slug)}" />
       <span>${escapeHtml(league.name)} — ${escapeHtml(league.country)}</span>
     </label>
   `).join("");
@@ -106,7 +107,7 @@ function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
 
   if (!state.fixtures.length) {
-    elements.matchesList.innerHTML = '<div class="empty-results">No hay escenarios de demostración para estos filtros.</div>';
+    elements.matchesList.innerHTML = `<div class="empty-results">${state.hasSearched ? "No se encontraron partidos para los filtros seleccionados." : "Selecciona una liga y un rango de fechas para buscar partidos."}</div>`;
     return;
   }
 
@@ -577,6 +578,7 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
 
 function validateFilters() {
   if (!selectedLeagueSlugs().length) return "Selecciona al menos una liga.";
+  if (!elements.dateFrom.value || !elements.dateTo.value) return "Selecciona las fechas desde y hasta.";
   if (elements.dateFrom.value && elements.dateTo.value && elements.dateFrom.value > elements.dateTo.value) return "La fecha inicial no puede ser posterior a la fecha final.";
   return "";
 }
@@ -588,6 +590,7 @@ async function searchFixtures(event) {
   elements.filterError.textContent = error;
   if (error || state.isSearching) return;
 
+  state.hasSearched = true;
   state.isSearching = true;
   const submitButton = elements.form.querySelector('button[type="submit"]');
   submitButton.disabled = true;
@@ -739,7 +742,7 @@ async function initializeApp() {
     document.querySelector("#runtime-mode").textContent = "Demo pública sin APIs";
     document.querySelector("#runtime-description").textContent = "GitHub Pages no ejecuta el backend; los partidos y análisis mostrados son sintéticos.";
   }
-  elements.form.requestSubmit();
+  renderMatches();
 }
 
 initializeApp();

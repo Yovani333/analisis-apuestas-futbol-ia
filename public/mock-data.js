@@ -1,9 +1,9 @@
 export const ALLOWED_LEAGUES = Object.freeze([
-  { slug: "la-liga", name: "La Liga", country: "España", code: "ESP", apiId: null, defaultSelected: true },
-  { slug: "chinese-super-league", name: "Superliga China", country: "China", code: "CHN", apiId: null, defaultSelected: true },
-  { slug: "bundesliga", name: "Bundesliga", country: "Alemania", code: "DEU", apiId: null, defaultSelected: true },
-  { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal", code: "PRT", apiId: null, defaultSelected: true },
-  { slug: "ligue-1", name: "Ligue 1", country: "Francia", code: "FRA", apiId: null, defaultSelected: true },
+  { slug: "la-liga", name: "La Liga", country: "España", code: "ESP", apiId: null, defaultSelected: false },
+  { slug: "chinese-super-league", name: "Superliga China", country: "China", code: "CHN", apiId: null, defaultSelected: false },
+  { slug: "bundesliga", name: "Bundesliga", country: "Alemania", code: "DEU", apiId: null, defaultSelected: false },
+  { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal", code: "PRT", apiId: null, defaultSelected: false },
+  { slug: "ligue-1", name: "Ligue 1", country: "Francia", code: "FRA", apiId: null, defaultSelected: false },
   { slug: "world-cup", name: "Copa Mundial FIFA", country: "Mundial", code: "FIFA", apiId: null, defaultSelected: false }
 ]);
 
