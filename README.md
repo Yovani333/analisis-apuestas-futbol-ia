@@ -22,6 +22,8 @@ Las tarjetas de cobertura del partido son interactivas. Al pulsarlas se abre una
 
 Los mercados sugeridos por un análisis real pueden agregarse a un cupón de parlay. Los cupones guardados conservan partido, mercado, selección, confianza, riesgo y estado de revisión. En **Parlays guardados** cada selección puede marcarse como pendiente, ganada, perdida o anulada; el resultado general se calcula automáticamente. En esta fase el historial se almacena solo en `localStorage` del navegador y no se sincroniza entre dispositivos.
 
+Antes de llamar a OpenAI, el backend construye una ficha prepartido con los últimos cinco encuentros por equipo, forma, goles, rendimiento local/visitante, descanso y cuotas principales. Calcula probabilidad implícita, margen de la casa, cuota justa y valor esperado con un método descriptivo y transparente. La primera versión cuantitativa se limita a doble oportunidad, Over/Under 2.5 y ambos equipos anotan. OpenAI explica esos cálculos, pero no puede reemplazarlos ni crear cifras nuevas.
+
 GitHub Pages publica exclusivamente `public/` mediante `.github/workflows/deploy-pages.yml`. Las APIs reales requieren ejecutar el servidor Node localmente o desplegarlo en un proveedor compatible con backend.
 
 ## Ligas permitidas
@@ -82,7 +84,7 @@ npm run dev
 ```dotenv
 API_FOOTBALL_KEY=
 OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.5
+OPENAI_MODEL=gpt-5.4
 DATA_MODE=mock
 PORT=3000
 API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
@@ -101,6 +103,7 @@ GET  /api/health
 GET  /api/leagues
 GET  /api/fixtures
 GET  /api/fixtures/:fixtureId
+GET  /api/fixtures/:fixtureId/result
 GET  /api/fixtures/:fixtureId/statistics
 GET  /api/fixtures/:fixtureId/standings
 GET  /api/fixtures/:fixtureId/head-to-head
@@ -118,13 +121,15 @@ POST /api/fixtures/:fixtureId/analysis
 1. El frontend consulta rutas propias bajo `/api`.
 2. El backend valida liga, fechas, temporada, estado e ID de fixture.
 3. API-Football entrega los datos deportivos.
-4. El backend conserva vacíos como `No disponible` y agrega procedencia y fecha de consulta.
-5. Solo ese dataset se envía a OpenAI.
-6. Zod valida el JSON antes de responder al navegador.
+4. El backend resume forma reciente, localía/visita, descanso y cuotas principales.
+5. Un módulo determinista calcula probabilidad implícita, margen, cuota justa y valor esperado.
+6. El paquete reducido y verificado se envía a OpenAI; las respuestas numéricas se sustituyen por los cálculos del servidor.
+7. Zod valida el JSON antes de responder al navegador.
+8. Los resultados finales pueden actualizarse desde API-Football sin volver a ejecutar OpenAI.
 
 En esta fase se muestran como máximo cinco fixtures por liga y búsqueda para proteger el rendimiento y el cupo del proveedor.
 
-Si falta información importante, el análisis debe indicar `Necesita revisión`. Las probabilidades permanecen en `null` cuando no pueden estimarse responsablemente.
+Si falta información importante, el análisis debe indicar `Necesita revisión`. Una calidad baja bloquea la incorporación al parlay. Las probabilidades 1X2 permanecen en `null` cuando no pueden estimarse responsablemente.
 
 ## Pruebas
 

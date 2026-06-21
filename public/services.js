@@ -1,4 +1,4 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-parlays";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-efficient-analysis";
 
 const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
@@ -85,6 +85,9 @@ export const footballDataService = {
       ...fixture,
       ...payload.fixture,
       confirmedData: payload.confirmed || {},
+      preMatch: payload.preMatch || null,
+      marketAnalysis: payload.marketAnalysis || [],
+      dataQuality: payload.dataQuality || null,
       unavailableData: payload.unavailable || [],
       qualityAlerts: payload.qualityAlerts || [],
       fetchedAt: payload.fetchedAt,
@@ -97,6 +100,11 @@ export const footballDataService = {
     if (runtime.mode !== "live") return this.generateMockAnalysis(fixture);
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/analysis`, { method: "POST" });
     return { ...payload.analysis, _source: "openai" };
+  },
+
+  async getFixtureResult(fixtureId) {
+    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`);
+    return payload.result;
   }
 };
 
@@ -113,6 +121,7 @@ export const backendApi = {
   allowedLeagues: () => fetch("/api/leagues"),
   fixtures: (query) => fetch(`/api/fixtures?${new URLSearchParams(query)}`),
   fixture: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}`),
+  fixtureResult: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`),
   standings: (query) => fetch(`/api/standings?${new URLSearchParams(query)}`),
   statistics: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/statistics`),
   headToHead: (query) => fetch(`/api/head-to-head?${new URLSearchParams(query)}`),

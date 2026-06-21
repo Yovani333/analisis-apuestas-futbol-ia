@@ -44,6 +44,44 @@ export function calculateParlayResult(legs = []) {
   return activeLegs.every((leg) => leg.result === "won") ? "won" : "pending";
 }
 
+export function settleLegResult(selectionCode, fixtureResult) {
+  if (!fixtureResult?.finished) return "pending";
+  const home = Number(fixtureResult.goals?.home);
+  const away = Number(fixtureResult.goals?.away);
+  if (!Number.isFinite(home) || !Number.isFinite(away)) return "pending";
+  const total = home + away;
+  const outcomes = {
+    "1X": home >= away,
+    X2: away >= home,
+    over_2_5: total > 2.5,
+    under_2_5: total < 2.5,
+    btts_yes: home > 0 && away > 0,
+    btts_no: home === 0 || away === 0
+  };
+  return selectionCode in outcomes ? (outcomes[selectionCode] ? "won" : "lost") : "pending";
+}
+
+export function calculateHistoryMetrics(parlays = []) {
+  const settled = parlays.filter((parlay) => ["won", "lost", "void"].includes(calculateParlayResult(parlay.legs)));
+  const won = settled.filter((parlay) => calculateParlayResult(parlay.legs) === "won");
+  const lost = settled.filter((parlay) => calculateParlayResult(parlay.legs) === "lost");
+  const theoreticalUnits = settled.reduce((total, parlay) => {
+    const result = calculateParlayResult(parlay.legs);
+    if (result === "lost") return total - 1;
+    if (result !== "won") return total;
+    const odds = parlay.legs.filter((leg) => leg.result !== "void").map((leg) => Number(leg.decimalOdds));
+    return odds.every((odd) => odd > 1) ? total + odds.reduce((product, odd) => product * odd, 1) - 1 : total;
+  }, 0);
+  return {
+    total: parlays.length,
+    settled: settled.length,
+    won: won.length,
+    lost: lost.length,
+    winRate: won.length + lost.length ? Number((won.length / (won.length + lost.length) * 100).toFixed(1)) : null,
+    theoreticalUnits: Number(theoreticalUnits.toFixed(2))
+  };
+}
+
 export function createSavedParlay(name, legs, now = new Date()) {
   const id = globalThis.crypto?.randomUUID?.() || `parlay-${now.getTime()}`;
   return {

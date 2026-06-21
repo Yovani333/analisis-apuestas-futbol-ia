@@ -1,9 +1,9 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-parlays";
-import { footballDataService } from "./services.js?v=20260620-parlays";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-efficient-analysis";
+import { footballDataService } from "./services.js?v=20260620-efficient-analysis";
 import {
-  calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
-  saveParlayDraft, saveSavedParlays
-} from "./parlay-store.js?v=20260620-parlays";
+  calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
+  saveParlayDraft, saveSavedParlays, settleLegResult
+} from "./parlay-store.js?v=20260620-efficient-analysis";
 
 const state = {
   fixtures: [],
@@ -46,7 +46,9 @@ const elements = {
   parlayName: document.querySelector("#parlay-name"),
   saveParlay: document.querySelector("#save-parlay"),
   savedParlayCount: document.querySelector("#saved-parlay-count"),
-  savedParlaysList: document.querySelector("#saved-parlays-list")
+  savedParlaysList: document.querySelector("#saved-parlays-list"),
+  historyMetrics: document.querySelector("#history-metrics"),
+  updateParlayResults: document.querySelector("#update-parlay-results")
 };
 
 function escapeHtml(value = "") {
@@ -158,7 +160,8 @@ function renderFixtureData() {
   elements.dataStatus.textContent = overall;
   elements.selectedSummary.className = "selected-summary";
   const sourceLabel = fixture.dataSource === "api-football" ? "API-Football" : "escenario sintético";
-  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${sourceLabel}</span>`;
+  const qualityLabel = fixture.dataQuality ? ` · Calidad ${fixture.dataQuality.level} ${fixture.dataQuality.score}/100` : "";
+  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${sourceLabel}${escapeHtml(qualityLabel)}</span>`;
   elements.dataGrid.innerHTML = DATA_CATEGORIES.map((category) => `
     <button class="data-card" type="button" data-category="${escapeHtml(category.key)}" aria-label="Ver detalle de ${escapeHtml(category.label)}">
       <h3>${escapeHtml(category.label)}</h3>
@@ -239,6 +242,15 @@ function renderOddsDetail(data) {
   return `<div class="detail-note"><strong>Casa mostrada: ${displayValue(bookmaker.name)}</strong><span>Cuotas informativas; pueden cambiar y no garantizan resultados.</span></div><div class="odds-grid">${visibleMarkets.map((bet) => `<section class="odds-market"><h3>${displayValue(bet.name)}</h3>${(bet.values || []).slice(0, 12).map((value) => `<div class="odd-row"><span>${displayValue(value.value)}</span><strong>${displayValue(value.odd)}</strong></div>`).join("")}</section>`).join("")}</div>`;
 }
 
+function renderPreMatchDetail(fixture) {
+  const preMatch = fixture.preMatch;
+  if (!preMatch) return emptyDetail("Todavía no se ha construido la ficha prepartido.");
+  const teamCard = (team, venue) => `<section class="team-stat-card"><h3>${escapeHtml(team.team)}</h3><div class="stat-row"><span>Forma reciente</span><strong>${displayValue(team.form)}</strong></div><div class="stat-row"><span>Partidos analizados</span><strong>${displayValue(team.played)}</strong></div><div class="stat-row"><span>Goles a favor / contra</span><strong>${displayValue(team.avgGoalsFor)} / ${displayValue(team.avgGoalsAgainst)}</strong></div><div class="stat-row"><span>Over 2.5</span><strong>${displayValue(team.over25Rate)}%</strong></div><div class="stat-row"><span>Ambos anotan</span><strong>${displayValue(team.bttsRate)}%</strong></div><div class="stat-row"><span>Rendimiento ${venue === "home" ? "local sin perder" : "visitante sin perder"}</span><strong>${displayValue(venue === "home" ? team.homeNonLossRate : team.awayNonLossRate)}%</strong></div><div class="stat-row"><span>Días de descanso</span><strong>${displayValue(team.restDays)}</strong></div></section>`;
+  const calculations = fixture.marketAnalysis || [];
+  const rows = calculations.map((item) => [displayValue(item.selection), displayValue(item.decimalOdds), `${displayValue(item.impliedProbabilityPct)}%`, `${displayValue(item.noVigImpliedProbabilityPct)}%`, `${displayValue(item.bookmakerMarginPct)}%`, `${displayValue(item.estimatedProbabilityPct)}%`, displayValue(item.fairOdds), `<strong class="${item.expectedValuePct >= 0 ? "value-positive" : "value-negative"}">${displayValue(item.expectedValuePct)}%</strong>`]);
+  return `<div class="quality-summary"><strong>Cobertura de datos ${escapeHtml(fixture.dataQuality?.level || "Baja")} · ${displayValue(fixture.dataQuality?.score, 0)}/100</strong><span>Este puntaje mide disponibilidad, no certeza predictiva. ${escapeHtml(preMatch.note)}</span></div><div class="team-stat-grid">${teamCard(preMatch.home, "home")}${teamCard(preMatch.away, "away")}</div><section class="detail-section"><h3>Cálculos de mercados permitidos</h3>${rows.length ? detailTable(["Selección", "Cuota", "Implícita", "Sin margen", "Margen", "Modelo", "Cuota justa", "EV"], rows) : emptyDetail("No hay cuotas principales suficientes para calcular valor esperado.")}</section>`;
+}
+
 function categoryDetail(categoryKey, fixture) {
   const data = fixture.confirmedData?.[categoryKey] || [];
   if (categoryKey === "standings") return renderStandingsDetail(data, fixture);
@@ -248,7 +260,7 @@ function categoryDetail(categoryKey, fixture) {
   if (categoryKey === "lineups") return renderLineupsDetail(data);
   if (categoryKey === "odds") return renderOddsDetail(data);
   if (categoryKey === "xg") return renderStatisticsDetail(fixture.confirmedData?.statistics || [], true);
-  if (categoryKey === "context") return emptyDetail("El contexto competitivo, descanso, viajes y rotación aún requieren fuentes adicionales y revisión humana.");
+  if (categoryKey === "context") return renderPreMatchDetail(fixture);
   if (categoryKey === "weather") return emptyDetail("La integración actual no consulta clima ni condiciones de cancha.");
   return emptyDetail("No hay información disponible para esta categoría.");
 }
@@ -298,6 +310,7 @@ function renderParlayDraft(open = false) {
         <span>${escapeHtml(leg.market)}</span>
         <small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}</small>
         <small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small>
+        <small>Cuota ${displayValue(leg.decimalOdds)} · EV ${displayValue(leg.expectedValue)}%</small>
         ${leg.requiresReview ? '<em>Requiere revisión antes de considerar una apuesta</em>' : ""}
       </div>
       <button type="button" data-remove-draft="${escapeHtml(leg.id)}" aria-label="Quitar selección">×</button>
@@ -326,6 +339,10 @@ function addMarketToParlay(analysis, marketIndex) {
     showNotice("Las selecciones sintéticas o sin mercado verificable no pueden agregarse al historial.");
     return;
   }
+  if (market.requiere_revision || !analysis._context?.quality?.canSuggest) {
+    showNotice("La calidad o el valor esperado de esta selección requieren revisión; no puede agregarse al parlay.");
+    return;
+  }
 
   const id = `${fixture.id}:${market.mercado}:${market.seleccion}`;
   if (state.parlayDraft.some((leg) => leg.id === id)) {
@@ -347,6 +364,11 @@ function addMarketToParlay(analysis, marketIndex) {
     date: fixture.date,
     market: market.mercado,
     selection: market.seleccion,
+    marketCode: market.codigo_mercado,
+    selectionCode: market.codigo_seleccion,
+    decimalOdds: market.cuota_decimal,
+    estimatedProbability: market.probabilidad_modelo,
+    expectedValue: market.valor_esperado,
     reasoning: market.razonamiento,
     confidence: market.confianza,
     risk: market.nivel_riesgo,
@@ -377,6 +399,14 @@ function saveCurrentParlay() {
 
 function renderSavedParlays() {
   elements.savedParlayCount.textContent = state.savedParlays.length;
+  const metrics = calculateHistoryMetrics(state.savedParlays);
+  elements.historyMetrics.innerHTML = `
+    <article><span>Parlays</span><strong>${metrics.total}</strong></article>
+    <article><span>Evaluados</span><strong>${metrics.settled}</strong></article>
+    <article><span>Ganados / perdidos</span><strong>${metrics.won} / ${metrics.lost}</strong></article>
+    <article><span>Acierto</span><strong>${metrics.winRate === null ? "—" : `${metrics.winRate}%`}</strong></article>
+    <article><span>Unidades teóricas</span><strong class="${metrics.theoreticalUnits >= 0 ? "value-positive" : "value-negative"}">${metrics.theoreticalUnits}</strong></article>`;
+  elements.updateParlayResults.disabled = state.savedParlays.length === 0;
   if (!state.savedParlays.length) {
     elements.savedParlaysList.innerHTML = '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis IA y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
@@ -393,7 +423,7 @@ function renderSavedParlays() {
       <div class="saved-parlay__legs">${parlay.legs.map((leg, index) => `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
-          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}</small><small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small></div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota ${displayValue(leg.decimalOdds)} · Prob. ${displayValue(leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small></div>
           <label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label>
         </section>`).join("")}</div>
       <div class="saved-parlay__notes"><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500" placeholder="Qué ocurrió, datos que faltaron o qué revisarías después…">${escapeHtml(parlay.notes || "")}</textarea></div>
@@ -401,6 +431,46 @@ function renderSavedParlays() {
     </article>`;
   }).join("");
   persistSavedParlays();
+}
+
+async function updateSavedParlayResults() {
+  const fixtureIds = [...new Set(state.savedParlays.flatMap((parlay) => parlay.legs)
+    .filter((leg) => leg.result === "pending" && leg.selectionCode)
+    .map((leg) => leg.fixtureId))];
+  if (!fixtureIds.length) {
+    showNotice("No hay selecciones compatibles pendientes de actualización automática.");
+    return;
+  }
+  elements.updateParlayResults.disabled = true;
+  elements.updateParlayResults.textContent = "Consultando resultados…";
+  try {
+    const results = await Promise.all(fixtureIds.map(async (fixtureId) => {
+      try { return await footballDataService.getFixtureResult(fixtureId); } catch { return null; }
+    }));
+    const byFixture = new Map(results.filter(Boolean).map((result) => [String(result.fixtureId), result]));
+    let updated = 0;
+    state.savedParlays.forEach((parlay) => {
+      parlay.legs.forEach((leg) => {
+        if (leg.result !== "pending") return;
+        const fixtureResult = byFixture.get(String(leg.fixtureId));
+        const nextResult = settleLegResult(leg.selectionCode, fixtureResult);
+        if (nextResult !== "pending") {
+          leg.result = nextResult;
+          leg.finalScore = `${fixtureResult.goals.home}-${fixtureResult.goals.away}`;
+          leg.resolvedAt = new Date().toISOString();
+          updated += 1;
+        }
+      });
+      parlay.result = calculateParlayResult(parlay.legs);
+      parlay.lastCheckedAt = new Date().toISOString();
+    });
+    persistSavedParlays();
+    renderSavedParlays();
+    showNotice(updated ? `${updated} selección(es) actualizadas con API-Football.` : "Los partidos pendientes todavía no tienen resultado final.");
+  } finally {
+    elements.updateParlayResults.disabled = state.savedParlays.length === 0;
+    elements.updateParlayResults.textContent = "Actualizar resultados";
+  }
 }
 
 function switchView(view) {
@@ -418,12 +488,18 @@ function renderAnalysis(analysis) {
   elements.analysisStatus.className = `status-badge status-badge--${statusClass(analysis.estado_analisis)}`;
   elements.analysisStatus.textContent = analysis.estado_analisis;
   const list = (items, fallback) => items.length ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p>${escapeHtml(fallback)}</p>`;
+  const context = analysis._context;
+  const quality = context?.quality;
+  const formCard = (team) => team ? `<article><span>${escapeHtml(team.team)}</span><strong>${displayValue(team.form)}</strong><small>${displayValue(team.avgGoalsFor)} GF · ${displayValue(team.avgGoalsAgainst)} GC · ${displayValue(team.restDays)} días descanso</small></article>` : "";
+  const calculations = context?.marketAnalysis || [];
+  const calculationRows = calculations.map((item) => `<tr><td>${escapeHtml(item.selection)}</td><td>${displayValue(item.decimalOdds)}</td><td>${displayValue(item.estimatedProbabilityPct)}%</td><td class="${item.expectedValuePct >= 0 ? "value-positive" : "value-negative"}">${displayValue(item.expectedValuePct)}%</td></tr>`).join("");
 
   elements.analysisContent.innerHTML = `
     <div class="analysis-hero">
-      <h3>${escapeHtml(analysis.partido.local)} vs ${escapeHtml(analysis.partido.visitante)}</h3>
+      <div class="analysis-hero__title"><h3>${escapeHtml(analysis.partido.local)} vs ${escapeHtml(analysis.partido.visitante)}</h3>${quality ? `<span class="quality-badge quality-badge--${quality.level.toLowerCase()}">Cobertura ${escapeHtml(quality.level)} · ${quality.score}/100</span>` : ""}</div>
       <p>${escapeHtml(analysis.resumen_partido)}</p>
     </div>
+    ${context ? `<section class="analysis-context"><div class="form-summary">${formCard(context.preMatch?.home)}${formCard(context.preMatch?.away)}</div>${calculationRows ? `<div class="calculation-table"><h3>Cálculos verificados antes de la IA</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Selección</th><th>Cuota</th><th>Prob. estimada</th><th>EV</th></tr></thead><tbody>${calculationRows}</tbody></table></div></div>` : '<p class="analysis-context__empty">No hubo cuotas suficientes para calcular valor esperado.</p>'}</section>` : ""}
     <div class="analysis-grid">
       <section class="analysis-card">
         <h3>Datos confirmados</h3>
@@ -439,7 +515,7 @@ function renderAnalysis(analysis) {
       </section>
       <section class="analysis-card">
         <h3>Mercados sugeridos</h3>
-        ${analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Confianza ${escapeHtml(market.confianza)}</small></div><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || /^sin mercado$/i.test(market.mercado || "") ? "disabled" : ""}>Agregar al parlay</button></div>`).join("")}
+        ${analysis.mercados_sugeridos.length ? analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Cuota ${displayValue(market.cuota_decimal)} · Prob. ${displayValue(market.probabilidad_modelo)}% · EV ${displayValue(market.valor_esperado)}%</small><small>Confianza ${escapeHtml(market.confianza)}${market.requiere_revision ? " · Requiere revisión" : ""}</small></div><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || market.requiere_revision || !quality?.canSuggest ? "disabled" : ""}>Agregar al parlay</button></div>`).join("") : '<p>No se identificó un mercado con cobertura y valor suficiente.</p>'}
         <p class="market-disclaimer">Agregar conserva la sugerencia para seguimiento; no realiza una apuesta.</p>
       </section>
       <section class="analysis-card analysis-card--wide">
@@ -597,6 +673,7 @@ elements.parlayMinimize.addEventListener("click", () => {
 });
 elements.parlayFab.addEventListener("click", () => renderParlayDraft(true));
 elements.saveParlay.addEventListener("click", saveCurrentParlay);
+elements.updateParlayResults.addEventListener("click", updateSavedParlayResults);
 elements.savedParlaysList.addEventListener("change", (event) => {
   const select = event.target.closest("[data-leg-result]");
   const card = event.target.closest("[data-parlay-id]");

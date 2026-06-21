@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260620-parlay-minimize" />
+    <link rel="stylesheet" href="styles.css?v=20260620-efficient-analysis" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -152,8 +152,12 @@
           <h2>Parlays guardados</h2>
           <p>Registra el resultado de cada selección. El estado general se calcula automáticamente.</p>
         </div>
-        <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+        <div class="saved-view__actions">
+          <button id="update-parlay-results" class="button button--primary" type="button">Actualizar resultados</button>
+          <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+        </div>
       </section>
+      <section id="history-metrics" class="history-metrics" aria-label="Rendimiento histórico"></section>
       <div id="saved-parlays-list" class="saved-parlays-list"></div>
     </main>
 
@@ -197,6 +201,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260620-parlay-minimize"></script>
+    <script type="module" src="app.js?v=20260620-efficient-analysis"></script>
   </body>
 </html>

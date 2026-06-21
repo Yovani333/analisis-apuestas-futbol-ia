@@ -4,7 +4,7 @@ import { env, requireLiveConfiguration } from "../config/env.js";
 import { ALLOWED_LEAGUES } from "../config/leagues.js";
 import { AppError } from "../errors.js";
 import { parseFixtureId, parseFixtureQuery } from "../middleware/validate.js";
-import { getFixtureDataset, resolveLeague, searchFixtures } from "../services/api-football.service.js";
+import { getFixtureDataset, getFixtureResult, resolveLeague, searchFixtures } from "../services/api-football.service.js";
 import { generateAnalysis } from "../services/openai.service.js";
 
 export const apiRouter = Router();
@@ -47,6 +47,10 @@ apiRouter.get("/fixtures", requireLiveMode, asyncRoute(async (req, res) => {
 
 apiRouter.get("/fixtures/:fixtureId", requireLiveMode, asyncRoute(async (req, res) => {
   res.json(await getFixtureDataset(parseFixtureId(req.params.fixtureId)));
+}));
+
+apiRouter.get("/fixtures/:fixtureId/result", requireLiveMode, asyncRoute(async (req, res) => {
+  res.json({ source: "api-football", result: await getFixtureResult(parseFixtureId(req.params.fixtureId)) });
 }));
 
 for (const [route, key] of [["statistics", "statistics"], ["standings", "standings"], ["head-to-head", "h2h"], ["injuries", "injuries"], ["lineups", "lineups"], ["odds", "odds"]]) {

@@ -1,6 +1,10 @@
 import { env } from "../config/env.js";
 import { ALLOWED_LEAGUES, getAllowedLeague } from "../config/leagues.js";
 import { AppError } from "../errors.js";
+import {
+  buildAnalysisInput, calculateDataQuality, calculateMarketAnalysis,
+  normalizeOdds, summarizeRecentFixtures
+} from "./market-analysis.service.js";
 
 const leagueCache = new Map();
 const requestCache = new Map();
@@ -97,14 +101,19 @@ function normalizeFixture(item, league) {
     id: String(item.fixture.id),
     leagueSlug: league.slug,
     leagueName: league.name,
+    leagueId: item.league.id,
+    season: item.league.season,
     home: item.teams.home.name,
     away: item.teams.away.name,
+    homeTeamId: item.teams.home.id,
+    awayTeamId: item.teams.away.id,
     date: iso.slice(0, 10),
     time: iso.slice(11, 16),
     status: ["FT", "AET", "PEN"].includes(item.fixture.status.short) ? "finished" : "scheduled",
     statusLabel: statusLabel(item.fixture.status.short),
     stadium: item.fixture.venue?.name || "No disponible",
     country: league.countryLabel,
+    score: { home: item.goals?.home ?? null, away: item.goals?.away ?? null },
     dataAvailability: {
       standings: "No disponible", statistics: "No disponible", h2h: "No disponible",
       injuries: "No disponible", lineups: "No disponible", odds: "No disponible",
@@ -149,29 +158,65 @@ export async function getFixtureDataset(fixtureId) {
   const awayId = base.teams.away.id;
   const season = base.league.season;
   const safe = (promise) => promise.catch(() => []);
-  const [statistics, standings, h2h, injuries, lineups, odds] = await Promise.all([
+  const [statistics, standings, h2h, injuries, lineups, odds, homeRecentRows, awayRecentRows] = await Promise.all([
     safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })),
     safe(apiRequest("/standings", { league: base.league.id, season })),
     safe(apiRequest("/fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 })),
     safe(apiRequest("/injuries", { fixture: fixtureId })),
     safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })),
-    safe(apiRequest("/odds", { fixture: fixtureId }))
+    safe(apiRequest("/odds", { fixture: fixtureId })),
+    safe(apiRequest("/fixtures", { team: homeId, last: 8, timezone: "UTC" })),
+    safe(apiRequest("/fixtures", { team: awayId, last: 8, timezone: "UTC" }))
   ]);
 
   const fixture = normalizeFixture(base, leagueConfig);
+  const homeForm = summarizeRecentFixtures(homeRecentRows, homeId, base.fixture.date);
+  const awayForm = summarizeRecentFixtures(awayRecentRows, awayId, base.fixture.date);
+  const oddsSummary = normalizeOdds(odds);
+  const dataQuality = calculateDataQuality({ homeForm, awayForm, odds: oddsSummary, standings, injuries, lineups, h2h });
+  const marketAnalysis = calculateMarketAnalysis(homeForm, awayForm, oddsSummary).map((market) => ({
+    ...market,
+    requiresReview: !dataQuality.canSuggest || market.sampleSize < 6
+  }));
+  const preMatch = {
+    home: { team: fixture.home, ...homeForm },
+    away: { team: fixture.away, ...awayForm },
+    odds: oddsSummary,
+    note: "Las frecuencias recientes son descriptivas, no garantizan resultados y no sustituyen una muestra histórica amplia."
+  };
   fixture.dataAvailability = {
     standings: availability(standings), statistics: availability(statistics), h2h: availability(h2h),
     injuries: availability(injuries), lineups: availability(lineups), odds: availability(odds),
     xg: statistics.some((team) => team.statistics?.some((stat) => /expected goals|xg/i.test(stat.type))) ? "Disponible" : "No disponible",
-    context: "Necesita revisión", weather: "No disponible"
+    context: homeForm.played && awayForm.played ? "Disponible" : "Necesita revisión", weather: "No disponible"
   };
 
-  return {
+  const dataset = {
     source: "api-football",
     fetchedAt: new Date().toISOString(),
     fixture,
     confirmed: { statistics, standings, h2h, injuries, lineups, odds },
+    preMatch,
+    marketAnalysis,
+    dataQuality,
     unavailable: ["weather", "news", "referee_details", "travel", "sidelined_not_verified"],
     qualityAlerts: ["Los datos vacíos se conservan como no disponibles; no se completan por inferencia."]
+  };
+  dataset.analysisInput = buildAnalysisInput(dataset);
+  return dataset;
+}
+
+export async function getFixtureResult(fixtureId) {
+  const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: "UTC" });
+  const row = fixtureRows[0];
+  if (!row) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
+  return {
+    fixtureId: String(row.fixture.id),
+    status: row.fixture.status?.short || "TBD",
+    finished: ["FT", "AET", "PEN"].includes(row.fixture.status?.short),
+    goals: { home: row.goals?.home ?? null, away: row.goals?.away ?? null },
+    date: row.fixture.date,
+    home: row.teams?.home?.name,
+    away: row.teams?.away?.name
   };
 }

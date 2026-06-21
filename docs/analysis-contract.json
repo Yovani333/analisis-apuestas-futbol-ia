@@ -34,6 +34,11 @@
   "mercados_sugeridos": [{
     "mercado": "",
     "seleccion": "",
+    "codigo_mercado": "double_chance | over_under_2_5 | btts | none",
+    "codigo_seleccion": "1X | X2 | over_2_5 | under_2_5 | btts_yes | btts_no | none",
+    "cuota_decimal": null,
+    "probabilidad_modelo": null,
+    "valor_esperado": null,
     "razonamiento": "",
     "nivel_riesgo": "Bajo | Medio | Alto",
     "confianza": "Baja | Media-baja | Media | Media-alta | Alta",
