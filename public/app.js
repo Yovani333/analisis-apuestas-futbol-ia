@@ -1,10 +1,16 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-details";
-import { footballDataService } from "./services.js?v=20260620-details";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-parlays";
+import { footballDataService } from "./services.js?v=20260620-parlays";
+import {
+  calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
+  saveParlayDraft, saveSavedParlays
+} from "./parlay-store.js?v=20260620-parlays";
 
 const state = {
   fixtures: [],
   selectedFixtureId: null,
   analysisByFixture: new Map(),
+  parlayDraft: loadParlayDraft(),
+  savedParlays: loadSavedParlays(),
   isSearching: false,
   isAnalyzing: false
 };
@@ -30,7 +36,16 @@ const elements = {
   dataDialogContent: document.querySelector("#data-detail-content"),
   dataDialogClose: document.querySelector("#data-detail-close"),
   analysisStatus: document.querySelector("#analysis-status"),
-  analysisContent: document.querySelector("#analysis-content")
+  analysisContent: document.querySelector("#analysis-content"),
+  parlaySlip: document.querySelector("#parlay-slip"),
+  parlayDraftList: document.querySelector("#parlay-draft-list"),
+  parlayLegCount: document.querySelector("#parlay-leg-count"),
+  parlayFab: document.querySelector("#open-parlay-slip"),
+  parlayFabCount: document.querySelector("#parlay-fab-count"),
+  parlayName: document.querySelector("#parlay-name"),
+  saveParlay: document.querySelector("#save-parlay"),
+  savedParlayCount: document.querySelector("#saved-parlay-count"),
+  savedParlaysList: document.querySelector("#saved-parlays-list")
 };
 
 function escapeHtml(value = "") {
@@ -52,6 +67,15 @@ function statusClass(status) {
 
 function statusBadge(status) {
   return `<span class="status-badge status-badge--${statusClass(status)}">${escapeHtml(status)}</span>`;
+}
+
+function showNotice(message) {
+  const notice = document.querySelector("#app-notice");
+  notice.textContent = message;
+  notice.hidden = false;
+  window.clearTimeout(Number(notice.dataset.timeoutId || 0));
+  const timeoutId = window.setTimeout(() => { notice.hidden = true; }, 3500);
+  notice.dataset.timeoutId = String(timeoutId);
 }
 
 function renderLeagueOptions() {
@@ -242,6 +266,143 @@ function openDataDetail(categoryKey) {
   elements.dataDialog.showModal();
 }
 
+const resultLabels = Object.freeze({ pending: "Pendiente", won: "Ganado", lost: "Perdido", void: "Anulado" });
+
+function persistParlayDraft() {
+  saveParlayDraft(state.parlayDraft);
+}
+
+function persistSavedParlays() {
+  saveSavedParlays(state.savedParlays);
+}
+
+function renderParlayDraft(open = false) {
+  const count = state.parlayDraft.length;
+  elements.parlayLegCount.textContent = count;
+  elements.parlayFabCount.textContent = count;
+  elements.parlayFab.hidden = count === 0 || !elements.parlaySlip.hidden;
+  elements.saveParlay.disabled = count < 2;
+
+  if (!count) {
+    elements.parlaySlip.hidden = true;
+    elements.parlayDraftList.innerHTML = "";
+    return;
+  }
+
+  elements.parlayDraftList.innerHTML = state.parlayDraft.map((leg, index) => `
+    <article class="parlay-draft-leg">
+      <div class="parlay-draft-leg__number">${index + 1}</div>
+      <div>
+        <strong>${escapeHtml(leg.selection)}</strong>
+        <span>${escapeHtml(leg.market)}</span>
+        <small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}</small>
+        <small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small>
+        ${leg.requiresReview ? '<em>Requiere revisión antes de considerar una apuesta</em>' : ""}
+      </div>
+      <button type="button" data-remove-draft="${escapeHtml(leg.id)}" aria-label="Quitar selección">×</button>
+    </article>
+  `).join("");
+
+  if (open) elements.parlaySlip.hidden = false;
+  elements.parlayFab.hidden = !elements.parlaySlip.hidden;
+}
+
+function addMarketToParlay(analysis, marketIndex) {
+  const fixture = selectedFixture();
+  const market = analysis?.mercados_sugeridos?.[marketIndex];
+  if (!fixture || !market) return;
+  if (analysis._source === "mock" || /^sin mercado$/i.test(market.mercado || "")) {
+    showNotice("Las selecciones sintéticas o sin mercado verificable no pueden agregarse al historial.");
+    return;
+  }
+
+  const id = `${fixture.id}:${market.mercado}:${market.seleccion}`;
+  if (state.parlayDraft.some((leg) => leg.id === id)) {
+    showNotice("Esta selección ya está incluida en el parlay.");
+    renderParlayDraft(true);
+    return;
+  }
+  if (state.parlayDraft.length >= 12) {
+    showNotice("El cupón admite hasta 12 selecciones para mantenerlo fácil de revisar.");
+    return;
+  }
+
+  state.parlayDraft.push({
+    id,
+    fixtureId: fixture.id,
+    league: fixture.leagueName,
+    home: fixture.home,
+    away: fixture.away,
+    date: fixture.date,
+    market: market.mercado,
+    selection: market.seleccion,
+    reasoning: market.razonamiento,
+    confidence: market.confianza,
+    risk: market.nivel_riesgo,
+    requiresReview: Boolean(market.requiere_revision),
+    analysisStatus: analysis.estado_analisis,
+    source: analysis._source || "openai"
+  });
+  persistParlayDraft();
+  renderParlayDraft(true);
+  showNotice("Selección agregada a Mi parlay.");
+}
+
+function saveCurrentParlay() {
+  if (state.parlayDraft.length < 2) {
+    showNotice("Agrega al menos dos selecciones para guardar un parlay.");
+    return;
+  }
+  state.savedParlays.unshift(createSavedParlay(elements.parlayName.value, state.parlayDraft));
+  state.parlayDraft = [];
+  elements.parlayName.value = "";
+  persistSavedParlays();
+  persistParlayDraft();
+  renderParlayDraft();
+  renderSavedParlays();
+  switchView("saved");
+  showNotice("Parlay guardado. Ya puedes registrar sus resultados.");
+}
+
+function renderSavedParlays() {
+  elements.savedParlayCount.textContent = state.savedParlays.length;
+  if (!state.savedParlays.length) {
+    elements.savedParlaysList.innerHTML = '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis IA y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
+    return;
+  }
+
+  elements.savedParlaysList.innerHTML = state.savedParlays.map((parlay) => {
+    const result = calculateParlayResult(parlay.legs);
+    parlay.result = result;
+    return `<article class="saved-parlay saved-parlay--${result}" data-parlay-id="${escapeHtml(parlay.id)}">
+      <header class="saved-parlay__header">
+        <div><span>Parlay · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(parlay.createdAt)))}</time></div>
+        <strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong>
+      </header>
+      <div class="saved-parlay__legs">${parlay.legs.map((leg, index) => `
+        <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
+          <div class="saved-leg__index">${index + 1}</div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}</small><small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small></div>
+          <label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label>
+        </section>`).join("")}</div>
+      <div class="saved-parlay__notes"><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500" placeholder="Qué ocurrió, datos que faltaron o qué revisarías después…">${escapeHtml(parlay.notes || "")}</textarea></div>
+      <footer class="saved-parlay__footer"><span>El resultado general se calcula con los estados de las selecciones.</span><button class="button button--danger" type="button" data-delete-parlay>Eliminar registro</button></footer>
+    </article>`;
+  }).join("");
+  persistSavedParlays();
+}
+
+function switchView(view) {
+  document.querySelectorAll("[data-view-panel]").forEach((panel) => { panel.hidden = panel.dataset.viewPanel !== view; });
+  document.querySelectorAll(".main-nav [data-view]").forEach((button) => {
+    const active = button.dataset.view === view;
+    button.classList.toggle("main-nav__item--active", active);
+    if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+  });
+  if (view === "saved") renderSavedParlays();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function renderAnalysis(analysis) {
   elements.analysisStatus.className = `status-badge status-badge--${statusClass(analysis.estado_analisis)}`;
   elements.analysisStatus.textContent = analysis.estado_analisis;
@@ -267,7 +428,8 @@ function renderAnalysis(analysis) {
       </section>
       <section class="analysis-card">
         <h3>Mercados sugeridos</h3>
-        ${analysis.mercados_sugeridos.map((market) => `<div class="market-row"><span>${escapeHtml(market.seleccion)}</span><strong>${escapeHtml(market.confianza)}</strong></div>`).join("")}
+        ${analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Confianza ${escapeHtml(market.confianza)}</small></div><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || /^sin mercado$/i.test(market.mercado || "") ? "disabled" : ""}>Agregar al parlay</button></div>`).join("")}
+        <p class="market-disclaimer">Agregar conserva la sugerencia para seguimiento; no realiza una apuesta.</p>
       </section>
       <section class="analysis-card analysis-card--wide">
         <h3>Predicción prudente · ${escapeHtml(analysis.prediccion_prudente.confianza)}</h3>
@@ -402,6 +564,61 @@ elements.dataDialogClose.addEventListener("click", () => elements.dataDialog.clo
 elements.dataDialog.addEventListener("click", (event) => {
   if (event.target === elements.dataDialog) elements.dataDialog.close();
 });
+elements.analysisContent.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-add-market]");
+  if (!button) return;
+  const analysis = state.analysisByFixture.get(state.selectedFixtureId);
+  addMarketToParlay(analysis, Number(button.dataset.addMarket));
+});
+elements.parlayDraftList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-remove-draft]");
+  if (!button) return;
+  state.parlayDraft = state.parlayDraft.filter((leg) => leg.id !== button.dataset.removeDraft);
+  persistParlayDraft();
+  renderParlayDraft();
+});
+document.querySelector("#parlay-slip-close").addEventListener("click", () => {
+  elements.parlaySlip.hidden = true;
+  elements.parlayFab.hidden = state.parlayDraft.length === 0;
+});
+elements.parlayFab.addEventListener("click", () => renderParlayDraft(true));
+elements.saveParlay.addEventListener("click", saveCurrentParlay);
+elements.savedParlaysList.addEventListener("change", (event) => {
+  const select = event.target.closest("[data-leg-result]");
+  const card = event.target.closest("[data-parlay-id]");
+  const legRow = event.target.closest("[data-leg-id]");
+  if (!select || !card || !legRow) return;
+  const parlay = state.savedParlays.find((item) => item.id === card.dataset.parlayId);
+  const leg = parlay?.legs.find((item) => item.id === legRow.dataset.legId);
+  if (!leg) return;
+  leg.result = select.value;
+  parlay.result = calculateParlayResult(parlay.legs);
+  persistSavedParlays();
+  renderSavedParlays();
+});
+elements.savedParlaysList.addEventListener("input", (event) => {
+  const notes = event.target.closest("[data-parlay-notes]");
+  const card = event.target.closest("[data-parlay-id]");
+  if (!notes || !card) return;
+  const parlay = state.savedParlays.find((item) => item.id === card.dataset.parlayId);
+  if (parlay) {
+    parlay.notes = notes.value;
+    persistSavedParlays();
+  }
+});
+elements.savedParlaysList.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("[data-delete-parlay]");
+  const card = event.target.closest("[data-parlay-id]");
+  if (!deleteButton || !card) return;
+  if (!window.confirm("¿Eliminar este registro de parlay? Esta acción no se puede deshacer.")) return;
+  state.savedParlays = state.savedParlays.filter((item) => item.id !== card.dataset.parlayId);
+  persistSavedParlays();
+  renderSavedParlays();
+});
+document.addEventListener("click", (event) => {
+  const viewButton = event.target.closest("[data-view]");
+  if (viewButton) switchView(viewButton.dataset.view);
+});
 elements.matchesList.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest("[data-fixture-id]");
@@ -411,18 +628,15 @@ elements.matchesList.addEventListener("click", (event) => {
 
 document.querySelectorAll("[data-nav-label]").forEach((button) => {
   button.addEventListener("click", () => {
-    const notice = document.querySelector("#app-notice");
-    notice.textContent = `${button.dataset.navLabel} es un módulo preparado, pero todavía no está habilitado.`;
-    notice.hidden = false;
-    window.clearTimeout(Number(notice.dataset.timeoutId || 0));
-    const timeoutId = window.setTimeout(() => { notice.hidden = true; }, 3500);
-    notice.dataset.timeoutId = String(timeoutId);
+    showNotice(`${button.dataset.navLabel} es un módulo preparado, pero todavía no está habilitado.`);
   });
 });
 
 async function initializeApp() {
   renderLeagueOptions();
   updateLeagueCount();
+  renderParlayDraft();
+  renderSavedParlays();
   const runtime = await footballDataService.getRuntime();
   if (runtime.mode === "live") {
     document.querySelector("#runtime-mode").textContent = runtime.liveReady ? "Datos reales" : "Configuración pendiente";

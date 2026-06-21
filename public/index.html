@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260620-details" />
+    <link rel="stylesheet" href="styles.css?v=20260620-parlays" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -20,11 +20,11 @@
       </div>
 
       <nav class="main-nav" aria-label="Navegación principal">
-        <a class="main-nav__item main-nav__item--active" href="#contenido-principal" aria-current="page">
+        <button class="main-nav__item main-nav__item--active" type="button" data-view="dashboard" aria-current="page">
           <span aria-hidden="true">▦</span> Dashboard
-        </a>
-        <button class="main-nav__item" type="button" data-nav-label="Análisis guardados">
-          <span aria-hidden="true">▣</span> Análisis guardados
+        </button>
+        <button class="main-nav__item" type="button" data-view="saved">
+          <span aria-hidden="true">▣</span> Parlays guardados <span id="saved-parlay-count" class="nav-count">0</span>
         </button>
         <button class="main-nav__item" type="button" data-nav-label="Alertas">
           <span aria-hidden="true">♧</span> Alertas
@@ -41,7 +41,7 @@
     </div>
     <div id="app-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
 
-    <main id="contenido-principal" class="dashboard">
+    <main id="contenido-principal" class="dashboard" data-view-panel="dashboard">
       <aside class="panel filters" aria-labelledby="filters-title">
         <div class="panel-heading">
           <div>
@@ -145,6 +145,18 @@
       </section>
     </main>
 
+    <main id="parlays-guardados" class="saved-view" data-view-panel="saved" hidden>
+      <section class="saved-view__heading">
+        <div>
+          <p class="eyebrow">Seguimiento de resultados</p>
+          <h2>Parlays guardados</h2>
+          <p>Registra el resultado de cada selección. El estado general se calcula automáticamente.</p>
+        </div>
+        <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+      </section>
+      <div id="saved-parlays-list" class="saved-parlays-list"></div>
+    </main>
+
     <footer class="app-footer">
       <p>Herramienta informativa. No garantiza resultados ni ganancias. Apuesta con responsabilidad.</p>
     </footer>
@@ -161,6 +173,27 @@
       <div id="data-detail-content" class="data-dialog__content"></div>
     </dialog>
 
-    <script type="module" src="app.js?v=20260620-details"></script>
+    <aside id="parlay-slip" class="parlay-slip" aria-labelledby="parlay-slip-title" hidden>
+      <div class="parlay-slip__header">
+        <div>
+          <p class="eyebrow">Cupón en preparación</p>
+          <h2 id="parlay-slip-title">Mi parlay <span id="parlay-leg-count">0</span></h2>
+        </div>
+        <button id="parlay-slip-close" class="parlay-slip__close" type="button" aria-label="Ocultar cupón">×</button>
+      </div>
+      <div id="parlay-draft-list" class="parlay-draft-list"></div>
+      <div class="parlay-slip__footer">
+        <label for="parlay-name">Nombre del parlay</label>
+        <input id="parlay-name" type="text" maxlength="60" placeholder="Ej. Mundial · Jornada 2" />
+        <p>Registro informativo: guardar una selección no realiza ninguna apuesta ni garantiza resultados.</p>
+        <button id="save-parlay" class="button button--primary button--full" type="button">Guardar parlay</button>
+      </div>
+    </aside>
+
+    <button id="open-parlay-slip" class="parlay-fab" type="button" aria-label="Abrir mi parlay" hidden>
+      Mi parlay <span id="parlay-fab-count">0</span>
+    </button>
+
+    <script type="module" src="app.js?v=20260620-parlays"></script>
   </body>
 </html>

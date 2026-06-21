@@ -20,6 +20,8 @@ Las claves nunca se envían al navegador. El modo inicial es `mock`.
 
 Las tarjetas de cobertura del partido son interactivas. Al pulsarlas se abre una ventana dentro del dashboard con clasificación, estadísticas, enfrentamientos, alineaciones o cuotas cuando API-Football proporciona esos datos. La información ausente se identifica claramente y no se completa por inferencia.
 
+Los mercados sugeridos por un análisis real pueden agregarse a un cupón de parlay. Los cupones guardados conservan partido, mercado, selección, confianza, riesgo y estado de revisión. En **Parlays guardados** cada selección puede marcarse como pendiente, ganada, perdida o anulada; el resultado general se calcula automáticamente. En esta fase el historial se almacena solo en `localStorage` del navegador y no se sincroniza entre dispositivos.
+
 GitHub Pages publica exclusivamente `public/` mediante `.github/workflows/deploy-pages.yml`. Las APIs reales requieren ejecutar el servidor Node localmente o desplegarlo en un proveedor compatible con backend.
 
 ## Ligas permitidas
