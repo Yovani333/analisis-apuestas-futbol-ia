@@ -52,7 +52,7 @@ function statusBadge(status) {
 function renderLeagueOptions() {
   elements.leagueOptions.innerHTML = ALLOWED_LEAGUES.map((league) => `
     <label class="checkbox-row">
-      <input type="checkbox" name="league" value="${escapeHtml(league.slug)}" checked />
+      <input type="checkbox" name="league" value="${escapeHtml(league.slug)}" ${league.defaultSelected === false ? "" : "checked"} />
       <span>${escapeHtml(league.name)} — ${escapeHtml(league.country)}</span>
     </label>
   `).join("");
@@ -269,7 +269,25 @@ async function searchFixtures(event) {
   }
 }
 
-elements.form.addEventListener("change", updateLeagueCount);
+function handleFilterChange(event) {
+  const input = event.target;
+  if (input.matches('input[name="league"]')) {
+    const leagueInputs = [...elements.form.querySelectorAll('input[name="league"]')];
+    if (input.value === "world-cup" && input.checked) {
+      leagueInputs.forEach((item) => { if (item !== input) item.checked = false; });
+      elements.season.value = "2026";
+      elements.dateFrom.value = "2026-06-11";
+      elements.dateTo.value = "2026-06-28";
+      elements.status.value = "all";
+    } else if (input.value !== "world-cup" && input.checked) {
+      const worldCupInput = elements.form.querySelector('input[name="league"][value="world-cup"]');
+      if (worldCupInput) worldCupInput.checked = false;
+    }
+  }
+  updateLeagueCount();
+}
+
+elements.form.addEventListener("change", handleFilterChange);
 elements.form.addEventListener("submit", searchFixtures);
 elements.matchesList.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
@@ -298,6 +316,7 @@ async function initializeApp() {
     document.querySelector("#runtime-description").textContent = runtime.liveReady
       ? "API-Football y OpenAI están configurados en el backend."
       : `Faltan variables del servidor: ${(runtime.missing || []).join(", ")}.`;
+    document.querySelector("#data-mode-note").textContent = "Los partidos y la cobertura se consultan desde API-Football. El análisis IA solo se ejecuta al solicitarlo.";
   } else if (window.location.hostname.endsWith("github.io")) {
     document.querySelector("#runtime-mode").textContent = "Demo pública sin APIs";
     document.querySelector("#runtime-description").textContent = "GitHub Pages no ejecuta el backend; los partidos y análisis mostrados son sintéticos.";

@@ -1,6 +1,6 @@
 # Análisis de Apuestas de Fútbol con IA
 
-Dashboard full-stack para consultar partidos de cinco ligas permitidas, revisar calidad de datos y generar análisis prudentes con API-Football y OpenAI.
+Dashboard full-stack para consultar partidos de seis competiciones permitidas, revisar calidad de datos y generar análisis prudentes con API-Football y OpenAI.
 
 ## Enlaces
 
@@ -27,8 +27,9 @@ GitHub Pages publica exclusivamente `public/` mediante `.github/workflows/deploy
 - Bundesliga — Alemania
 - Primeira Liga — Portugal
 - Ligue 1 — Francia
+- Copa Mundial FIFA — Mundial (API-Football ID 1, temporada 2026)
 
-Los IDs fueron verificados contra API-Football el 19 de junio de 2026 y están documentados en la configuración para ahorrar solicitudes del plan gratuito. Deben revalidarse si el proveedor cambia su catálogo. Las temporadas automáticas sí consultan metadatos actuales.
+Los IDs fueron verificados contra API-Football el 19 y 20 de junio de 2026 y están documentados en la configuración para ahorrar solicitudes. Deben revalidarse si el proveedor cambia su catálogo. Las temporadas automáticas sí consultan metadatos actuales.
 
 ## Tecnologías
 
@@ -133,7 +134,7 @@ Las pruebas verifican ligas permitidas, rangos de fechas e identificadores de fi
 
 - El frontend no recibe claves API.
 - Las consultas se limitan por frecuencia y tamaño.
-- Solo se permiten las cinco ligas configuradas.
+- Solo se permiten las seis competiciones configuradas.
 - Las llamadas externas tienen timeout y caché temporal.
 - El sistema no debe prometer resultados ni ganancias.
 

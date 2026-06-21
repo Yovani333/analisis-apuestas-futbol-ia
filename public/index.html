@@ -48,7 +48,7 @@
             <p class="eyebrow">Filtros</p>
             <h2 id="filters-title">Selecciona ligas</h2>
           </div>
-          <span id="league-count" class="count-badge">5 de 5</span>
+          <span id="league-count" class="count-badge">5 de 6</span>
         </div>
 
         <form id="filters-form">
@@ -62,7 +62,8 @@
           <div class="field">
             <label for="season">Temporada</label>
             <select id="season" name="season">
-              <option value="2024">2024/2025</option>
+              <option value="2026">2026 (Copa Mundial)</option>
+              <option value="2024" selected>2024/2025</option>
               <option value="2023">2023/2024</option>
               <option value="2022">2022/2023</option>
               <option value="auto">Automática (requiere cobertura actual)</option>
@@ -93,7 +94,7 @@
           <button class="button button--primary button--full" type="submit">
             <span aria-hidden="true">⌕</span> Buscar partidos
           </button>
-          <p class="helper-text">La búsqueda actual usa escenarios sintéticos y no representa partidos reales.</p>
+          <p id="data-mode-note" class="helper-text">La búsqueda actual usa escenarios sintéticos y no representa partidos reales.</p>
         </form>
       </aside>
 
