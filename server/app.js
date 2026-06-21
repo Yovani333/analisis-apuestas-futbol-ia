@@ -11,7 +11,7 @@ const publicDir = path.join(rootDir, "public");
 export const app = express();
 
 app.disable("x-powered-by");
-app.use(helmet({ contentSecurityPolicy: { directives: { "script-src": ["'self'"], "style-src": ["'self'"], "img-src": ["'self'", "data:"] } } }));
+app.use(helmet({ contentSecurityPolicy: { directives: { "script-src": ["'self'"], "style-src": ["'self'"], "img-src": ["'self'", "data:", "https://media.api-sports.io"] } } }));
 app.use(express.json({ limit: "64kb" }));
 app.use("/api", rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: "draft-8", legacyHeaders: false }), apiRouter);
 app.use(express.static(publicDir, { extensions: ["html"], maxAge: "1h", index: "index.html" }));

@@ -18,6 +18,8 @@ El proyecto incluye un backend seguro y dos modos:
 
 Las claves nunca se envían al navegador. El modo inicial es `mock`.
 
+Las tarjetas de cobertura del partido son interactivas. Al pulsarlas se abre una ventana dentro del dashboard con clasificación, estadísticas, enfrentamientos, alineaciones o cuotas cuando API-Football proporciona esos datos. La información ausente se identifica claramente y no se completa por inferencia.
+
 GitHub Pages publica exclusivamente `public/` mediante `.github/workflows/deploy-pages.yml`. Las APIs reales requieren ejecutar el servidor Node localmente o desplegarlo en un proveedor compatible con backend.
 
 ## Ligas permitidas
@@ -86,7 +88,7 @@ API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
 
 Para activar datos reales, completa un `.env` local y cambia `DATA_MODE=live`. Confirma que `OPENAI_MODEL` sea un identificador disponible en tu proyecto de OpenAI.
 
-La interfaz incluye temporadas 2022–2024 porque son las habilitadas por el plan gratuito detectado durante la integración. Planes con cobertura actual pueden usar la opción automática.
+La interfaz incluye temporadas históricas y la temporada 2026 para la Copa Mundial FIFA. La cobertura real de cada competición depende del plan vigente de API-Football; cuando corresponda puede usarse la opción automática.
 
 Nunca publiques `.env`, claves, respuestas internas del proveedor ni registros con secretos.
 

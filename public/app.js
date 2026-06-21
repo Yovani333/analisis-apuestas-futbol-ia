@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js";
-import { footballDataService } from "./services.js";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260620-details";
+import { footballDataService } from "./services.js?v=20260620-details";
 
 const state = {
   fixtures: [],
@@ -24,6 +24,11 @@ const elements = {
   selectedSummary: document.querySelector("#selected-match-summary"),
   dataStatus: document.querySelector("#data-overall-status"),
   dataGrid: document.querySelector("#data-grid"),
+  dataDialog: document.querySelector("#data-detail-dialog"),
+  dataDialogTitle: document.querySelector("#data-detail-title"),
+  dataDialogSubtitle: document.querySelector("#data-detail-subtitle"),
+  dataDialogContent: document.querySelector("#data-detail-content"),
+  dataDialogClose: document.querySelector("#data-detail-close"),
   analysisStatus: document.querySelector("#analysis-status"),
   analysisContent: document.querySelector("#analysis-content")
 };
@@ -130,11 +135,111 @@ function renderFixtureData() {
   const sourceLabel = fixture.dataSource === "api-football" ? "API-Football" : "escenario sintético";
   elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${sourceLabel}</span>`;
   elements.dataGrid.innerHTML = DATA_CATEGORIES.map((category) => `
-    <article class="data-card">
+    <button class="data-card" type="button" data-category="${escapeHtml(category.key)}" aria-label="Ver detalle de ${escapeHtml(category.label)}">
       <h3>${escapeHtml(category.label)}</h3>
       ${statusBadge(fixture.dataAvailability[category.key] || "No disponible")}
-    </article>
+      <span class="data-card__action">Ver detalle <span aria-hidden="true">→</span></span>
+    </button>
   `).join("");
+}
+
+function displayValue(value, fallback = "—") {
+  return value === null || value === undefined || value === "" ? fallback : escapeHtml(value);
+}
+
+function emptyDetail(message) {
+  return `<div class="detail-empty"><strong>No hay datos para mostrar</strong><p>${escapeHtml(message)}</p></div>`;
+}
+
+function detailTable(headers, rows) {
+  if (!rows.length) return "";
+  return `<div class="detail-table-wrap"><table class="detail-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderStandingsDetail(data, fixture) {
+  const groups = data.flatMap((entry) => entry?.league?.standings || []);
+  if (!groups.length) return emptyDetail("API-Football no devolvió una clasificación para este partido.");
+  const relatedGroups = groups.filter((group) => group.some((row) => [fixture.home, fixture.away].includes(row.team?.name)));
+  const visibleGroups = relatedGroups.length ? relatedGroups : groups.slice(0, 2);
+  return visibleGroups.map((group) => {
+    const groupName = group[0]?.group || "Clasificación";
+    const rows = group.map((row) => [
+      displayValue(row.rank),
+      `<span class="team-cell">${row.team?.logo ? `<img src="${escapeHtml(row.team.logo)}" alt="" />` : ""}<strong>${displayValue(row.team?.name)}</strong></span>`,
+      displayValue(row.all?.played), displayValue(row.all?.win), displayValue(row.all?.draw), displayValue(row.all?.lose),
+      displayValue(row.all?.goals?.for), displayValue(row.all?.goals?.against), displayValue(row.goalsDiff), `<strong>${displayValue(row.points)}</strong>`
+    ]);
+    return `<section class="detail-section"><h3>${escapeHtml(groupName)}</h3>${detailTable(["Pos.", "Equipo", "PJ", "G", "E", "P", "GF", "GC", "DG", "Pts"], rows)}</section>`;
+  }).join("");
+}
+
+function renderStatisticsDetail(data, xgOnly = false) {
+  if (!data.length) return emptyDetail("Las estadísticas todavía no están publicadas para este partido.");
+  return `<div class="team-stat-grid">${data.map((team) => {
+    const stats = (team.statistics || []).filter((stat) => !xgOnly || /expected goals|xg/i.test(stat.type));
+    return `<section class="team-stat-card"><div class="team-stat-card__heading">${team.team?.logo ? `<img src="${escapeHtml(team.team.logo)}" alt="" />` : ""}<h3>${displayValue(team.team?.name)}</h3></div>${stats.length ? stats.map((stat) => `<div class="stat-row"><span>${displayValue(stat.type)}</span><strong>${displayValue(stat.value)}</strong></div>`).join("") : `<p class="muted-text">No hay ${xgOnly ? "xG/xGA" : "estadísticas"} disponibles.</p>`}</section>`;
+  }).join("")}</div>`;
+}
+
+function renderH2HDetail(data) {
+  if (!data.length) return emptyDetail("No hay enfrentamientos directos disponibles.");
+  const rows = data.slice(0, 10).map((match) => [
+    displayValue(match.fixture?.date ? formatDate(match.fixture.date.slice(0, 10)) : null),
+    displayValue(match.teams?.home?.name),
+    `<strong>${displayValue(match.goals?.home)} – ${displayValue(match.goals?.away)}</strong>`,
+    displayValue(match.teams?.away?.name),
+    displayValue(match.league?.name)
+  ]);
+  return detailTable(["Fecha", "Local", "Marcador", "Visitante", "Competición"], rows);
+}
+
+function renderInjuriesDetail(data) {
+  if (!data.length) return emptyDetail("API-Football no reporta lesiones o sanciones para este fixture. Esto no confirma que no existan; solo indica que no fueron proporcionadas.");
+  const rows = data.map((item) => [displayValue(item.team?.name), displayValue(item.player?.name), displayValue(item.player?.type), displayValue(item.player?.reason)]);
+  return detailTable(["Equipo", "Jugador", "Tipo", "Motivo"], rows);
+}
+
+function renderLineupsDetail(data) {
+  if (!data.length) return emptyDetail("Las alineaciones todavía no están disponibles.");
+  return `<div class="lineups-grid">${data.map((lineup) => `<section class="lineup-card"><div class="team-stat-card__heading">${lineup.team?.logo ? `<img src="${escapeHtml(lineup.team.logo)}" alt="" />` : ""}<div><h3>${displayValue(lineup.team?.name)}</h3><p>Formación: ${displayValue(lineup.formation)} · DT: ${displayValue(lineup.coach?.name)}</p></div></div><h4>Titulares</h4><ol class="player-list">${(lineup.startXI || []).map((item) => `<li><span>${displayValue(item.player?.number)}</span>${displayValue(item.player?.name)} <small>${displayValue(item.player?.pos)}</small></li>`).join("")}</ol><details><summary>Ver suplentes (${(lineup.substitutes || []).length})</summary><ul class="player-list">${(lineup.substitutes || []).map((item) => `<li><span>${displayValue(item.player?.number)}</span>${displayValue(item.player?.name)} <small>${displayValue(item.player?.pos)}</small></li>`).join("")}</ul></details></section>`).join("")}</div>`;
+}
+
+function renderOddsDetail(data) {
+  const bookmaker = data[0]?.bookmakers?.[0];
+  if (!bookmaker) return emptyDetail("No hay cuotas publicadas para este partido.");
+  const preferred = /match winner|double chance|goals over\/under|both teams score/i;
+  const bets = bookmaker.bets || [];
+  const markets = bets.filter((bet) => preferred.test(bet.name)).slice(0, 6);
+  const visibleMarkets = markets.length ? markets : bets.slice(0, 4);
+  return `<div class="detail-note"><strong>Casa mostrada: ${displayValue(bookmaker.name)}</strong><span>Cuotas informativas; pueden cambiar y no garantizan resultados.</span></div><div class="odds-grid">${visibleMarkets.map((bet) => `<section class="odds-market"><h3>${displayValue(bet.name)}</h3>${(bet.values || []).slice(0, 12).map((value) => `<div class="odd-row"><span>${displayValue(value.value)}</span><strong>${displayValue(value.odd)}</strong></div>`).join("")}</section>`).join("")}</div>`;
+}
+
+function categoryDetail(categoryKey, fixture) {
+  const data = fixture.confirmedData?.[categoryKey] || [];
+  if (categoryKey === "standings") return renderStandingsDetail(data, fixture);
+  if (categoryKey === "statistics") return renderStatisticsDetail(data);
+  if (categoryKey === "h2h") return renderH2HDetail(data);
+  if (categoryKey === "injuries") return renderInjuriesDetail(data);
+  if (categoryKey === "lineups") return renderLineupsDetail(data);
+  if (categoryKey === "odds") return renderOddsDetail(data);
+  if (categoryKey === "xg") return renderStatisticsDetail(fixture.confirmedData?.statistics || [], true);
+  if (categoryKey === "context") return emptyDetail("El contexto competitivo, descanso, viajes y rotación aún requieren fuentes adicionales y revisión humana.");
+  if (categoryKey === "weather") return emptyDetail("La integración actual no consulta clima ni condiciones de cancha.");
+  return emptyDetail("No hay información disponible para esta categoría.");
+}
+
+function openDataDetail(categoryKey) {
+  const fixture = selectedFixture();
+  const category = DATA_CATEGORIES.find((item) => item.key === categoryKey);
+  if (!fixture || !category) return;
+  const status = fixture.dataAvailability?.[categoryKey] || "No disponible";
+  elements.dataDialogTitle.textContent = category.label;
+  elements.dataDialogSubtitle.textContent = `${fixture.home} vs ${fixture.away} · ${status}`;
+  elements.dataDialogContent.innerHTML = categoryDetail(categoryKey, fixture);
+  if (fixture.dataSource !== "api-football") {
+    elements.dataDialogContent.insertAdjacentHTML("afterbegin", '<div class="detail-note"><strong>Modo demostración</strong><span>No existen datos reales detallados para este escenario sintético.</span></div>');
+  }
+  elements.dataDialog.showModal();
 }
 
 function renderAnalysis(analysis) {
@@ -289,6 +394,14 @@ function handleFilterChange(event) {
 
 elements.form.addEventListener("change", handleFilterChange);
 elements.form.addEventListener("submit", searchFixtures);
+elements.dataGrid.addEventListener("click", (event) => {
+  const card = event.target.closest("[data-category]");
+  if (card) openDataDetail(card.dataset.category);
+});
+elements.dataDialogClose.addEventListener("click", () => elements.dataDialog.close());
+elements.dataDialog.addEventListener("click", (event) => {
+  if (event.target === elements.dataDialog) elements.dataDialog.close();
+});
 elements.matchesList.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest("[data-fixture-id]");

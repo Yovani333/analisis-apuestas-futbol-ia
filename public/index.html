@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260620-details" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -149,6 +149,18 @@
       <p>Herramienta informativa. No garantiza resultados ni ganancias. Apuesta con responsabilidad.</p>
     </footer>
 
-    <script type="module" src="app.js"></script>
+    <dialog id="data-detail-dialog" class="data-dialog" aria-labelledby="data-detail-title">
+      <div class="data-dialog__header">
+        <div>
+          <p class="eyebrow">Datos confirmados · API-Football</p>
+          <h2 id="data-detail-title">Detalle del partido</h2>
+          <p id="data-detail-subtitle" class="data-dialog__subtitle"></p>
+        </div>
+        <button id="data-detail-close" class="data-dialog__close" type="button" aria-label="Cerrar detalle">×</button>
+      </div>
+      <div id="data-detail-content" class="data-dialog__content"></div>
+    </dialog>
+
+    <script type="module" src="app.js?v=20260620-details"></script>
   </body>
 </html>
