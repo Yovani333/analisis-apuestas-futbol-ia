@@ -11,6 +11,9 @@ const leagueCache = new Map();
 const requestCache = new Map();
 const datasetCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
+const LIVE_CACHE_TTL = 60 * 1000;
+const PREDICTION_CACHE_TTL = 30 * 60 * 1000;
+const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
 function getCached(key) {
   const item = requestCache.get(key);
@@ -18,7 +21,7 @@ function getCached(key) {
   return item.value;
 }
 
-async function apiRequest(path, params = {}) {
+async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
   if (!env.apiFootballKey) throw new AppError("API-Football no está configurada.", 503, "API_FOOTBALL_NOT_CONFIGURED");
   const url = new URL(path, env.apiFootballBaseUrl);
   Object.entries(params).forEach(([key, value]) => {
@@ -37,7 +40,7 @@ async function apiRequest(path, params = {}) {
   const providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
   if (providerErrors?.length) throw new AppError("API-Football rechazó la consulta.", 502, "API_FOOTBALL_PROVIDER_ERROR", providerErrors);
   const value = payload.response || [];
-  requestCache.set(cacheKey, { value, expiresAt: Date.now() + CACHE_TTL });
+  requestCache.set(cacheKey, { value, expiresAt: Date.now() + cacheTtl });
   return value;
 }
 
@@ -93,12 +96,45 @@ function providerStatus(status) {
 function statusLabel(short) {
   if (["NS", "TBD"].includes(short)) return "Programado";
   if (["FT", "AET", "PEN"].includes(short)) return "Completo";
+  if (["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(short)) return "En vivo";
+  if (["PST", "CANC", "ABD", "AWD", "WO"].includes(short)) return "No disponible";
   return short || "No disponible";
 }
 
-function normalizeFixture(item, league) {
+function pacificDateParts(value) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PACIFIC_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return { date: `${values.year}-${values.month}-${values.day}`, time: `${values.hour}:${values.minute}` };
+}
+
+function fixtureStatus(short) {
+  if (["FT", "AET", "PEN"].includes(short)) return "finished";
+  if (["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(short)) return "live";
+  return "scheduled";
+}
+
+export function normalizeFavorite(rows = [], fixture) {
+  const prediction = rows[0]?.predictions;
+  const winner = prediction?.winner;
+  if (!winner?.id || !winner?.name) return null;
+  const side = winner.id === fixture.homeTeamId ? "home" : winner.id === fixture.awayTeamId ? "away" : null;
+  const rawPercent = side ? prediction.percent?.[side] : null;
+  const percent = Number.parseFloat(String(rawPercent || "").replace("%", ""));
+  return {
+    teamId: winner.id, team: winner.name, percent: Number.isFinite(percent) ? percent : null,
+    comment: winner.comment || "", source: "api-football-predictions",
+    note: "Favorito estadístico del proveedor; no representa una votación pública de usuarios."
+  };
+}
+
+export function normalizeFixture(item, league) {
   const date = new Date(item.fixture.date);
-  const iso = date.toISOString();
+  const pacific = pacificDateParts(date);
+  const shortStatus = item.fixture.status.short;
+  const neutralVenue = league.slug === "world-cup";
   return {
     id: String(item.fixture.id),
     leagueSlug: league.slug,
@@ -109,10 +145,15 @@ function normalizeFixture(item, league) {
     away: item.teams.away.name,
     homeTeamId: item.teams.home.id,
     awayTeamId: item.teams.away.id,
-    date: iso.slice(0, 10),
-    time: iso.slice(11, 16),
-    status: ["FT", "AET", "PEN"].includes(item.fixture.status.short) ? "finished" : "scheduled",
-    statusLabel: statusLabel(item.fixture.status.short),
+    date: pacific.date,
+    time: pacific.time,
+    utcDateTime: date.toISOString(),
+    timezone: PACIFIC_TIME_ZONE,
+    status: fixtureStatus(shortStatus),
+    statusLabel: statusLabel(shortStatus),
+    statusShort: shortStatus,
+    elapsed: item.fixture.status?.elapsed ?? null,
+    neutralVenue,
     stadium: item.fixture.venue?.name || "No disponible",
     city: item.fixture.venue?.city || "",
     country: league.countryLabel,
@@ -131,12 +172,16 @@ export async function searchFixtures(filters) {
     const season = chooseSeason(league.seasons, filters.season, filters.dateFrom);
     if (!season) throw new AppError(`No se encontró temporada válida para ${league.name}.`, 422, "SEASON_NOT_RESOLVED");
     const fixtures = await apiRequest("/fixtures", {
-      league: league.apiId, season, from: filters.dateFrom, to: filters.dateTo, status: providerStatus(filters.status), timezone: "UTC"
-    });
-    return fixtures
+      league: league.apiId, season, from: filters.dateFrom, to: filters.dateTo, status: providerStatus(filters.status), timezone: PACIFIC_TIME_ZONE
+    }, LIVE_CACHE_TTL);
+    const normalized = fixtures
       .map((item) => normalizeFixture(item, league))
       .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
       .slice(0, 5);
+    return Promise.all(normalized.map(async (fixture) => {
+      const predictions = await apiRequest("/predictions", { fixture: fixture.id }, PREDICTION_CACHE_TTL).catch(() => []);
+      return { ...fixture, favorite: normalizeFavorite(predictions, fixture) };
+    }));
   }));
   return groups.flat().sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
 }
@@ -161,7 +206,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   if (forceRefresh) invalidateFixtureCache(fixtureId);
   const cachedDataset = datasetCache.get(fixtureId);
   if (cachedDataset?.expiresAt > Date.now()) return cachedDataset.value;
-  const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: "UTC" });
+  const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const base = fixtureRows[0];
   if (!base) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
 
@@ -196,7 +241,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   const fixture = normalizeFixture(base, leagueConfig);
   const homeForm = summarizeRecentFixtures(homeRecentRows, homeId, base.fixture.date);
   const awayForm = summarizeRecentFixtures(awayRecentRows, awayId, base.fixture.date);
-  const oddsSummary = normalizeOdds(odds);
+  const oddsSummary = normalizeOdds(odds, { homeName: fixture.home, awayName: fixture.away });
   const dataQuality = calculateDataQuality({ homeForm, awayForm, odds: oddsSummary, standings, injuries, lineups, h2h });
   const marketAnalysis = calculateMarketAnalysis(homeForm, awayForm, oddsSummary).map((market) => ({
     ...market,
@@ -241,7 +286,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
 }
 
 export async function getFixtureResult(fixtureId) {
-  const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: "UTC" });
+  const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const row = fixtureRows[0];
   if (!row) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
   return {

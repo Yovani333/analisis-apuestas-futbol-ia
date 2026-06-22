@@ -84,7 +84,7 @@ function findOdd(bet, patterns) {
   return asDecimal(value?.odd);
 }
 
-export function normalizeOdds(rows = []) {
+export function normalizeOdds(rows = [], teams = {}) {
   const bookmakers = rows.flatMap((row) => row.bookmakers || []);
   const bookmaker = bookmakers.find((item) => {
     const names = (item.bets || []).map((bet) => normalizedName(bet.name)).join("|");
@@ -95,9 +95,11 @@ export function normalizeOdds(rows = []) {
   const doubleChance = findBet(bookmaker, /double chance/);
   const totals = findBet(bookmaker, /goals over under|over under/);
   const btts = findBet(bookmaker, /both teams.*score|both teams to score/);
+  const homeLabel = teams.homeName ? `${teams.homeName} o empate (1X)` : "Equipo 1 o empate (1X)";
+  const awayLabel = teams.awayName ? `Empate o ${teams.awayName} (X2)` : "Empate o equipo 2 (X2)";
   const selections = [
-    { marketKey: "double_chance", selectionKey: "1X", market: "Doble oportunidad", selection: "Local o empate (1X)", decimalOdds: findOdd(doubleChance, [/home draw/, /^1x$/, /local empate/]) },
-    { marketKey: "double_chance", selectionKey: "X2", market: "Doble oportunidad", selection: "Empate o visitante (X2)", decimalOdds: findOdd(doubleChance, [/draw away/, /^x2$/, /empate visitante/]) },
+    { marketKey: "double_chance", selectionKey: "1X", market: "Doble oportunidad", selection: homeLabel, decimalOdds: findOdd(doubleChance, [/home draw/, /^1x$/, /local empate/]) },
+    { marketKey: "double_chance", selectionKey: "X2", market: "Doble oportunidad", selection: awayLabel, decimalOdds: findOdd(doubleChance, [/draw away/, /^x2$/, /empate visitante/]) },
     { marketKey: "over_under_2_5", selectionKey: "over_2_5", market: "Total de goles 2.5", selection: "Más de 2.5 goles", decimalOdds: findOdd(totals, [/over 2 5/, /mas de 2 5/]) },
     { marketKey: "over_under_2_5", selectionKey: "under_2_5", market: "Total de goles 2.5", selection: "Menos de 2.5 goles", decimalOdds: findOdd(totals, [/under 2 5/, /menos de 2 5/]) },
     { marketKey: "btts", selectionKey: "btts_yes", market: "Ambos equipos anotan", selection: "Sí", decimalOdds: findOdd(btts, [/^yes$/, /^si$/]) },

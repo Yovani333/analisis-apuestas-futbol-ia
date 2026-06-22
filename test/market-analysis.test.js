@@ -38,3 +38,12 @@ test("normaliza cuotas principales y calcula margen de la casa", () => {
   assert.ok(calculations[0].bookmakerMarginPct > 5);
   assert.equal(calculations[0].noVigImpliedProbabilityPct, 50);
 });
+
+test("usa nombres de equipos en doble oportunidad sin asumir localía", () => {
+  const odds = normalizeOdds([{ bookmakers: [{ name: "Casa", bets: [{ name: "Double Chance", values: [{ value: "Home/Draw", odd: "1.40" }, { value: "Draw/Away", odd: "1.70" }] }] }] }], {
+    homeName: "México", awayName: "Japón"
+  });
+  assert.equal(odds.selections[0].selection, "México o empate (1X)");
+  assert.equal(odds.selections[1].selection, "Empate o Japón (X2)");
+  assert.doesNotMatch(odds.selections.map((item) => item.selection).join(" "), /local|visitante/i);
+});

@@ -285,12 +285,15 @@ export function normalizeMatchResearchData(dataset) {
     matchId: String(dataset.fixture.id),
     apiFootballFixtureId: String(dataset.fixture.id),
     league: { id: dataset.fixture.leagueId, name: dataset.fixture.leagueName, country: dataset.fixture.country, season: dataset.fixture.season },
-    dateTime: `${dataset.fixture.date}T${dataset.fixture.time}:00Z`,
+    dateTime: dataset.fixture.utcDateTime || `${dataset.fixture.date}T${dataset.fixture.time}:00`,
+    displayTimeZone: dataset.fixture.timezone || "America/Los_Angeles",
     homeTeam: { id: dataset.fixture.homeTeamId, name: dataset.fixture.home },
     awayTeam: { id: dataset.fixture.awayTeamId, name: dataset.fixture.away },
     venue: {
       stadium: dataset.fixture.stadium || "", city: dataset.fixture.city || "", country: dataset.fixture.country || "",
-      surface: "", pitchCondition: "", pitchConditionStatus: DATA_STATUS.NOT_AVAILABLE, source: ""
+      surface: "", pitchCondition: "", pitchConditionStatus: DATA_STATUS.NOT_AVAILABLE, source: "",
+      neutral: Boolean(dataset.fixture.neutralVenue),
+      terminology: dataset.fixture.neutralVenue ? "equipo_1_equipo_2" : "local_visitante"
     },
     standings: safeModule("standings", getStandingsData, dataset),
     h2h: safeModule("h2h", getH2HData, dataset),
@@ -326,6 +329,7 @@ Usa únicamente la información estructurada proporcionada en matchData.
 No inventes datos deportivos, lesiones, sanciones, alineaciones, xG, xGA, clima, cancha, resultados, cuotas ni noticias.
 Separa datos confirmados, datos parciales o probables, inferencias y datos faltantes.
 Si analysisStatus es "needs_review", advierte que el pronóstico no es fuerte.
+Si matchData.venue.neutral es true, usa los nombres de los equipos o "equipo 1/equipo 2"; nunca los describas como local o visitante.
 No generes picks agresivos cuando falten datos críticos.
 Los datos marcados como post_match_audit_only no deben usarse para justificar predicciones prepartido.
 No presentes ningún pronóstico como garantizado, fijo, seguro o sin riesgo.

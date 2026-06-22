@@ -13,13 +13,31 @@ No sugieras mercados sin positiveValue=true, con requiresReview=true ni más de 
 Si matchData.analysisStatus es needs_review, devuelve mercados_sugeridos vacío y apto_para_parlay No.
 Head to head es una señal secundaria. Cuotas y valor esperado tienen prioridad.`;
 
+function neutralizeVenueLanguage(value, homeTeam, awayTeam) {
+  if (Array.isArray(value)) return value.map((item) => neutralizeVenueLanguage(item, homeTeam, awayTeam));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, neutralizeVenueLanguage(item, homeTeam, awayTeam)]));
+  if (typeof value !== "string") return value;
+  return value
+    .replace(/\bequipo local\b/gi, "__HOME_TEAM__")
+    .replace(/\bequipo visitante\b/gi, "__AWAY_TEAM__")
+    .replace(/\bdel local\b/gi, "de __HOME_TEAM__")
+    .replace(/\bdel visitante\b/gi, "de __AWAY_TEAM__")
+    .replace(/\blocal\b/gi, "__HOME_TEAM__")
+    .replace(/\bvisitante\b/gi, "__AWAY_TEAM__")
+    .replaceAll("__HOME_TEAM__", homeTeam)
+    .replaceAll("__AWAY_TEAM__", awayTeam);
+}
+
 export function applyResearchGuardrails(parsed, dataset) {
   const quality = dataset.dataQuality;
   const calculations = dataset.marketAnalysis || [];
   const research = dataset.researchData;
+  const safeParsed = research?.venue?.neutral
+    ? neutralizeVenueLanguage(parsed, research.homeTeam?.name || "equipo 1", research.awayTeam?.name || "equipo 2")
+    : parsed;
   const researchBlocksMarkets = research?.analysisStatus === ANALYSIS_STATUS.NEEDS_REVIEW;
   const researchIsPartial = research?.analysisStatus === ANALYSIS_STATUS.PARTIAL;
-  const verifiedMarkets = (parsed.mercados_sugeridos || []).slice(0, 3).map((market) => {
+  const verifiedMarkets = (safeParsed.mercados_sugeridos || []).slice(0, 3).map((market) => {
     const calculation = calculations.find((item) => item.marketKey === market.codigo_mercado && item.selectionKey === market.codigo_seleccion);
     if (!calculation) {
       return { ...market, cuota_decimal: null, probabilidad_modelo: null, valor_esperado: null, requiere_revision: true };
@@ -36,15 +54,15 @@ export function applyResearchGuardrails(parsed, dataset) {
   });
   const usableMarkets = quality.canSuggest && !researchBlocksMarkets ? verifiedMarkets : [];
   const normalizedMissing = (research?.missingData || []).map((item) => `${item.label}: ${item.message || item.status}`);
-  const datosFaltantes = [...new Set([...(parsed.datos_faltantes || []), ...normalizedMissing])];
+  const datosFaltantes = [...new Set([...(safeParsed.datos_faltantes || []), ...normalizedMissing])];
   const researchComplete = research?.analysisStatus === ANALYSIS_STATUS.COMPLETE;
   return {
-    ...parsed,
-    estado_analisis: researchComplete ? parsed.estado_analisis : "Necesita revisión",
+    ...safeParsed,
+    estado_analisis: researchComplete ? safeParsed.estado_analisis : "Necesita revisión",
     datos_faltantes: datosFaltantes,
     mercados_sugeridos: usableMarkets,
     apto_para_parlay: researchComplete && quality.canSuggest && usableMarkets.some((market) => !market.requiere_revision)
-      ? parsed.apto_para_parlay
+      ? safeParsed.apto_para_parlay
       : { respuesta: "No", razonamiento: "La cobertura normalizada, los datos críticos o el valor esperado verificado no alcanzan el umbral para agregar selecciones al parlay." },
     _context: {
       quality, preMatch: dataset.preMatch, marketAnalysis: calculations,

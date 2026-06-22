@@ -19,7 +19,8 @@ function datasetFixture() {
     fixture: {
       id: "100", leagueId: 1, leagueName: "Copa Mundial FIFA", season: 2026, country: "Mundial",
       homeTeamId: 10, home: "Equipo Local", awayTeamId: 20, away: "Equipo Visitante",
-      date: "2026-06-22", time: "18:00", stadium: "Estadio de prueba", city: "Ciudad de prueba"
+      date: "2026-06-22", time: "18:00", stadium: "Estadio de prueba", city: "Ciudad de prueba",
+      neutralVenue: true, timezone: "America/Los_Angeles", utcDateTime: "2026-06-23T01:00:00.000Z"
     },
     confirmed: {
       standings: [{ league: { standings: [[
@@ -117,7 +118,7 @@ test("OpenAI no puede convertir un research parcial en análisis completo", () =
     marketAnalysis: [{ marketKey: "btts", selectionKey: "btts_yes", market: "Ambos anotan", selection: "Sí", decimalOdds: 1.9, estimatedProbabilityPct: 55, expectedValuePct: 4.5, positiveValue: true, requiresReview: false }]
   };
   const parsed = {
-    estado_analisis: "Completo", datos_faltantes: [],
+    estado_analisis: "Completo", datos_faltantes: [], resumen_partido: "El local tiene ventaja sobre el visitante.",
     mercados_sugeridos: [{ codigo_mercado: "btts", codigo_seleccion: "btts_yes", mercado: "Otro", seleccion: "Otra", cuota_decimal: 9, probabilidad_modelo: 99, valor_esperado: 999, requiere_revision: false }],
     apto_para_parlay: { respuesta: "Sí", razonamiento: "Prueba" }
   };
@@ -126,6 +127,7 @@ test("OpenAI no puede convertir un research parcial en análisis completo", () =
   assert.equal(guarded.mercados_sugeridos[0].cuota_decimal, 1.9);
   assert.equal(guarded.mercados_sugeridos[0].requiere_revision, true);
   assert.equal(guarded.apto_para_parlay.respuesta, "No");
+  assert.equal(guarded.resumen_partido, "El Equipo Local tiene ventaja sobre el Equipo Visitante.");
   assert.match(guarded.datos_faltantes[0], /xG/);
 });
 

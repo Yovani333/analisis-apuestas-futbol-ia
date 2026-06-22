@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-advanced-data";
-import { footballDataService } from "./services.js?v=20260621-advanced-data";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-pacific-live";
+import { footballDataService } from "./services.js?v=20260621-pacific-live";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -67,6 +67,7 @@ function statusClass(status) {
     "Disponible": "available",
     "Programado": "available",
     "Completo": "complete",
+    "En vivo": "live",
     "Parcial": "partial",
     "Falló": "failed",
     "Necesita revisión": "review",
@@ -155,21 +156,28 @@ function renderMatches() {
       <h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</h3>
       ${fixtures.map((fixture) => {
         const selected = state.selectedFixtureId === fixture.id;
+        const isFinished = fixture.status === "finished";
+        const showScore = ["finished", "live"].includes(fixture.status) && fixture.score?.home !== null && fixture.score?.away !== null;
+        const homeFavorite = fixture.favorite?.teamId === fixture.homeTeamId;
+        const awayFavorite = fixture.favorite?.teamId === fixture.awayTeamId;
+        const favoriteTitle = fixture.favorite ? `${fixture.favorite.note}${fixture.favorite.percent !== null ? ` Confianza del modelo: ${fixture.favorite.percent}%.` : ""}` : "";
+        const teamName = (name, favorite) => `<strong class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${escapeHtml(name)}${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito${fixture.favorite.percent !== null ? ` ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</strong>`;
         return `
           <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" ${selected ? 'aria-current="true"' : ""}>
             <span class="match-card__favorite" aria-hidden="true">☆</span>
             <div class="match-card__teams">
-              <strong>${escapeHtml(fixture.home)}</strong>
-              <span class="match-card__versus">vs</span>
-              <strong>${escapeHtml(fixture.away)}</strong>
+              ${teamName(fixture.home, homeFavorite)}
+              <span class="match-card__versus">${showScore ? `<strong class="match-score">${escapeHtml(fixture.score.home)} – ${escapeHtml(fixture.score.away)}</strong>` : "vs"}</span>
+              ${teamName(fixture.away, awayFavorite)}
             </div>
             <div class="match-card__meta">
-              <time datetime="${escapeHtml(fixture.date)}T${escapeHtml(fixture.time)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)}</time>
+              <time datetime="${escapeHtml(fixture.utcDateTime || `${fixture.date}T${fixture.time}`)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT</time>
               ${statusBadge(fixture.statusLabel)}
+              ${fixture.status === "live" && fixture.elapsed !== null ? `<small>${escapeHtml(fixture.elapsed)} minutos</small>` : ""}
             </div>
             <div class="match-card__actions">
-              <button class="button button--secondary" type="button" data-action="view">Ver datos</button>
-              <button class="button button--primary" type="button" data-action="analyze">Generar análisis IA</button>
+              <button class="button button--secondary" type="button" data-action="view" ${isFinished ? 'disabled title="Partido finalizado"' : ""}>Ver datos</button>
+              <button class="button button--primary" type="button" data-action="analyze" ${isFinished ? 'disabled title="Partido finalizado"' : ""}>Generar análisis IA</button>
             </div>
           </article>`;
       }).join("")}
@@ -177,7 +185,8 @@ function renderMatches() {
   `).join("") + `
     <div class="matches-footer">
       <span>Mostrando ${state.fixtures.length} de ${state.fixtures.length} partidos</span>
-      <span>Fuente: ${state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "demostración sintética"}</span>
+      <span>Fuente: ${state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "demostración sintética"} · Horario del Pacífico (PT)</span>
+      ${state.fixtures.some((fixture) => fixture.favorite) ? "<span>Verde = favorito estadístico del proveedor; no es una votación pública.</span>" : ""}
     </div>`;
 }
 
@@ -196,7 +205,8 @@ function renderFixtureData() {
   elements.selectedSummary.className = "selected-summary";
   const sourceLabel = fixture.dataSource === "api-football" ? "API-Football" : "escenario sintético";
   const qualityLabel = fixture.dataQuality ? ` · Calidad ${fixture.dataQuality.level} ${fixture.dataQuality.score}/100` : "";
-  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${sourceLabel}${escapeHtml(qualityLabel)}</span>`;
+  const venueLabel = fixture.neutralVenue ? " · Sede neutral; equipo 1 y equipo 2" : "";
+  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT · ${sourceLabel}${escapeHtml(venueLabel)}${escapeHtml(qualityLabel)}</span>`;
   elements.dataGrid.innerHTML = DATA_CATEGORIES.map((category) => `
     <button class="data-card" type="button" data-category="${escapeHtml(category.key)}" aria-label="Ver detalle de ${escapeHtml(category.label)}">
       <h3>${escapeHtml(category.label)}</h3>
@@ -427,7 +437,12 @@ function renderOddsDetail(data) {
 function renderPreMatchDetail(fixture) {
   const preMatch = fixture.preMatch;
   if (!preMatch) return emptyDetail("Todavía no se ha construido la ficha prepartido.");
-  const teamCard = (team, venue) => `<section class="team-stat-card"><h3>${escapeHtml(team.team)}</h3><div class="stat-row"><span>Forma reciente</span><strong>${displayValue(team.form)}</strong></div><div class="stat-row"><span>Partidos analizados</span><strong>${displayValue(team.played)}</strong></div><div class="stat-row"><span>Goles a favor / contra</span><strong>${displayValue(team.avgGoalsFor)} / ${displayValue(team.avgGoalsAgainst)}</strong></div><div class="stat-row"><span>Over 2.5</span><strong>${displayValue(team.over25Rate)}%</strong></div><div class="stat-row"><span>Ambos anotan</span><strong>${displayValue(team.bttsRate)}%</strong></div><div class="stat-row"><span>Rendimiento ${venue === "home" ? "local sin perder" : "visitante sin perder"}</span><strong>${displayValue(venue === "home" ? team.homeNonLossRate : team.awayNonLossRate)}%</strong></div><div class="stat-row"><span>Días de descanso</span><strong>${displayValue(team.restDays)}</strong></div></section>`;
+  const teamCard = (team, venue) => {
+    const neutral = fixture.neutralVenue;
+    const nonLossLabel = neutral ? "Rendimiento general sin perder" : `Rendimiento ${venue === "home" ? "local sin perder" : "visitante sin perder"}`;
+    const nonLossValue = neutral ? team.nonLossRate : venue === "home" ? team.homeNonLossRate : team.awayNonLossRate;
+    return `<section class="team-stat-card"><h3>${escapeHtml(team.team)}</h3><div class="stat-row"><span>Forma reciente</span><strong>${displayValue(team.form)}</strong></div><div class="stat-row"><span>Partidos analizados</span><strong>${displayValue(team.played)}</strong></div><div class="stat-row"><span>Goles a favor / contra</span><strong>${displayValue(team.avgGoalsFor)} / ${displayValue(team.avgGoalsAgainst)}</strong></div><div class="stat-row"><span>Over 2.5</span><strong>${displayValue(team.over25Rate)}%</strong></div><div class="stat-row"><span>Ambos anotan</span><strong>${displayValue(team.bttsRate)}%</strong></div><div class="stat-row"><span>${escapeHtml(nonLossLabel)}</span><strong>${displayValue(nonLossValue)}%</strong></div><div class="stat-row"><span>Días de descanso</span><strong>${displayValue(team.restDays)}</strong></div></section>`;
+  };
   const calculations = fixture.marketAnalysis || [];
   const rows = calculations.map((item) => [displayValue(item.selection), displayValue(item.decimalOdds), `${displayValue(item.impliedProbabilityPct)}%`, `${displayValue(item.noVigImpliedProbabilityPct)}%`, `${displayValue(item.bookmakerMarginPct)}%`, `${displayValue(item.estimatedProbabilityPct)}%`, displayValue(item.fairOdds), `<strong class="${item.expectedValuePct >= 0 ? "value-positive" : "value-negative"}">${displayValue(item.expectedValuePct)}%</strong>`]);
   return `<div class="quality-summary"><strong>Cobertura de datos ${escapeHtml(fixture.dataQuality?.level || "Baja")} · ${displayValue(fixture.dataQuality?.score, 0)}/100</strong><span>Este puntaje mide disponibilidad, no certeza predictiva. ${escapeHtml(preMatch.note)}</span></div><div class="team-stat-grid">${teamCard(preMatch.home, "home")}${teamCard(preMatch.away, "away")}</div><section class="detail-section"><h3>Cálculos de mercados permitidos</h3>${rows.length ? detailTable(["Selección", "Cuota", "Implícita", "Sin margen", "Margen", "Modelo", "Cuota justa", "EV"], rows) : emptyDetail("No hay cuotas principales suficientes para calcular valor esperado.")}</section>`;
@@ -835,8 +850,6 @@ function handleFilterChange(event) {
     if (input.value === "world-cup" && input.checked) {
       leagueInputs.forEach((item) => { if (item !== input) item.checked = false; });
       elements.season.value = "2026";
-      elements.dateFrom.value = "2026-06-11";
-      elements.dateTo.value = "2026-06-28";
       elements.status.value = "all";
     } else if (input.value !== "world-cup" && input.checked) {
       const worldCupInput = elements.form.querySelector('input[name="league"][value="world-cup"]');

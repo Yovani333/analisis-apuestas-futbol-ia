@@ -3,6 +3,7 @@
   "apiFootballFixtureId": "fixture-id",
   "league": { "id": 0, "name": "", "country": "", "season": 0 },
   "dateTime": "",
+  "displayTimeZone": "America/Los_Angeles",
   "homeTeam": { "id": 0, "name": "" },
   "awayTeam": { "id": 0, "name": "" },
   "venue": {
@@ -12,7 +13,9 @@
     "surface": "",
     "pitchCondition": "",
     "pitchConditionStatus": "not_available",
-    "source": ""
+    "source": "",
+    "neutral": false,
+    "terminology": "local_visitante | equipo_1_equipo_2"
   },
   "standings": { "status": "not_available", "home": null, "away": null, "source": "api-football", "updatedAt": "", "message": "" },
   "h2h": { "status": "not_available", "matches": [], "homeWins": null, "draws": null, "awayWins": null, "source": "api-football", "updatedAt": "", "message": "" },

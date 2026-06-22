@@ -52,6 +52,10 @@ La sección **Análisis de fuentes** muestra el nivel de confianza de 0 a 100, e
 
 La misma sección incluye tres módulos complementarios: estadísticas agregadas de temporada, eventos del fixture y rendimiento individual de jugadores. Las estadísticas de temporada se consultan con corte al día anterior del partido. Eventos y rendimiento del mismo fixture se etiquetan `post_match_audit_only`, se muestran para evaluación retrospectiva y su detalle se elimina del paquete enviado a OpenAI para evitar fuga de información posterior al inicio.
 
+Todos los horarios visibles se convierten a la zona del Pacífico (`America/Los_Angeles`) y se identifican con `PT`. Los partidos finalizados muestran su marcador y deshabilitan las acciones de datos y análisis; los encuentros en vivo muestran marcador y minuto con una caché reducida de 60 segundos. En Copa Mundial se usa sede neutral y nombres de equipos en lugar de asumir localía.
+
+Cuando API-Football ofrece una predicción, el equipo favorito aparece en verde con el porcentaje del modelo. Esta señal es estadística y no representa una votación pública de usuarios. Si el proveedor no identifica un favorito, la interfaz no marca ninguno.
+
 GitHub Pages publica exclusivamente `public/` mediante `.github/workflows/deploy-pages.yml`. Las APIs reales requieren ejecutar el servidor Node localmente o desplegarlo en un proveedor compatible con backend.
 
 ## Ligas permitidas
