@@ -30,19 +30,19 @@ export const SOURCE_DEFINITIONS = Object.freeze({
     label: "FotMob",
     role: "Bajas, alineaciones probables y métricas",
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["Adaptador pendiente; no se realizan consultas ni scraping."]
+    notes: ["Adaptador opcional mediante web_search de OpenAI, desactivado por defecto."]
   },
   whoScored: {
     label: "WhoScored",
     role: "Bajas y alineaciones probables",
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["Adaptador pendiente; no se realizan consultas ni scraping."]
+    notes: ["Adaptador de respaldo mediante web_search de OpenAI, desactivado por defecto."]
   },
   fbref: {
     label: "FBref",
     role: "xG/xGA y estadísticas avanzadas",
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["Adaptador pendiente y sujeto a cobertura de la competición."]
+    notes: ["Adaptador opcional mediante web_search de OpenAI, desactivado por defecto y sujeto a cobertura de la competición."]
   },
   weather: {
     label: "Clima",

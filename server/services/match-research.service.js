@@ -135,6 +135,8 @@ function absenceKind(item) {
 
 export function getInjuriesSuspensionsData(dataset) {
   const rows = dataset.confirmed?.injuries || [];
+  const fotmob = dataset.externalSources?.fotmob;
+  const whoScored = dataset.externalSources?.whoScored;
   const sides = {
     home: { injuries: [], suspensions: [], doubts: [] },
     away: { injuries: [], suspensions: [], doubts: [] }
@@ -149,6 +151,28 @@ export function getInjuriesSuspensionsData(dataset) {
   });
   const homeAvailable = rows.some((item) => item.team?.id === dataset.fixture.homeTeamId);
   const awayAvailable = rows.some((item) => item.team?.id === dataset.fixture.awayTeamId);
+  if (!rows.length && fotmob?.data?.injuriesSuspensions) {
+    const externalSides = fotmob.data.injuriesSuspensions;
+    const hasExternal = [...Object.values(externalSides.home || {}), ...Object.values(externalSides.away || {})].some((items) => items?.length);
+    if (hasExternal) {
+      return {
+        ...moduleBase(DATA_STATUS.PARTIAL, fotmob.updatedAt || dataset.fetchedAt, "fotmob",
+          "Bajas complementarias recuperadas de FotMob mediante búsqueda web; requieren revisión."),
+        home: externalSides.home, away: externalSides.away, sourceUrl: fotmob.data.eventUrl || ""
+      };
+    }
+  }
+  if (!rows.length && whoScored?.data?.injuriesSuspensions) {
+    const externalSides = whoScored.data.injuriesSuspensions;
+    const hasExternal = [...Object.values(externalSides.home || {}), ...Object.values(externalSides.away || {})].some((items) => items?.length);
+    if (hasExternal) {
+      return {
+        ...moduleBase(DATA_STATUS.PARTIAL, whoScored.updatedAt || dataset.fetchedAt, "whoScored",
+          "Bajas complementarias recuperadas de WhoScored mediante búsqueda web; requieren revisión."),
+        home: externalSides.home, away: externalSides.away, sourceUrl: whoScored.data.eventUrl || ""
+      };
+    }
+  }
   const status = statusForSides(homeAvailable, awayAvailable);
   return {
     ...moduleBase(status, dataset.fetchedAt, rows.length ? SOURCE : "", rows.length ? "" : "El endpoint no devolvió registros; no se puede confirmar que no existan bajas."),
@@ -162,6 +186,8 @@ function lineupForTeam(rows, teamId) {
 
 export function getLineupsData(dataset) {
   const rows = dataset.confirmed?.lineups || [];
+  const fotmob = dataset.externalSources?.fotmob;
+  const whoScored = dataset.externalSources?.whoScored;
   const home = lineupForTeam(rows, dataset.fixture.homeTeamId);
   const away = lineupForTeam(rows, dataset.fixture.awayTeamId);
   const homeConfirmed = Boolean(home?.startXI?.length);
@@ -171,6 +197,37 @@ export function getLineupsData(dataset) {
     id: item.player?.id || null, name: item.player?.name || "", number: item.player?.number ?? null,
     position: item.player?.pos || "", grid: item.player?.grid || ""
   }));
+  if (!rows.length && fotmob?.data?.lineups) {
+    const external = fotmob.data.lineups;
+    const hasExternal = external.homeStartingXI?.length || external.awayStartingXI?.length || external.probableHomeXI?.length || external.probableAwayXI?.length;
+    if (hasExternal) {
+      return {
+        ...moduleBase(DATA_STATUS.PARTIAL, fotmob.updatedAt || dataset.fetchedAt, "fotmob",
+          "Alineaciones reportadas por FotMob mediante búsqueda web; se mantienen como probables y requieren revisión."),
+        confirmed: false,
+        homeFormation: external.homeFormation || "", awayFormation: external.awayFormation || "",
+        homeStartingXI: external.homeStartingXI || [], awayStartingXI: external.awayStartingXI || [],
+        homeSubstitutes: [], awaySubstitutes: [],
+        probableHomeXI: external.probableHomeXI || [], probableAwayXI: external.probableAwayXI || [],
+        sourceUrl: fotmob.data.eventUrl || ""
+      };
+    }
+  }
+  if (!rows.length && whoScored?.data?.lineups) {
+    const external = whoScored.data.lineups;
+    const hasExternal = external.probableHomeXI?.length || external.probableAwayXI?.length;
+    if (hasExternal) {
+      return {
+        ...moduleBase(DATA_STATUS.PARTIAL, whoScored.updatedAt || dataset.fetchedAt, "whoScored",
+          "Alineaciones probables recuperadas de WhoScored mediante búsqueda web; requieren revisión."),
+        confirmed: false,
+        homeFormation: external.homeFormation || "", awayFormation: external.awayFormation || "",
+        homeStartingXI: [], awayStartingXI: [], homeSubstitutes: [], awaySubstitutes: [],
+        probableHomeXI: external.probableHomeXI || [], probableAwayXI: external.probableAwayXI || [],
+        sourceUrl: whoScored.data.eventUrl || ""
+      };
+    }
+  }
   return {
     ...moduleBase(status, dataset.fetchedAt, status === DATA_STATUS.NOT_AVAILABLE ? "" : SOURCE,
       status === DATA_STATUS.NOT_AVAILABLE ? "API-Football todavía no publicó alineaciones." : ""),
@@ -183,6 +240,35 @@ export function getLineupsData(dataset) {
 }
 
 export function getXgXgaData(dataset) {
+  const fotmob = dataset.externalSources?.fotmob;
+  const external = fotmob?.data?.xgXga;
+  const hasExternal = external && [external.homeXG, external.homeXGA, external.awayXG, external.awayXGA].some(Number.isFinite);
+  if (hasExternal && ["pre_match_team_aggregate", "season_average"].includes(external.scope)) {
+    return {
+      ...moduleBase(DATA_STATUS.PARTIAL, fotmob.updatedAt || dataset.fetchedAt, "fotmob",
+        "xG/xGA prepartido recuperado de FotMob mediante búsqueda web; requiere revisión."),
+      homeXG: external.homeXG, homeXGA: external.homeXGA,
+      awayXG: external.awayXG, awayXGA: external.awayXGA,
+      homeNPXG: null, awayNPXG: null, scope: external.scope, sourceUrl: fotmob.data.eventUrl || ""
+    };
+  }
+  const fbref = dataset.externalSources?.fbref;
+  const fbrefData = fbref?.data;
+  const hasFbref = fbrefData?.scope === "season_per_match"
+    && [fbrefData.home?.xg, fbrefData.home?.xga, fbrefData.away?.xg, fbrefData.away?.xga].some(Number.isFinite);
+  if (hasFbref) {
+    return {
+      ...moduleBase(DATA_STATUS.PARTIAL, fbref.updatedAt || dataset.fetchedAt, "fbref",
+        "xG/xGA de temporada recuperado de FBref mediante búsqueda web; requiere revisión y puede tener cobertura parcial."),
+      homeXG: fbrefData.home?.xg ?? null, homeXGA: fbrefData.home?.xga ?? null,
+      awayXG: fbrefData.away?.xg ?? null, awayXGA: fbrefData.away?.xga ?? null,
+      homeNPXG: fbrefData.home?.npxg ?? null, awayNPXG: fbrefData.away?.npxg ?? null,
+      homeMatchesPlayed: fbrefData.home?.matchesPlayed ?? null,
+      awayMatchesPlayed: fbrefData.away?.matchesPlayed ?? null,
+      scope: fbrefData.scope,
+      sourceUrls: [fbrefData.home?.sourceUrl, fbrefData.away?.sourceUrl].filter(Boolean)
+    };
+  }
   return {
     ...moduleBase(DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, "",
       "API-Football no entregó xG/xGA acumulado prepartido normalizado; no se usan estadísticas del partido como sustituto."),
@@ -315,7 +401,10 @@ function buildSourceCoverage(normalized) {
       : normalized[plan.module] || { status: DATA_STATUS.NOT_AVAILABLE, source: "", updatedAt: "", message: "Módulo no disponible." };
     const activeSources = moduleData.source === SOURCE
       ? [sourceLabel("apiFootball")]
-      : moduleData.source === "oddspedia" ? [sourceLabel("oddspedia")] : [];
+      : moduleData.source === "oddspedia" ? [sourceLabel("oddspedia")]
+        : moduleData.source === "fotmob" ? [sourceLabel("fotmob")]
+          : moduleData.source === "whoScored" ? [sourceLabel("whoScored")]
+            : moduleData.source === "fbref" ? [sourceLabel("fbref")] : [];
     const unavailablePrimary = plan.primary.filter((key) => normalized.sources[key]?.status !== "available").map(sourceLabel);
     const observation = moduleData.message || (activeSources.length
       ? `Datos activos desde ${activeSources.join(", ")}.`

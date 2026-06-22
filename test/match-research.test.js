@@ -134,6 +134,88 @@ test("Oddspedia solo complementa cuotas faltantes y obliga revisión", () => {
   assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "odds").activeSources, ["Oddspedia"]);
 });
 
+test("FotMob complementa módulos críticos como parciales sin confirmar alineaciones", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.injuries = [];
+  dataset.confirmed.lineups = [];
+  dataset.externalSources = {
+    fotmob: {
+      source: "fotmob", status: "partial", updatedAt: "2026-06-21T13:00:00Z", notes: ["Referencia externa"],
+      data: {
+        eventUrl: "https://www.fotmob.com/matches/a-vs-b/123",
+        injuriesSuspensions: {
+          home: { injuries: [{ name: "Jugador A", type: "injury", reason: "Lesión", requiresReview: true }], suspensions: [], doubts: [] },
+          away: { injuries: [], suspensions: [], doubts: [] }
+        },
+        lineups: {
+          reportedConfirmed: false, homeStartingXI: [], awayStartingXI: [],
+          probableHomeXI: [{ name: "Jugador B", position: "M", requiresReview: true }], probableAwayXI: [{ name: "Jugador C", position: "D", requiresReview: true }],
+          homeFormation: "4-3-3", awayFormation: "4-4-2"
+        },
+        xgXga: { scope: "season_average", homeXG: 1.5, homeXGA: 1.1, awayXG: 1.2, awayXGA: 1.4 }
+      }
+    }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.injuriesSuspensions.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.lineups.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.lineups.confirmed, false);
+  assert.equal(normalized.xgXga.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.sources.fotmob.status, "partial");
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["FotMob"]);
+});
+
+test("WhoScored actúa como respaldo parcial de bajas y alineaciones", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.injuries = [];
+  dataset.confirmed.lineups = [];
+  dataset.externalSources = {
+    whoScored: {
+      source: "whoScored", status: "partial", updatedAt: "2026-06-21T14:00:00Z", notes: ["Referencia externa"],
+      data: {
+        eventUrl: "https://www.whoscored.com/matches/123/preview",
+        injuriesSuspensions: {
+          home: { injuries: [], suspensions: [{ name: "Jugador A", type: "suspension", reason: "Tarjeta", requiresReview: true }], doubts: [] },
+          away: { injuries: [], suspensions: [], doubts: [] }
+        },
+        lineups: {
+          probableHomeXI: [{ name: "Jugador B", position: "M", requiresReview: true }],
+          probableAwayXI: [{ name: "Jugador C", position: "D", requiresReview: true }],
+          homeFormation: "4-3-3", awayFormation: "4-4-2"
+        }
+      }
+    }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.injuriesSuspensions.source, "whoScored");
+  assert.equal(normalized.injuriesSuspensions.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.lineups.source, "whoScored");
+  assert.equal(normalized.lineups.confirmed, false);
+  assert.equal(normalized.sources.whoScored.status, "partial");
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "lineups").activeSources, ["WhoScored"]);
+});
+
+test("FBref complementa xG y xGA como datos parciales de temporada", () => {
+  const dataset = datasetFixture();
+  dataset.externalSources = {
+    fbref: {
+      source: "fbref", status: "partial", updatedAt: "2026-06-21T15:00:00Z", notes: ["Referencia externa"],
+      data: {
+        scope: "season_per_match", season: "2025-2026",
+        home: { xg: 1.55, xga: 1.02, npxg: 1.31, matchesPlayed: 30, sourceUrl: "https://fbref.com/equipo-a" },
+        away: { xg: 1.2, xga: 1.4, npxg: 1.05, matchesPlayed: 30, sourceUrl: "https://fbref.com/equipo-b" }
+      }
+    }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.xgXga.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.xgXga.source, "fbref");
+  assert.equal(normalized.xgXga.homeXG, 1.55);
+  assert.equal(normalized.xgXga.awayNPXG, 1.05);
+  assert.equal(normalized.sources.fbref.status, "partial");
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["FBref"]);
+});
+
 test("OpenAI no puede convertir un research parcial en análisis completo", () => {
   const researchData = normalizeMatchResearchData(datasetFixture());
   researchData.analysisStatus = ANALYSIS_STATUS.PARTIAL;

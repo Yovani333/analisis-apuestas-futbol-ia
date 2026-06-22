@@ -56,6 +56,12 @@ SofaScore es el primer adaptador externo formal. Está conectado al orquestador 
 
 Oddspedia es el segundo adaptador. En modo predeterminado `disabled` no realiza solicitudes. Opcionalmente puede usar `openai_web_search`: solo se ejecuta cuando API-Football no proporciona mercados, restringe la búsqueda a `oddspedia.com`, exige coincidencia exacta y una URL verificable del dominio, marca toda cuota como `partial` y `requiresReview`, y conserva una caché de 30 minutos. Esta opción consume créditos de OpenAI y posibles cargos de la herramienta de búsqueda web; nunca genera picks ni valor esperado a partir de esas cuotas por sí sola.
 
+FotMob es el tercer adaptador. Su modo opcional `openai_web_search` se limita a `fotmob.com`, solo consulta partidos que todavía están programados y busca faltantes de lesiones/sanciones, alineaciones y xG/xGA prepartido. Rechaza datos del mismo fixture generados después del inicio, acepta xG únicamente como agregado prepartido o promedio de temporada y mantiene todos los resultados como `partial` y `requiresReview`. No convierte una alineación recuperada por búsqueda web en confirmada.
+
+WhoScored es el cuarto adaptador y funciona como respaldo condicionado. Solo consulta `whoscored.com` para lesiones, sanciones, dudas y alineaciones probables cuando API-Football y FotMob no cubrieron esos módulos. No se ejecuta en partidos iniciados o finalizados, no duplica búsquedas ya resueltas por FotMob y nunca marca como confirmada una alineación obtenida mediante búsqueda web.
+
+FBref es el quinto adaptador y funciona como respaldo exclusivo para xG/xGA. Solo consulta `fbref.com` cuando FotMob no aportó métricas prepartido utilizables, acepta promedios de temporada con URL verificable para cada equipo y conserva el módulo como `partial`. No usa estadísticas producidas por el mismo encuentro ni aumenta la confianza como si fueran datos confirmados del partido.
+
 Estados de fuente: `available`, `partial`, `not_available`, `not_configured`, `failed` y `blocked`. Estos estados describen la integración; el score continúa calculándose con el estado real de los nueve módulos y sus pesos documentados. Agregar una fuente al catálogo no aumenta la confianza si todavía no aporta datos normalizados.
 
 La misma sección incluye tres módulos complementarios: estadísticas agregadas de temporada, eventos del fixture y rendimiento individual de jugadores. Las estadísticas de temporada se consultan con corte al día anterior del partido. Eventos y rendimiento del mismo fixture se etiquetan `post_match_audit_only`, se muestran para evaluación retrospectiva y su detalle se elimina del paquete enviado a OpenAI para evitar fuga de información posterior al inicio.
@@ -131,9 +137,21 @@ API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
 SOFASCORE_ACCESS_MODE=disabled
 ODDSPEDIA_ACCESS_MODE=disabled
 ODDSPEDIA_SEARCH_MODEL=gpt-5.4
+FOTMOB_ACCESS_MODE=disabled
+FOTMOB_SEARCH_MODEL=gpt-5.4
+WHOSCORED_ACCESS_MODE=disabled
+WHOSCORED_SEARCH_MODEL=gpt-5.4
+FBREF_ACCESS_MODE=disabled
+FBREF_SEARCH_MODEL=gpt-5.4
 ```
 
 Para activar conscientemente la búsqueda complementaria en Render, cambia únicamente `ODDSPEDIA_ACCESS_MODE=openai_web_search`. Si falla, no encuentra coincidencia exacta o no obtiene una fuente de `oddspedia.com`, el resto del análisis continúa y el módulo queda como no disponible o fallido.
+
+FotMob se activa por separado con `FOTMOB_ACCESS_MODE=openai_web_search`. Cada adaptador puede generar una búsqueda web de OpenAI cuando corresponda; habilitar ambos incrementa el consumo. Los resultados se guardan en caché durante 30 minutos por fixture.
+
+WhoScored se activa con `WHOSCORED_ACCESS_MODE=openai_web_search`. Al actuar como respaldo, normalmente no consume una búsqueda cuando FotMob ya devolvió bajas y alineaciones utilizables.
+
+FBref se activa con `FBREF_ACCESS_MODE=openai_web_search`. Solo consume una búsqueda cuando FotMob no devolvió xG/xGA prepartido y el partido aún no ha comenzado. Su cobertura depende de la competición y puede devolver `not_available` sin afectar los demás módulos.
 
 Para activar datos reales, completa un `.env` local y cambia `DATA_MODE=live`. Confirma que `OPENAI_MODEL` sea un identificador disponible en tu proyecto de OpenAI.
 

@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-source-matrix";
-import { footballDataService } from "./services.js?v=20260621-source-matrix";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-fbref-adapter";
+import { footballDataService } from "./services.js?v=20260621-fbref-adapter";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -234,7 +234,12 @@ function formatUpdatedAt(value) {
 }
 
 function researchSourceLabel(moduleKey, module) {
-  if (module?.source) return "API-Football";
+  if (module?.source === "api-football") return "API-Football";
+  if (module?.source === "oddspedia") return "Oddspedia · búsqueda web";
+  if (module?.source === "fotmob") return "FotMob · búsqueda web";
+  if (module?.source === "whoScored") return "WhoScored · búsqueda web";
+  if (module?.source === "fbref") return "FBref · búsqueda web";
+  if (module?.source) return module.source;
   if (["xgXga", "weatherPitch"].includes(moduleKey)) return "Sin fuente configurada";
   return "API-Football consultada sin datos";
 }
@@ -337,7 +342,9 @@ function renderResearchModuleDetail(moduleKey, research) {
     content = rows.length ? detailTable(["Equipo", "Tipo", "Jugador", "Motivo"], rows) : emptyDetail("No se recibieron registros. Esto no confirma que no existan bajas.");
   } else if (moduleKey === "lineups") {
     const playerList = (team, formation, players) => `<section class="lineup-card"><h3>${escapeHtml(team)} · ${displayValue(formation)}</h3>${players?.length ? `<ol class="player-list">${players.map((player) => `<li><span>${displayValue(player.number)}</span>${displayValue(player.name)}<small>${displayValue(player.position)}</small></li>`).join("")}</ol>` : `<p class="muted-text">Sin once inicial disponible.</p>`}</section>`;
-    content = `<div class="detail-note"><strong>${module.confirmed ? "Alineaciones confirmadas" : "Sin confirmación completa"}</strong><span>La confirmación exige once inicial para ambos equipos.</span></div><div class="lineups-grid">${playerList(research.homeTeam.name, module.homeFormation, module.homeStartingXI)}${playerList(research.awayTeam.name, module.awayFormation, module.awayStartingXI)}</div>`;
+    const homePlayers = module.homeStartingXI?.length ? module.homeStartingXI : module.probableHomeXI;
+    const awayPlayers = module.awayStartingXI?.length ? module.awayStartingXI : module.probableAwayXI;
+    content = `<div class="detail-note"><strong>${module.confirmed ? "Alineaciones confirmadas" : "Alineaciones probables / sin confirmación"}</strong><span>La confirmación exige once inicial oficial para ambos equipos.</span></div><div class="lineups-grid">${playerList(research.homeTeam.name, module.homeFormation, homePlayers)}${playerList(research.awayTeam.name, module.awayFormation, awayPlayers)}</div>`;
   } else if (moduleKey === "xgXga") {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["xG", module.homeXG], ["xGA", module.homeXGA], ["npxG", module.homeNPXG]])}${researchTeamStats(research.awayTeam.name, [["xG", module.awayXG], ["xGA", module.awayXGA], ["npxG", module.awayNPXG]])}</div>`;
   } else if (moduleKey === "weatherPitch") {

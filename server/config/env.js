@@ -11,7 +11,13 @@ export const env = Object.freeze({
   openaiModel: process.env.OPENAI_MODEL || "",
   sofaScoreAccessMode: process.env.SOFASCORE_ACCESS_MODE || "disabled",
   oddspediaAccessMode: process.env.ODDSPEDIA_ACCESS_MODE || "disabled",
-  oddspediaSearchModel: process.env.ODDSPEDIA_SEARCH_MODEL || ""
+  oddspediaSearchModel: process.env.ODDSPEDIA_SEARCH_MODEL || "",
+  fotmobAccessMode: process.env.FOTMOB_ACCESS_MODE || "disabled",
+  fotmobSearchModel: process.env.FOTMOB_SEARCH_MODEL || "",
+  whoScoredAccessMode: process.env.WHOSCORED_ACCESS_MODE || "disabled",
+  whoScoredSearchModel: process.env.WHOSCORED_SEARCH_MODEL || "",
+  fbrefAccessMode: process.env.FBREF_ACCESS_MODE || "disabled",
+  fbrefSearchModel: process.env.FBREF_SEARCH_MODEL || ""
 });
 
 export function requireLiveConfiguration() {

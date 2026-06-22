@@ -4,6 +4,9 @@ import { SOURCE_STATUS } from "../server/constants/source-catalog.js";
 import { createSourceResult } from "../server/services/sources/source-adapter.js";
 import { getSofaScoreSportsData } from "../server/services/sources/sofascore.service.js";
 import { getOddspediaMarketData } from "../server/services/sources/oddspedia.service.js";
+import { getFotMobContextData } from "../server/services/sources/fotmob.service.js";
+import { getWhoScoredAbsenceData } from "../server/services/sources/whoscored.service.js";
+import { getFbrefXgData } from "../server/services/sources/fbref.service.js";
 
 test("SofaScore desactivado no realiza solicitudes de red", async () => {
   const originalFetch = globalThis.fetch;
@@ -79,6 +82,160 @@ test("Oddspedia descarta cuotas sin una URL verificable del dominio", async () =
     output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: "https://example.com/a-b" }] } }]
   }) } };
   const result = await getOddspediaMarketData({ fixture: { id: 3, home: "A", away: "B", date: "2026-06-22" }, marketAnalysis: [] }, {
+    accessMode: "openai_web_search", apiKey: "test", model: "test-model", client
+  });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(result.data, null);
+});
+
+test("FotMob desactivado no llama a OpenAI", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const result = await getFotMobContextData({ fixture: { id: 10, status: "scheduled" }, confirmed: {} }, { accessMode: "disabled", client });
+  assert.equal(result.status, SOURCE_STATUS.NOT_CONFIGURED);
+  assert.equal(calls, 0);
+});
+
+test("FotMob no consulta partidos iniciados o finalizados", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const result = await getFotMobContextData({ fixture: { id: 11, status: "finished" }, confirmed: {} }, {
+    accessMode: "openai_web_search", apiKey: "test", model: "test-model", client
+  });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(calls, 0);
+});
+
+test("FotMob normaliza únicamente datos prepartido con fuente verificable", async () => {
+  let request;
+  const client = { responses: { parse: async (input) => {
+    request = input;
+    return {
+      output_parsed: {
+        match_found: true, identity_confirmed: true, event_url: "https://www.fotmob.com/matches/a-vs-b/123", observed_at: "2026-06-21T18:00:00Z",
+        home_absences: [{ player: "Jugador A", type: "injury", reason: "Lesión muscular" }], away_absences: [],
+        lineups_confirmed: false, home_starting_xi: [], away_starting_xi: [],
+        home_probable_xi: [{ name: "Jugador B", position: "M" }], away_probable_xi: [{ name: "Jugador C", position: "D" }],
+        home_formation: "4-3-3", away_formation: "4-4-2", xg_scope: "season_average",
+        home_xg: 1.5, home_xga: 1.1, away_xg: 1.2, away_xga: 1.4, notes: []
+      },
+      output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: "https://www.fotmob.com/matches/a-vs-b/123" }] } }]
+    };
+  } } };
+  const result = await getFotMobContextData({
+    fixture: { id: 12, status: "scheduled", home: "A", away: "B", date: "2026-06-22", time: "18:00", leagueName: "Liga" },
+    confirmed: { injuries: [], lineups: [] }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client });
+  assert.equal(result.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.data.injuriesSuspensions.home.injuries[0].requiresReview, true);
+  assert.equal(result.data.lineups.probableHomeXI[0].name, "Jugador B");
+  assert.equal(result.data.xgXga.homeXG, 1.5);
+  assert.deepEqual(request.tools[0].filters.allowed_domains, ["fotmob.com"]);
+});
+
+test("WhoScored desactivado no llama a OpenAI", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const result = await getWhoScoredAbsenceData({ fixture: { id: 20, status: "scheduled" }, confirmed: {} }, { accessMode: "disabled", client });
+  assert.equal(result.status, SOURCE_STATUS.NOT_CONFIGURED);
+  assert.equal(calls, 0);
+});
+
+test("WhoScored no duplica búsqueda cuando FotMob ya cubrió módulos", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const fotmobResult = {
+    data: {
+      injuriesSuspensions: { home: { injuries: [{ name: "A" }] }, away: {} },
+      lineups: { probableHomeXI: [{ name: "A" }], probableAwayXI: [{ name: "B" }] }
+    }
+  };
+  const result = await getWhoScoredAbsenceData({ fixture: { id: 21, status: "scheduled" }, confirmed: { injuries: [], lineups: [] } }, {
+    accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, fotmobResult
+  });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(calls, 0);
+});
+
+test("WhoScored normaliza bajas y alineaciones probables con fuente verificable", async () => {
+  let request;
+  const client = { responses: { parse: async (input) => {
+    request = input;
+    return {
+      output_parsed: {
+        match_found: true, identity_confirmed: true, event_url: "https://www.whoscored.com/matches/123/preview", observed_at: "2026-06-21T18:00:00Z",
+        home_absences: [{ player: "Jugador A", type: "suspension", reason: "Tarjeta roja" }], away_absences: [],
+        home_probable_xi: [{ name: "Jugador B", position: "M" }], away_probable_xi: [{ name: "Jugador C", position: "D" }],
+        home_formation: "4-3-3", away_formation: "4-4-2", tactical_notes: ["Presión alta probable"], notes: []
+      },
+      output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: "https://www.whoscored.com/matches/123/preview" }] } }]
+    };
+  } } };
+  const result = await getWhoScoredAbsenceData({
+    fixture: { id: 22, status: "scheduled", home: "A", away: "B", date: "2026-06-22", time: "18:00", leagueName: "Liga" },
+    confirmed: { injuries: [], lineups: [] }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, fotmobResult: null });
+  assert.equal(result.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.data.injuriesSuspensions.home.suspensions[0].requiresReview, true);
+  assert.equal(result.data.lineups.probableHomeXI[0].name, "Jugador B");
+  assert.deepEqual(request.tools[0].filters.allowed_domains, ["whoscored.com"]);
+});
+
+test("FBref desactivado no llama a OpenAI", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const result = await getFbrefXgData({ fixture: { id: 30, status: "scheduled" } }, { accessMode: "disabled", client });
+  assert.equal(result.status, SOURCE_STATUS.NOT_CONFIGURED);
+  assert.equal(calls, 0);
+});
+
+test("FBref no duplica búsqueda cuando FotMob ya aportó xG", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const fotmobResult = { data: { xgXga: { scope: "season_average", homeXG: 1.4, homeXGA: 1.1, awayXG: 1.2, awayXGA: 1.3 } } };
+  const result = await getFbrefXgData({ fixture: { id: 31, status: "scheduled" } }, {
+    accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, fotmobResult
+  });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(calls, 0);
+});
+
+test("FBref normaliza promedios de temporada con fuentes verificables", async () => {
+  let request;
+  const homeUrl = "https://fbref.com/en/squads/111/Team-A-Stats";
+  const awayUrl = "https://fbref.com/en/squads/222/Team-B-Stats";
+  const client = { responses: { parse: async (input) => {
+    request = input;
+    return {
+      output_parsed: {
+        competition_found: true, teams_confirmed: true, season: "2025-2026", observed_at: "2026-06-21T18:00:00Z",
+        scope: "season_per_match",
+        home: { team: "A", xg_per_match: 1.55, xga_per_match: 1.02, npxg_per_match: 1.31, matches_played: 30, source_url: homeUrl },
+        away: { team: "B", xg_per_match: 1.2, xga_per_match: 1.4, npxg_per_match: 1.05, matches_played: 30, source_url: awayUrl },
+        notes: []
+      },
+      output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: homeUrl }, { type: "url", url: awayUrl }] } }]
+    };
+  } } };
+  const result = await getFbrefXgData({
+    fixture: { id: 32, status: "scheduled", home: "A", away: "B", date: "2026-06-22", leagueName: "Liga", season: "2025-2026" }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client });
+  assert.equal(result.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.data.home.xg, 1.55);
+  assert.equal(result.data.away.npxg, 1.05);
+  assert.deepEqual(request.tools[0].filters.allowed_domains, ["fbref.com"]);
+});
+
+test("FBref descarta métricas sin URL verificable para los equipos", async () => {
+  const client = { responses: { parse: async () => ({
+    output_parsed: {
+      competition_found: true, teams_confirmed: true, season: "2025-2026", observed_at: null, scope: "season_per_match",
+      home: { team: "A", xg_per_match: 1.5, xga_per_match: 1, npxg_per_match: 1.3, matches_played: 20, source_url: "https://example.com/a" },
+      away: { team: "B", xg_per_match: 1.2, xga_per_match: 1.4, npxg_per_match: 1, matches_played: 20, source_url: "https://example.com/b" },
+      notes: []
+    }, output: []
+  }) } };
+  const result = await getFbrefXgData({ fixture: { id: 33, status: "scheduled", home: "A", away: "B" } }, {
     accessMode: "openai_web_search", apiKey: "test", model: "test-model", client
   });
   assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
