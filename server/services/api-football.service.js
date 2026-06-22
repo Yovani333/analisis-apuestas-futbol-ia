@@ -7,6 +7,7 @@ import {
 } from "./market-analysis.service.js";
 import { normalizeMatchResearchData } from "./match-research.service.js";
 import { collectExternalSourceData } from "./source-orchestrator.service.js";
+import { buildEstimatedXgFromDataset } from "./xg/estimated-xg.service.js";
 
 const leagueCache = new Map();
 const requestCache = new Map();
@@ -280,7 +281,10 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     unavailable: ["weather", "news", "referee_details", "travel", "sidelined_not_verified"],
     qualityAlerts: ["Los datos vacíos se conservan como no disponibles; no se completan por inferencia."]
   };
-  dataset.externalSources = await collectExternalSourceData(dataset);
+  dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
+  dataset.externalSources = await collectExternalSourceData(dataset, { forceRefresh });
+  fixture.dataAvailability.xg = dataset.estimatedXg.status === "available"
+    ? "Disponible" : dataset.estimatedXg.status === "partial" ? "Necesita revisión" : fixture.dataAvailability.xg;
   dataset.researchData = normalizeMatchResearchData(dataset);
   dataset.analysisInput = buildAnalysisInput(dataset);
   datasetCache.set(fixtureId, { value: dataset, expiresAt: Date.now() + CACHE_TTL });

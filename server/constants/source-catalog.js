@@ -14,6 +14,12 @@ export const SOURCE_DEFINITIONS = Object.freeze({
     defaultStatus: SOURCE_STATUS.AVAILABLE,
     notes: ["Integración activa desde el backend."]
   },
+  apiFootballInternalModel: {
+    label: "API-Football + modelo interno",
+    role: "xG/xGA estimado del fixture",
+    defaultStatus: SOURCE_STATUS.NOT_AVAILABLE,
+    notes: ["Cálculo interno; no corresponde a xG oficial de un proveedor estadístico."]
+  },
   sofaScore: {
     label: "SofaScore",
     role: "Respaldo deportivo",
@@ -44,23 +50,29 @@ export const SOURCE_DEFINITIONS = Object.freeze({
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
     notes: ["Adaptador opcional mediante web_search de OpenAI, desactivado por defecto y sujeto a cobertura de la competición."]
   },
+  soccerway: {
+    label: "Soccerway",
+    role: "Respaldo de clasificación y resultados previos",
+    defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
+    notes: ["Adaptador condicionado mediante web_search de OpenAI, desactivado por defecto."]
+  },
   weather: {
     label: "Clima",
     role: "Contexto meteorológico y de cancha",
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["No hay proveedor meteorológico configurado."]
+    notes: ["Adaptador opcional de pronóstico horario mediante web_search de OpenAI, desactivado por defecto."]
   }
 });
 
 export const MODULE_SOURCE_PLAN = Object.freeze([
   { module: "calendar", label: "Calendario", primary: ["apiFootball"], secondary: ["sofaScore", "oddspedia"] },
   { module: "statsForm", label: "Estadísticas / forma", primary: ["sofaScore"], secondary: ["apiFootball"] },
-  { module: "h2h", label: "Head to head", primary: ["apiFootball"], secondary: ["sofaScore", "oddspedia"] },
-  { module: "standings", label: "Clasificación", primary: ["apiFootball"], secondary: ["sofaScore"] },
+  { module: "h2h", label: "Head to head", primary: ["apiFootball"], secondary: ["soccerway", "sofaScore", "oddspedia"] },
+  { module: "standings", label: "Clasificación", primary: ["apiFootball"], secondary: ["soccerway", "sofaScore"] },
   { module: "odds", label: "Cuotas / momios", primary: ["oddspedia"], secondary: ["apiFootball"] },
   { module: "lineups", label: "Alineaciones", primary: ["sofaScore"], secondary: ["fotmob", "apiFootball"] },
   { module: "injuriesSuspensions", label: "Lesiones / sanciones", primary: ["fotmob", "whoScored"], secondary: ["apiFootball", "sofaScore"] },
-  { module: "xgXga", label: "xG / xGA", primary: ["fbref", "fotmob"], secondary: ["sofaScore"] },
+  { module: "xgXga", label: "xG / xGA", primary: ["fbref", "fotmob"], secondary: ["apiFootballInternalModel", "sofaScore"] },
   { module: "weatherPitch", label: "Clima / cancha", primary: ["weather"], secondary: [] },
   { module: "contextCalendar", label: "Contexto / calendario", primary: ["apiFootball"], secondary: ["sofaScore"] }
 ]);

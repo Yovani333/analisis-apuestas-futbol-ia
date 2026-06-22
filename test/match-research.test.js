@@ -4,6 +4,7 @@ import { ANALYSIS_STATUS, DATA_STATUS, MODULE_WEIGHTS } from "../server/constant
 import { calculateMatchConfidenceScore, detectMissingCriticalData, scoreModule } from "../server/services/match-confidence.service.js";
 import { buildOpenAIPromptFromMatchData, normalizeMatchResearchData } from "../server/services/match-research.service.js";
 import { applyResearchGuardrails } from "../server/services/openai.service.js";
+import { buildEstimatedXgFromDataset } from "../server/services/xg/estimated-xg.service.js";
 
 function lineup(teamId, name) {
   return { team: { id: teamId, name }, formation: "4-3-3", startXI: [{ player: { id: teamId * 10, name: `${name} 1`, number: 1, pos: "G" } }], substitutes: [] };
@@ -214,6 +215,141 @@ test("FBref complementa xG y xGA como datos parciales de temporada", () => {
   assert.equal(normalized.xgXga.awayNPXG, 1.05);
   assert.equal(normalized.sources.fbref.status, "partial");
   assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["FBref"]);
+});
+
+test("el clima verificable permanece parcial mientras falte el estado de cancha", () => {
+  const dataset = datasetFixture();
+  dataset.externalSources = {
+    weather: {
+      source: "weather", status: "partial", updatedAt: "2026-06-22T12:00:00Z", notes: ["Pronóstico horario"],
+      data: {
+        temperature: 22, rainProbability: 10, windSpeed: 14, humidity: 55,
+        condition: "Parcialmente nublado", matchedLocation: "Los Angeles, CA",
+        forecastTime: "2026-06-23T01:00:00Z", sourceUrl: "https://weather.com/test",
+        pitchNotes: "Sin reporte reciente de estado de cancha."
+      }
+    }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.weatherPitch.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.weatherPitch.source, "weather");
+  assert.equal(normalized.weatherPitch.temperature, 22);
+  assert.match(normalized.weatherPitch.pitchNotes, /Sin reporte/);
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "weatherPitch").activeSources, ["Clima"]);
+});
+
+test("Soccerway complementa clasificación y H2H sin volverlos confirmados", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.standings = [];
+  dataset.confirmed.h2h = [];
+  dataset.externalSources = {
+    soccerway: {
+      source: "soccerway", status: "partial", updatedAt: "2026-06-22T12:00:00Z", notes: ["Respaldo"],
+      data: {
+        competitionUrl: "https://int.soccerway.com/standings",
+        standings: {
+          home: { team: "Equipo Local", rank: 1, points: 30, requiresReview: true },
+          away: { team: "Equipo Visitante", rank: 4, points: 22, requiresReview: true }
+        },
+        h2h: [{ date: "2025-01-01", homeTeam: "Equipo Local", awayTeam: "Equipo Visitante", homeGoals: 2, awayGoals: 1, requiresReview: true }]
+      }
+    }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.standings.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.standings.source, "soccerway");
+  assert.equal(normalized.h2h.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.h2h.homeWins, 1);
+  assert.equal(normalized.sources.soccerway.status, "partial");
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "h2h").activeSources, ["Soccerway"]);
+});
+
+function completeFixtureStatistics(teamId, name, totalShots, shotsOnGoal) {
+  return {
+    team: { id: teamId, name },
+    statistics: [
+      { type: "Total Shots", value: totalShots }, { type: "Shots on Goal", value: shotsOnGoal },
+      { type: "Shots insidebox", value: 7 }, { type: "Shots outsidebox", value: 4 },
+      { type: "Corner Kicks", value: 5 }, { type: "Blocked Shots", value: 3 }
+    ]
+  };
+}
+
+test("integra xG estimado del mismo fixture únicamente cuando el partido inició", () => {
+  const dataset = datasetFixture();
+  dataset.fixture.status = "live";
+  dataset.confirmed.statistics = [
+    completeFixtureStatistics(10, "Equipo Local", 11, 5),
+    completeFixtureStatistics(20, "Equipo Visitante", 9, 3)
+  ];
+  dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.xgXga.type, "estimated");
+  assert.equal(normalized.xgXga.source, "api-football-internal-model");
+  assert.equal(normalized.xgXga.analysisUse, "live_match_context_only");
+  assert.equal(normalized.xgXga.modelVersion, "estimated-xg-v1");
+  assert.match(normalized.xgXga.warning, /No corresponde a xG oficial/);
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["API-Football + modelo interno"]);
+});
+
+test("no usa estadísticas del fixture como xG prepartido", () => {
+  const dataset = datasetFixture();
+  dataset.fixture.status = "scheduled";
+  dataset.confirmed.statistics = [
+    completeFixtureStatistics(10, "Equipo Local", 11, 5),
+    completeFixtureStatistics(20, "Equipo Visitante", 9, 3)
+  ];
+  dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.xgXga.status, DATA_STATUS.NOT_AVAILABLE);
+  assert.equal(normalized.xgXga.type, "not_available");
+});
+
+test("xG especializado conserva prioridad sobre el modelo interno", () => {
+  const dataset = datasetFixture();
+  dataset.fixture.status = "live";
+  dataset.confirmed.statistics = [
+    completeFixtureStatistics(10, "Equipo Local", 11, 5),
+    completeFixtureStatistics(20, "Equipo Visitante", 9, 3)
+  ];
+  dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
+  dataset.externalSources = {
+    fbref: {
+      source: "fbref", status: "partial", updatedAt: dataset.fetchedAt, notes: [],
+      data: { scope: "season_per_match", home: { xg: 1.4, xga: 1.1 }, away: { xg: 1.2, xga: 1.3 } }
+    }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.xgXga.type, "official");
+  assert.equal(normalized.xgXga.source, "fbref");
+  assert.equal(normalized.xgXga.homeXG, 1.4);
+});
+
+test("el prompt explica el tratamiento obligatorio del xG estimado", () => {
+  const dataset = datasetFixture();
+  dataset.fixture.status = "live";
+  dataset.confirmed.statistics = [
+    completeFixtureStatistics(10, "Equipo Local", 11, 5),
+    completeFixtureStatistics(20, "Equipo Visitante", 9, 3)
+  ];
+  dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
+  const prompt = buildOpenAIPromptFromMatchData(normalizeMatchResearchData(dataset));
+  assert.match(prompt.instructions, /llámalo siempre "xG estimado"/);
+  assert.match(prompt.instructions, /live_match_context_only/);
+  assert.match(prompt.input, /estimated-xg-v1/);
+});
+
+test("las guardas corrigen cualquier mención de xG oficial cuando es estimado", () => {
+  const researchData = normalizeMatchResearchData(datasetFixture());
+  researchData.xgXga = { type: "estimated", confidenceLabel: "medium", analysisUse: "live_match_context_only" };
+  const guarded = applyResearchGuardrails({
+    estado_analisis: "Necesita revisión", datos_faltantes: [],
+    resumen_partido: "El xG oficial favorece al equipo.", mercados_sugeridos: [],
+    apto_para_parlay: { respuesta: "No", razonamiento: "El dato oficial de xG es limitado." }
+  }, { researchData, dataQuality: { canSuggest: false }, preMatch: {}, marketAnalysis: [] });
+  assert.match(guarded.resumen_partido, /xG estimado/);
+  assert.doesNotMatch(JSON.stringify(guarded), /xG oficial/i);
+  assert.doesNotMatch(JSON.stringify(guarded), /dato oficial de xG/i);
 });
 
 test("OpenAI no puede convertir un research parcial en análisis completo", () => {

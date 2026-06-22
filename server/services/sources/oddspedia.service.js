@@ -38,7 +38,7 @@ function webSources(response) {
 }
 
 export async function getOddspediaMarketData(matchData, {
-  accessMode = "disabled", apiKey = "", model = "", client = null
+  accessMode = "disabled", apiKey = "", model = "", client = null, forceRefresh = false
 } = {}) {
   if (accessMode !== "openai_web_search") {
     return createSourceResult({
@@ -64,7 +64,7 @@ export async function getOddspediaMarketData(matchData, {
   const fixture = matchData?.fixture || {};
   const cacheKey = `${fixture.id}:${fixture.date}:${fixture.home}:${fixture.away}`;
   const cached = cache.get(cacheKey);
-  if (cached?.expiresAt > Date.now()) return cached.value;
+  if (!forceRefresh && cached?.expiresAt > Date.now()) return cached.value;
 
   try {
     const openai = client || new OpenAI({ apiKey, timeout: 45000, maxRetries: 1 });

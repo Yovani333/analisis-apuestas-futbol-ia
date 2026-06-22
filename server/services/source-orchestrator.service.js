@@ -4,30 +4,61 @@ import { getOddspediaMarketData } from "./sources/oddspedia.service.js";
 import { getFotMobContextData } from "./sources/fotmob.service.js";
 import { getWhoScoredAbsenceData } from "./sources/whoscored.service.js";
 import { getFbrefXgData } from "./sources/fbref.service.js";
+import { getWeatherContextData } from "./sources/weather.service.js";
+import { getSoccerwayFallbackData } from "./sources/soccerway.service.js";
+import { SOURCE_STATUS } from "../constants/source-catalog.js";
+import { createSourceResult } from "./sources/source-adapter.js";
 
-export async function collectExternalSourceData(matchData) {
-  const sofaScore = await getSofaScoreSportsData(matchData, { accessMode: env.sofaScoreAccessMode });
-  const oddspedia = await getOddspediaMarketData(matchData, {
-    accessMode: env.oddspediaAccessMode,
-    apiKey: env.openaiApiKey,
-    model: env.oddspediaSearchModel || env.openaiModel
-  });
-  const fotmob = await getFotMobContextData(matchData, {
-    accessMode: env.fotmobAccessMode,
-    apiKey: env.openaiApiKey,
-    model: env.fotmobSearchModel || env.openaiModel
-  });
-  const whoScored = await getWhoScoredAbsenceData(matchData, {
-    accessMode: env.whoScoredAccessMode,
-    apiKey: env.openaiApiKey,
-    model: env.whoScoredSearchModel || env.openaiModel,
-    fotmobResult: fotmob
-  });
-  const fbref = await getFbrefXgData(matchData, {
-    accessMode: env.fbrefAccessMode,
-    apiKey: env.openaiApiKey,
-    model: env.fbrefSearchModel || env.openaiModel,
-    fotmobResult: fotmob
-  });
-  return { sofaScore, oddspedia, fotmob, whoScored, fbref };
+const DEFAULT_ADAPTERS = Object.freeze({
+  sofaScore: getSofaScoreSportsData,
+  oddspedia: getOddspediaMarketData,
+  fotmob: getFotMobContextData,
+  whoScored: getWhoScoredAbsenceData,
+  fbref: getFbrefXgData,
+  weather: getWeatherContextData,
+  soccerway: getSoccerwayFallbackData
+});
+
+async function safeSource(source, operation) {
+  try {
+    return await operation();
+  } catch {
+    return createSourceResult({
+      source, status: SOURCE_STATUS.FAILED, updatedAt: new Date().toISOString(),
+      notes: ["La fuente no pudo procesarse; las demás consultas continuaron."], data: null
+    });
+  }
+}
+
+export async function collectExternalSourceData(matchData, {
+  forceRefresh = false, adapters = DEFAULT_ADAPTERS, config = env
+} = {}) {
+  const common = { apiKey: config.openaiApiKey, forceRefresh };
+  const [sofaScore, oddspedia, fotmob, weather, soccerway] = await Promise.all([
+    safeSource("sofaScore", () => adapters.sofaScore(matchData, { accessMode: config.sofaScoreAccessMode, forceRefresh })),
+    safeSource("oddspedia", () => adapters.oddspedia(matchData, {
+      ...common, accessMode: config.oddspediaAccessMode, model: config.oddspediaSearchModel || config.openaiModel
+    })),
+    safeSource("fotmob", () => adapters.fotmob(matchData, {
+      ...common, accessMode: config.fotmobAccessMode, model: config.fotmobSearchModel || config.openaiModel
+    })),
+    safeSource("weather", () => adapters.weather(matchData, {
+      ...common, accessMode: config.weatherAccessMode, model: config.weatherSearchModel || config.openaiModel
+    })),
+    safeSource("soccerway", () => adapters.soccerway(matchData, {
+      ...common, accessMode: config.soccerwayAccessMode, model: config.soccerwaySearchModel || config.openaiModel
+    }))
+  ]);
+
+  const [whoScored, fbref] = await Promise.all([
+    safeSource("whoScored", () => adapters.whoScored(matchData, {
+      ...common, accessMode: config.whoScoredAccessMode,
+      model: config.whoScoredSearchModel || config.openaiModel, fotmobResult: fotmob
+    })),
+    safeSource("fbref", () => adapters.fbref(matchData, {
+      ...common, accessMode: config.fbrefAccessMode,
+      model: config.fbrefSearchModel || config.openaiModel, fotmobResult: fotmob
+    }))
+  ]);
+  return { sofaScore, oddspedia, fotmob, whoScored, fbref, weather, soccerway };
 }

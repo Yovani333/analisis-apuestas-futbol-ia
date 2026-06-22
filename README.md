@@ -44,6 +44,16 @@ Cada módulo usa `available`, `partial`, `not_available` o `failed`, conserva fu
 
 Pesos de confianza: lesiones/sanciones 18, alineaciones 18, forma 17, xG/xGA 17, contexto 10, clasificación 8, cuotas 7, H2H 3 y clima/cancha 2. Un módulo parcial aporta la mitad. Si faltan al menos tres de los cuatro módulos críticos —lesiones, alineaciones, forma y xG/xGA— el estado siempre será `needs_review`.
 
+### xG/xGA oficial y estimado
+
+El **xG** representa la calidad y el volumen esperado de las ocasiones creadas; el **xGA** representa el xG concedido al rival. Los valores obtenidos de una fuente estadística especializada se identifican como `official`. Cuando no existen, el sistema puede calcular `estimated` con estadísticas del mismo fixture proporcionadas por API-Football.
+
+El modelo interno `estimated-xg-v1` usa tiros totales, tiros a puerta, tiros dentro y fuera del área, tiros bloqueados, corners, penales y Dangerous Attacks cuando existen. La fórmula es: `Total Shots × 0.025 + Shots on Goal × 0.12 + Shots inside box × 0.09 + Shots outside box × 0.025 + Blocked Shots × 0.015 + Corners × 0.02 + Penalties × 0.76 + Dangerous Attacks × 0.003`. Los goles no forman parte del cálculo.
+
+La confianza depende principalmente de la cobertura de tiros totales, tiros a puerta, tiros dentro/fuera del área, corners y eventos. Puede ser alta, media, baja o no disponible. Un resultado superior a 6.00 se marca para revisión. Este cálculo no es un modelo entrenado con coordenadas de cada disparo y **nunca debe tratarse como xG oficial**.
+
+Por seguridad temporal, las estadísticas del mismo fixture no sustituyen xG prepartido: en vivo se etiquetan `live_match_context_only` y tras finalizar se consideran `post_match_audit_only`. OpenAI recibe el tipo, confianza, versión y advertencia, y no puede presentarlas como información oficial ni como base fuerte cuando la confianza es baja.
+
 `buildOpenAIPromptFromMatchData()` alimenta el flujo activo de OpenAI exclusivamente con `researchData`. OpenAI no recibe respuestas crudas del proveedor. Después de validar la respuesta estructurada, el servidor vuelve a imponer el estado de confianza, los datos faltantes y los cálculos deterministas, por lo que el modelo no puede convertir un estudio parcial en completo ni sustituir probabilidades, cuotas justas o valor esperado.
 
 También existe una ruta específica para consultar la investigación sin generar análisis ni consumir créditos de OpenAI: `GET /api/fixtures/:fixtureId/research`. Puede añadirse `?refresh=true` para invalidar la caché del fixture y solicitar datos actualizados a API-Football; esta operación está limitada para proteger el cupo del proveedor.
@@ -61,6 +71,12 @@ FotMob es el tercer adaptador. Su modo opcional `openai_web_search` se limita a 
 WhoScored es el cuarto adaptador y funciona como respaldo condicionado. Solo consulta `whoscored.com` para lesiones, sanciones, dudas y alineaciones probables cuando API-Football y FotMob no cubrieron esos módulos. No se ejecuta en partidos iniciados o finalizados, no duplica búsquedas ya resueltas por FotMob y nunca marca como confirmada una alineación obtenida mediante búsqueda web.
 
 FBref es el quinto adaptador y funciona como respaldo exclusivo para xG/xGA. Solo consulta `fbref.com` cuando FotMob no aportó métricas prepartido utilizables, acepta promedios de temporada con URL verificable para cada equipo y conserva el módulo como `partial`. No usa estadísticas producidas por el mismo encuentro ni aumenta la confianza como si fueran datos confirmados del partido.
+
+Clima es el sexto adaptador. No añade una API meteorológica: usa opcionalmente `openai_web_search` restringido a Weather.com, AccuWeather y Meteored para partidos programados dentro de los próximos 14 días. Exige ubicación, hora y URL verificables, normaliza temperatura, lluvia, viento y humedad, y mantiene el módulo como `partial` porque el estado del césped no se deduce del pronóstico.
+
+Soccerway es el séptimo adaptador y actúa únicamente como respaldo de clasificación y H2H. Solo consulta `soccerway.com` cuando API-Football no entregó esos módulos, exige coincidencia de equipos y competición, descarta encuentros con fecha igual o posterior al partido estudiado y mantiene todos los datos como `partial` y sujetos a revisión.
+
+El orquestador ejecuta en paralelo las fuentes independientes y espera a FotMob antes de decidir si necesita WhoScored o FBref. Cada fallo queda aislado como `failed`; una fuente caída no detiene la investigación. Las consultas conservan caché de 30 minutos, pero el botón **Actualizar datos** omite esa caché y solicita información nueva conscientemente.
 
 Estados de fuente: `available`, `partial`, `not_available`, `not_configured`, `failed` y `blocked`. Estos estados describen la integración; el score continúa calculándose con el estado real de los nueve módulos y sus pesos documentados. Agregar una fuente al catálogo no aumenta la confianza si todavía no aporta datos normalizados.
 
@@ -143,6 +159,10 @@ WHOSCORED_ACCESS_MODE=disabled
 WHOSCORED_SEARCH_MODEL=gpt-5.4
 FBREF_ACCESS_MODE=disabled
 FBREF_SEARCH_MODEL=gpt-5.4
+WEATHER_ACCESS_MODE=disabled
+WEATHER_SEARCH_MODEL=gpt-5.4
+SOCCERWAY_ACCESS_MODE=disabled
+SOCCERWAY_SEARCH_MODEL=gpt-5.4
 ```
 
 Para activar conscientemente la búsqueda complementaria en Render, cambia únicamente `ODDSPEDIA_ACCESS_MODE=openai_web_search`. Si falla, no encuentra coincidencia exacta o no obtiene una fuente de `oddspedia.com`, el resto del análisis continúa y el módulo queda como no disponible o fallido.
@@ -152,6 +172,10 @@ FotMob se activa por separado con `FOTMOB_ACCESS_MODE=openai_web_search`. Cada a
 WhoScored se activa con `WHOSCORED_ACCESS_MODE=openai_web_search`. Al actuar como respaldo, normalmente no consume una búsqueda cuando FotMob ya devolvió bajas y alineaciones utilizables.
 
 FBref se activa con `FBREF_ACCESS_MODE=openai_web_search`. Solo consume una búsqueda cuando FotMob no devolvió xG/xGA prepartido y el partido aún no ha comenzado. Su cobertura depende de la competición y puede devolver `not_available` sin afectar los demás módulos.
+
+Clima se activa con `WEATHER_ACCESS_MODE=openai_web_search`. Solo consulta encuentros programados con ciudad o estadio y dentro de una ventana de 14 días. Un pronóstico diario, una hora distinta o una ubicación dudosa se descartan.
+
+Soccerway se activa con `SOCCERWAY_ACCESS_MODE=openai_web_search`. No consume una búsqueda cuando API-Football ya proporcionó clasificación y H2H. Sus resultados nunca sustituyen datos confirmados del proveedor principal.
 
 Para activar datos reales, completa un `.env` local y cambia `DATA_MODE=live`. Confirma que `OPENAI_MODEL` sea un identificador disponible en tu proyecto de OpenAI.
 
@@ -183,7 +207,7 @@ POST /api/fixtures/:fixtureId/analysis
 
 `sidelined` responde como no verificado hasta confirmar que el plan contratado ofrece cobertura adecuada. No se inventa ni se sustituye esa información.
 
-API-Football está integrado para fixtures, estadísticas del fixture, clasificación, H2H, lesiones, alineaciones, cuotas, eventos, rendimiento de jugadores y estadísticas agregadas de equipos. Los tres últimos se normalizan como datos complementarios y no alteran los pesos principales. Clima/cancha y xG/xGA acumulado permanecen `not_available` cuando API-Football no los entrega en un formato prepartido verificable. No hay APIs meteorológicas ni scrapers adicionales configurados.
+API-Football está integrado para fixtures, estadísticas del fixture, clasificación, H2H, lesiones, alineaciones, cuotas, eventos, rendimiento de jugadores y estadísticas agregadas de equipos. Los tres últimos se normalizan como datos complementarios y no alteran los pesos principales. Clima y xG/xGA pueden complementarse mediante adaptadores opcionales; el estado de cancha permanece `not_available` mientras no exista un reporte verificable. No hay APIs meteorológicas ni scrapers adicionales configurados.
 
 ## Flujo de datos
 

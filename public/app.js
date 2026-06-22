@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-fbref-adapter";
-import { footballDataService } from "./services.js?v=20260621-fbref-adapter";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260622-estimated-xg";
+import { footballDataService } from "./services.js?v=20260622-estimated-xg";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -239,6 +239,9 @@ function researchSourceLabel(moduleKey, module) {
   if (module?.source === "fotmob") return "FotMob · búsqueda web";
   if (module?.source === "whoScored") return "WhoScored · búsqueda web";
   if (module?.source === "fbref") return "FBref · búsqueda web";
+  if (module?.source === "weather") return "Clima · búsqueda web";
+  if (module?.source === "soccerway") return "Soccerway · búsqueda web";
+  if (module?.source === "api-football-internal-model") return "API-Football + modelo interno";
   if (module?.source) return module.source;
   if (["xgXga", "weatherPitch"].includes(moduleKey)) return "Sin fuente configurada";
   return "API-Football consultada sin datos";
@@ -275,11 +278,12 @@ function renderResearchData(research) {
 
   const primaryCards = RESEARCH_MODULES.map(({ key, label }) => {
     const module = research[key] || { status: "not_available" };
+    const displayLabel = key === "xgXga" && module.type === "estimated" ? "xG / xGA estimado" : label;
     const status = researchStatusLabel(module.status);
     const source = researchSourceLabel(key, module);
     const message = module.message || (module.status === "available" ? "Datos encontrados y normalizados." : "Cobertura parcial; revisa el detalle.");
     return `<article class="research-card research-card--${escapeHtml(module.status || "not_available")}">
-      <div class="research-card__heading"><h3>${escapeHtml(label)}</h3>${statusBadge(status)}</div>
+      <div class="research-card__heading"><h3>${escapeHtml(displayLabel)}</h3>${statusBadge(status)}</div>
       <dl><div><dt>Fuente</dt><dd>${escapeHtml(source)}</dd></div><div><dt>Actualizado</dt><dd>${escapeHtml(formatUpdatedAt(module.updatedAt))}</dd></div></dl>
       <p>${escapeHtml(message)}</p>
       <div class="research-card__footer"><span>Aporta ${displayValue(research.moduleScores?.[key], 0)} puntos</span><button class="button button--secondary button--compact" type="button" data-research-module="${escapeHtml(key)}">Ver detalle</button></div>
@@ -302,7 +306,7 @@ function renderSourceCoverage(research) {
   elements.sourceCoverage.hidden = false;
   elements.sourceCoverage.innerHTML = `
     <section class="source-registry" aria-labelledby="source-registry-title">
-      <div class="source-registry__heading"><div><h3 id="source-registry-title">Estado de fuentes</h3><p>Solo API-Football está activa en esta etapa.</p></div></div>
+      <div class="source-registry__heading"><div><h3 id="source-registry-title">Estado de fuentes</h3><p>Las fuentes complementarias solo aparecen activas cuando aportan datos verificables.</p></div></div>
       <div class="source-pills">${sources.map((source) => `<span class="source-pill" title="${escapeHtml((source.notes || []).join(" "))}"><strong>${escapeHtml(source.label)}</strong>${statusBadge(researchStatusLabel(source.status))}</span>`).join("")}</div>
     </section>
     <section class="source-matrix" aria-labelledby="source-matrix-title">
@@ -346,9 +350,15 @@ function renderResearchModuleDetail(moduleKey, research) {
     const awayPlayers = module.awayStartingXI?.length ? module.awayStartingXI : module.probableAwayXI;
     content = `<div class="detail-note"><strong>${module.confirmed ? "Alineaciones confirmadas" : "Alineaciones probables / sin confirmación"}</strong><span>La confirmación exige once inicial oficial para ambos equipos.</span></div><div class="lineups-grid">${playerList(research.homeTeam.name, module.homeFormation, homePlayers)}${playerList(research.awayTeam.name, module.awayFormation, awayPlayers)}</div>`;
   } else if (moduleKey === "xgXga") {
-    content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["xG", module.homeXG], ["xGA", module.homeXGA], ["npxG", module.homeNPXG]])}${researchTeamStats(research.awayTeam.name, [["xG", module.awayXG], ["xGA", module.awayXGA], ["npxG", module.awayNPXG]])}</div>`;
+    const estimated = module.type === "estimated";
+    const confidenceLabel = (value) => ({ high: "Alta", medium: "Media", low: "Baja", not_available: "No disponible" }[value] || "No disponible");
+    const xgLabel = estimated ? "xG estimado" : "xG";
+    const xgaLabel = estimated ? "xGA estimado" : "xGA";
+    const teams = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [[xgLabel, module.homeXG], [xgaLabel, module.homeXGA], ["Confianza", confidenceLabel(module.homeConfidence?.label || module.confidenceLabel)]])}${researchTeamStats(research.awayTeam.name, [[xgLabel, module.awayXG], [xgaLabel, module.awayXGA], ["Confianza", confidenceLabel(module.awayConfidence?.label || module.confidenceLabel)]])}</div>`;
+    const metadata = estimated ? `<div class="detail-note"><strong>Modelo ${escapeHtml(module.modelVersion || "estimated-xg-v1")}</strong><span>Este xG/xGA es estimado y fue calculado internamente con estadísticas disponibles de API-Football. No corresponde a xG oficial.</span></div>${module.missingFields?.length ? `<div class="detail-note"><strong>Datos faltantes</strong><span>${escapeHtml(module.missingFields.join(", "))}</span></div>` : ""}` : "";
+    content = `${metadata}${teams}`;
   } else if (moduleKey === "weatherPitch") {
-    content = `${researchTeamStats("Clima y cancha", [["Temperatura", module.temperature], ["Probabilidad de lluvia", module.rainProbability], ["Viento", module.windSpeed], ["Humedad", module.humidity], ["Condición", module.condition], ["Cancha", module.pitchNotes]])}`;
+    content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación verificada", module.matchedLocation], ["Cancha", module.pitchNotes]])}`;
   }
   return `${researchMeta(moduleKey, module)}${content || emptyDetail("No hay detalle adicional disponible.")}`;
 }

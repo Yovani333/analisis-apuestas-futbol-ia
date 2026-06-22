@@ -7,6 +7,8 @@ import { getOddspediaMarketData } from "../server/services/sources/oddspedia.ser
 import { getFotMobContextData } from "../server/services/sources/fotmob.service.js";
 import { getWhoScoredAbsenceData } from "../server/services/sources/whoscored.service.js";
 import { getFbrefXgData } from "../server/services/sources/fbref.service.js";
+import { getWeatherContextData } from "../server/services/sources/weather.service.js";
+import { getSoccerwayFallbackData } from "../server/services/sources/soccerway.service.js";
 
 test("SofaScore desactivado no realiza solicitudes de red", async () => {
   const originalFetch = globalThis.fetch;
@@ -238,6 +240,146 @@ test("FBref descarta métricas sin URL verificable para los equipos", async () =
   const result = await getFbrefXgData({ fixture: { id: 33, status: "scheduled", home: "A", away: "B" } }, {
     accessMode: "openai_web_search", apiKey: "test", model: "test-model", client
   });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(result.data, null);
+});
+
+test("Clima desactivado no llama a OpenAI", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const result = await getWeatherContextData({ fixture: { id: 40, status: "scheduled" } }, { accessMode: "disabled", client });
+  assert.equal(result.status, SOURCE_STATUS.NOT_CONFIGURED);
+  assert.equal(calls, 0);
+});
+
+test("Clima no consulta partidos fuera de la ventana de 14 días", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const result = await getWeatherContextData({
+    fixture: { id: 41, status: "scheduled", utcDateTime: "2026-08-01T20:00:00Z", city: "Ciudad" }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, now: new Date("2026-06-22T12:00:00Z") });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(calls, 0);
+});
+
+test("Clima normaliza un pronóstico horario con ubicación y fuente verificables", async () => {
+  let request;
+  const sourceUrl = "https://weather.com/weather/hourbyhour/l/Test";
+  const client = { responses: { parse: async (input) => {
+    request = input;
+    return {
+      output_parsed: {
+        location_confirmed: true, forecast_time_confirmed: true, matched_location: "Los Angeles, CA",
+        forecast_time: "2026-06-25T20:00:00Z", temperature_c: 22, rain_probability_pct: 10,
+        wind_speed_kmh: 14, humidity_pct: 55, condition: "Parcialmente nublado",
+        source_url: sourceUrl, observed_at: "2026-06-22T12:00:00Z", notes: []
+      },
+      output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: sourceUrl }] } }]
+    };
+  } } };
+  const result = await getWeatherContextData({
+    fixture: { id: 42, status: "scheduled", utcDateTime: "2026-06-25T20:00:00Z", stadium: "Estadio", city: "Los Angeles", country: "USA" }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, now: new Date("2026-06-22T12:00:00Z") });
+  assert.equal(result.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.data.temperature, 22);
+  assert.equal(result.data.pitchNotes, "Sin reporte reciente de estado de cancha.");
+  assert.deepEqual(request.tools[0].filters.allowed_domains, ["weather.com", "accuweather.com", "meteored.com", "meteored.mx"]);
+});
+
+test("Clima descarta un pronóstico cuya hora no corresponde al partido", async () => {
+  const sourceUrl = "https://weather.com/weather/hourbyhour/l/Test2";
+  const client = { responses: { parse: async () => ({
+    output_parsed: {
+      location_confirmed: true, forecast_time_confirmed: true, matched_location: "Los Angeles, CA",
+      forecast_time: "2026-06-26T08:00:00Z", temperature_c: 22, rain_probability_pct: 10,
+      wind_speed_kmh: 14, humidity_pct: 55, condition: "Despejado", source_url: sourceUrl, observed_at: null, notes: []
+    },
+    output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: sourceUrl }] } }]
+  }) } };
+  const result = await getWeatherContextData({
+    fixture: { id: 43, status: "scheduled", utcDateTime: "2026-06-25T20:00:00Z", city: "Los Angeles" }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, now: new Date("2026-06-22T12:00:00Z") });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(result.data, null);
+});
+
+test("Soccerway desactivado no llama a OpenAI", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const result = await getSoccerwayFallbackData({ fixture: { id: 50, status: "scheduled" } }, { accessMode: "disabled", client });
+  assert.equal(result.status, SOURCE_STATUS.NOT_CONFIGURED);
+  assert.equal(calls, 0);
+});
+
+test("Soccerway no duplica datos ya cubiertos por API-Football", async () => {
+  let calls = 0;
+  const client = { responses: { parse: async () => { calls += 1; } } };
+  const result = await getSoccerwayFallbackData({
+    fixture: { id: 51, status: "scheduled" },
+    confirmed: { standings: [{}], h2h: [{}] }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(calls, 0);
+});
+
+test("Soccerway normaliza clasificación y H2H anteriores con fuentes verificables", async () => {
+  let request;
+  const tableUrl = "https://int.soccerway.com/national/test/standings";
+  const matchUrl = "https://int.soccerway.com/matches/2025/01/01/a-b";
+  const client = { responses: { parse: async (input) => {
+    request = input;
+    return {
+      output_parsed: {
+        match_found: true, identity_confirmed: true, competition_confirmed: true,
+        competition_url: tableUrl, observed_at: "2026-06-22T12:00:00Z",
+        home_standing: { team: "A", rank: 1, points: 30, played: 15, wins: 9, draws: 3, losses: 3, goals_for: 28, goals_against: 14, goal_difference: 14, source_url: tableUrl },
+        away_standing: { team: "B", rank: 4, points: 22, played: 15, wins: 6, draws: 4, losses: 5, goals_for: 20, goals_against: 18, goal_difference: 2, source_url: tableUrl },
+        h2h_matches: [{ date: "2025-01-01", home_team: "A", away_team: "B", home_goals: 2, away_goals: 1, source_url: matchUrl }], notes: []
+      },
+      output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: tableUrl }, { type: "url", url: matchUrl }] } }]
+    };
+  } } };
+  const result = await getSoccerwayFallbackData({
+    fixture: { id: 52, status: "scheduled", home: "A", away: "B", date: "2026-06-25", leagueName: "Liga", season: "2026" },
+    confirmed: { standings: [], h2h: [] }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client });
+  assert.equal(result.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.data.standings.home.rank, 1);
+  assert.equal(result.data.h2h.length, 1);
+  assert.equal(result.data.h2h[0].requiresReview, true);
+  assert.deepEqual(request.tools[0].filters.allowed_domains, ["soccerway.com"]);
+});
+
+test("Soccerway descarta H2H de la fecha actual o futura", async () => {
+  const matchUrl = "https://int.soccerway.com/matches/2026/06/25/a-b";
+  const client = { responses: { parse: async () => ({
+    output_parsed: {
+      match_found: true, identity_confirmed: true, competition_confirmed: false,
+      competition_url: null, observed_at: null, home_standing: null, away_standing: null,
+      h2h_matches: [{ date: "2026-06-25", home_team: "A", away_team: "B", home_goals: 2, away_goals: 1, source_url: matchUrl }], notes: []
+    },
+    output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: matchUrl }] } }]
+  }) } };
+  const result = await getSoccerwayFallbackData({
+    fixture: { id: 53, status: "scheduled", home: "A", away: "B", date: "2026-06-25" }, confirmed: { standings: [], h2h: [] }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.equal(result.data, null);
+});
+
+test("Soccerway descarta datos pertenecientes a otros equipos", async () => {
+  const sourceUrl = "https://int.soccerway.com/matches/2025/01/01/c-d";
+  const client = { responses: { parse: async () => ({
+    output_parsed: {
+      match_found: true, identity_confirmed: true, competition_confirmed: false,
+      competition_url: null, observed_at: null, home_standing: null, away_standing: null,
+      h2h_matches: [{ date: "2025-01-01", home_team: "C", away_team: "D", home_goals: 1, away_goals: 0, source_url: sourceUrl }], notes: []
+    },
+    output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: sourceUrl }] } }]
+  }) } };
+  const result = await getSoccerwayFallbackData({
+    fixture: { id: 54, status: "scheduled", home: "A", away: "B", date: "2026-06-25" }, confirmed: { standings: [], h2h: [] }
+  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client });
   assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
   assert.equal(result.data, null);
 });

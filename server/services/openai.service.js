@@ -28,13 +28,24 @@ function neutralizeVenueLanguage(value, homeTeam, awayTeam) {
     .replaceAll("__AWAY_TEAM__", awayTeam);
 }
 
+function enforceEstimatedXgLanguage(value) {
+  if (Array.isArray(value)) return value.map(enforceEstimatedXgLanguage);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, enforceEstimatedXgLanguage(item)]));
+  if (typeof value !== "string") return value;
+  return value
+    .replace(/\bxGA\s+oficial\b/gi, "xGA estimado")
+    .replace(/\bxG\s+oficial\b/gi, "xG estimado")
+    .replace(/\bdatos? oficiales? de xG\b/gi, "datos estimados de xG");
+}
+
 export function applyResearchGuardrails(parsed, dataset) {
   const quality = dataset.dataQuality;
   const calculations = dataset.marketAnalysis || [];
   const research = dataset.researchData;
-  const safeParsed = research?.venue?.neutral
+  const venueSafe = research?.venue?.neutral
     ? neutralizeVenueLanguage(parsed, research.homeTeam?.name || "equipo 1", research.awayTeam?.name || "equipo 2")
     : parsed;
+  const safeParsed = research?.xgXga?.type === "estimated" ? enforceEstimatedXgLanguage(venueSafe) : venueSafe;
   const researchBlocksMarkets = research?.analysisStatus === ANALYSIS_STATUS.NEEDS_REVIEW;
   const researchIsPartial = research?.analysisStatus === ANALYSIS_STATUS.PARTIAL;
   const verifiedMarkets = (safeParsed.mercados_sugeridos || []).slice(0, 3).map((market) => {
@@ -71,7 +82,14 @@ export function applyResearchGuardrails(parsed, dataset) {
         analysisStatus: research.analysisStatus,
         moduleScores: research.moduleScores,
         criticalMissingData: research.criticalMissingData,
-        missingData: research.missingData
+        missingData: research.missingData,
+        xgXga: research.xgXga ? {
+          type: research.xgXga.type,
+          modelVersion: research.xgXga.modelVersion,
+          confidenceScore: research.xgXga.confidenceScore,
+          confidenceLabel: research.xgXga.confidenceLabel,
+          analysisUse: research.xgXga.analysisUse
+        } : null
       } : null
     }
   };

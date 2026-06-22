@@ -58,7 +58,7 @@ function hasFotMobLineups(result) {
 }
 
 export async function getWhoScoredAbsenceData(matchData, {
-  accessMode = "disabled", apiKey = "", model = "", client = null, fotmobResult = null
+  accessMode = "disabled", apiKey = "", model = "", client = null, fotmobResult = null, forceRefresh = false
 } = {}) {
   if (accessMode !== "openai_web_search") {
     return createSourceResult({
@@ -93,7 +93,7 @@ export async function getWhoScoredAbsenceData(matchData, {
 
   const cacheKey = `${fixture.id}:${fixture.date}:${fixture.home}:${fixture.away}:${needsInjuries}:${needsLineups}`;
   const cached = cache.get(cacheKey);
-  if (cached?.expiresAt > Date.now()) return cached.value;
+  if (!forceRefresh && cached?.expiresAt > Date.now()) return cached.value;
 
   try {
     const openai = client || new OpenAI({ apiKey, timeout: 45000, maxRetries: 1 });

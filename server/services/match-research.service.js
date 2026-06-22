@@ -30,6 +30,16 @@ export function getStandingsData(dataset) {
     losses: row.all?.lose ?? null, goalsFor: row.all?.goals?.for ?? null,
     goalsAgainst: row.all?.goals?.against ?? null, goalDifference: row.goalsDiff ?? null, form: row.form || ""
   } : null;
+  const soccerway = dataset.externalSources?.soccerway;
+  const external = soccerway?.data?.standings;
+  if (!home && !away && (external?.home || external?.away)) {
+    return {
+      ...moduleBase(DATA_STATUS.PARTIAL, soccerway.updatedAt || dataset.fetchedAt, "soccerway",
+        "Clasificación complementaria recuperada de Soccerway; requiere revisión."),
+      home: external.home || null, away: external.away || null,
+      sourceUrl: soccerway.data.competitionUrl || ""
+    };
+  }
   return {
     ...moduleBase(status, dataset.fetchedAt, SOURCE, status === DATA_STATUS.NOT_AVAILABLE ? "API-Football no devolvió clasificación para los equipos." : ""),
     home: compact(home), away: compact(away)
@@ -38,6 +48,24 @@ export function getStandingsData(dataset) {
 
 export function getH2HData(dataset) {
   const rows = dataset.confirmed?.h2h || [];
+  const soccerway = dataset.externalSources?.soccerway;
+  if (!rows.length && soccerway?.data?.h2h?.length) {
+    const matches = soccerway.data.h2h;
+    let homeWins = 0; let draws = 0; let awayWins = 0;
+    matches.forEach((match) => {
+      if (match.homeGoals === match.awayGoals) draws += 1;
+      else {
+        const trackedHomeIsHome = match.homeTeam === dataset.fixture.home;
+        if ((match.homeGoals > match.awayGoals) === trackedHomeIsHome) homeWins += 1;
+        else awayWins += 1;
+      }
+    });
+    return {
+      ...moduleBase(DATA_STATUS.PARTIAL, soccerway.updatedAt || dataset.fetchedAt, "soccerway",
+        "H2H complementario recuperado de Soccerway; requiere revisión y se usa como dato secundario."),
+      matches, homeWins, draws, awayWins
+    };
+  }
   let homeWins = 0; let draws = 0; let awayWins = 0;
   const matches = rows.slice(0, 10).map((row) => {
     const homeGoals = row.goals?.home;
@@ -249,7 +277,9 @@ export function getXgXgaData(dataset) {
         "xG/xGA prepartido recuperado de FotMob mediante búsqueda web; requiere revisión."),
       homeXG: external.homeXG, homeXGA: external.homeXGA,
       awayXG: external.awayXG, awayXGA: external.awayXGA,
-      homeNPXG: null, awayNPXG: null, scope: external.scope, sourceUrl: fotmob.data.eventUrl || ""
+      homeNPXG: null, awayNPXG: null, scope: external.scope, sourceUrl: fotmob.data.eventUrl || "",
+      type: "official", modelVersion: "", confidenceScore: null, confidenceLabel: "",
+      warning: "Dato reportado por una fuente estadística especializada y recuperado como referencia verificable."
     };
   }
   const fbref = dataset.externalSources?.fbref;
@@ -266,17 +296,61 @@ export function getXgXgaData(dataset) {
       homeMatchesPlayed: fbrefData.home?.matchesPlayed ?? null,
       awayMatchesPlayed: fbrefData.away?.matchesPlayed ?? null,
       scope: fbrefData.scope,
-      sourceUrls: [fbrefData.home?.sourceUrl, fbrefData.away?.sourceUrl].filter(Boolean)
+      sourceUrls: [fbrefData.home?.sourceUrl, fbrefData.away?.sourceUrl].filter(Boolean),
+      type: "official", modelVersion: "", confidenceScore: null, confidenceLabel: "",
+      warning: "Dato reportado por una fuente estadística especializada y recuperado como referencia verificable."
+    };
+  }
+  const estimated = dataset.estimatedXg;
+  const canUseCurrentFixtureEstimate = dataset.fixture.status === "live" || dataset.fixture.status === "finished";
+  if (canUseCurrentFixtureEstimate && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(estimated?.status)) {
+    return {
+      ...moduleBase(estimated.status, estimated.updatedAt || dataset.fetchedAt, "api-football-internal-model",
+        "xG/xGA estimado con estadísticas del mismo fixture; no corresponde a xG oficial."),
+      type: "estimated",
+      homeXG: estimated.homeTeam.estimatedXG,
+      homeXGA: estimated.homeTeam.estimatedXGA,
+      awayXG: estimated.awayTeam.estimatedXG,
+      awayXGA: estimated.awayTeam.estimatedXGA,
+      homeNPXG: null,
+      awayNPXG: null,
+      modelVersion: estimated.modelVersion,
+      confidenceScore: estimated.confidence.score,
+      confidenceLabel: estimated.confidence.label,
+      homeConfidence: estimated.homeTeam.confidence,
+      awayConfidence: estimated.awayTeam.confidence,
+      missingFields: estimated.confidence.missingFields,
+      warning: estimated.warning,
+      rawStats: { home: estimated.homeTeam.rawStats, away: estimated.awayTeam.rawStats },
+      analysisUse: dataset.fixture.status === "finished" ? "post_match_audit_only" : "live_match_context_only"
     };
   }
   return {
     ...moduleBase(DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, "",
-      "API-Football no entregó xG/xGA acumulado prepartido normalizado; no se usan estadísticas del partido como sustituto."),
-    homeXG: null, homeXGA: null, awayXG: null, awayXGA: null, homeNPXG: null, awayNPXG: null
+      "No hay xG/xGA especializado prepartido ni estadísticas suficientes del fixture para un cálculo interno responsable."),
+    type: "not_available", homeXG: null, homeXGA: null, awayXG: null, awayXGA: null,
+    homeNPXG: null, awayNPXG: null, modelVersion: "", confidenceScore: 0,
+    confidenceLabel: "not_available", warning: "No se inventaron valores de xG/xGA."
   };
 }
 
 export function getWeatherPitchData(dataset) {
+  const weather = dataset.externalSources?.weather;
+  if (weather?.data) {
+    return {
+      ...moduleBase(DATA_STATUS.PARTIAL, weather.updatedAt || dataset.fetchedAt, "weather",
+        "Clima horario verificado; el estado de la cancha continúa sin reporte y requiere revisión."),
+      temperature: weather.data.temperature,
+      rainProbability: weather.data.rainProbability,
+      windSpeed: weather.data.windSpeed,
+      humidity: weather.data.humidity,
+      condition: weather.data.condition || "",
+      matchedLocation: weather.data.matchedLocation || "",
+      forecastTime: weather.data.forecastTime || "",
+      sourceUrl: weather.data.sourceUrl || "",
+      pitchNotes: weather.data.pitchNotes || "Sin reporte reciente de estado de cancha."
+    };
+  }
   return {
     ...moduleBase(DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, "",
       "No hay una fuente meteorológica o de cancha configurada."),
@@ -383,13 +457,15 @@ function safeModule(name, getter, dataset) {
 
 function buildSourceRegistry(dataset) {
   return Object.fromEntries(Object.entries(SOURCE_DEFINITIONS).map(([key, definition]) => {
-    const adapterResult = dataset.externalSources?.[key];
+    const adapterResult = key === "apiFootballInternalModel" ? dataset.estimatedXg : dataset.externalSources?.[key];
     return [key, {
       status: key === "apiFootball" ? "available" : adapterResult?.status || definition.defaultStatus,
       label: definition.label,
       role: definition.role,
       updatedAt: key === "apiFootball" ? dataset.fetchedAt : adapterResult?.updatedAt || "",
-      notes: adapterResult?.notes?.length ? [...adapterResult.notes] : [...definition.notes]
+      notes: adapterResult?.notes?.length
+        ? [...adapterResult.notes]
+        : key === "apiFootballInternalModel" && adapterResult?.warning ? [adapterResult.warning] : [...definition.notes]
     }];
   }));
 }
@@ -404,7 +480,10 @@ function buildSourceCoverage(normalized) {
       : moduleData.source === "oddspedia" ? [sourceLabel("oddspedia")]
         : moduleData.source === "fotmob" ? [sourceLabel("fotmob")]
           : moduleData.source === "whoScored" ? [sourceLabel("whoScored")]
-            : moduleData.source === "fbref" ? [sourceLabel("fbref")] : [];
+            : moduleData.source === "fbref" ? [sourceLabel("fbref")]
+              : moduleData.source === "weather" ? [sourceLabel("weather")]
+                : moduleData.source === "soccerway" ? [sourceLabel("soccerway")] : [];
+    if (moduleData.source === "api-football-internal-model") activeSources.push(sourceLabel("apiFootballInternalModel"));
     const unavailablePrimary = plan.primary.filter((key) => normalized.sources[key]?.status !== "available").map(sourceLabel);
     const observation = moduleData.message || (activeSources.length
       ? `Datos activos desde ${activeSources.join(", ")}.`
@@ -481,6 +560,19 @@ No presentes ningún pronóstico como garantizado, fijo, seguro o sin riesgo.
 La respuesta debe mantener la advertencia de juego responsable.
 `;
 
+export const XG_ANALYSIS_RULES = `
+El módulo xG/xGA puede contener datos oficiales, estimados o no disponibles.
+Si type es official, atribuye el dato a la fuente indicada sin aumentar su nivel de confianza.
+Si type es estimated, llámalo siempre "xG estimado" y "xGA estimado". Nunca lo presentes como xG oficial.
+Indica que fue calculado internamente con estadísticas disponibles de API-Football y considera confidenceLabel.
+Si confidenceLabel es low, úsalo únicamente como referencia secundaria y nunca como base principal del pronóstico.
+Si confidenceLabel es medium, reconoce expresamente sus limitaciones.
+No generes picks fuertes basándote únicamente en el xG/xGA estimado, cualquiera que sea su confianza.
+Si analysisUse es live_match_context_only, no describas el dato como información prepartido.
+Si analysisUse es post_match_audit_only, no lo uses para justificar una predicción prepartido.
+Si status es not_available, indica que no existe información suficiente. No inventes ni redondees valores de forma engañosa.
+`;
+
 export function buildOpenAIPromptFromMatchData(matchData) {
   const safeData = JSON.parse(JSON.stringify(matchData, (key, value) => key === "errorCode" ? undefined : value));
   for (const key of ["fixtureEvents", "playerPerformance"]) {
@@ -492,5 +584,5 @@ export function buildOpenAIPromptFromMatchData(matchData) {
       message: "Detalle excluido del análisis prepartido para evitar fuga de información posterior al inicio."
     };
   }
-  return { instructions: OPENAI_ANALYSIS_INSTRUCTIONS.trim(), input: JSON.stringify({ matchData: safeData }) };
+  return { instructions: `${OPENAI_ANALYSIS_INSTRUCTIONS.trim()}\n${XG_ANALYSIS_RULES.trim()}`, input: JSON.stringify({ matchData: safeData }) };
 }
