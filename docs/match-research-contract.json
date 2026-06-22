@@ -17,6 +17,16 @@
     "neutral": false,
     "terminology": "local_visitante | equipo_1_equipo_2"
   },
+  "sources": {
+    "apiFootball": { "status": "available", "label": "API-Football", "role": "Fuente estructurada base", "updatedAt": "", "notes": [] },
+    "sofaScore": { "status": "not_configured", "label": "SofaScore", "role": "Respaldo deportivo", "updatedAt": "", "notes": [] },
+    "oddspedia": { "status": "blocked", "label": "Oddspedia", "role": "Respaldo de mercado y cuotas", "updatedAt": "", "notes": [] },
+    "fotmob": { "status": "not_configured", "label": "FotMob", "role": "Bajas, alineaciones probables y métricas", "updatedAt": "", "notes": [] },
+    "whoScored": { "status": "not_configured", "label": "WhoScored", "role": "Bajas y alineaciones probables", "updatedAt": "", "notes": [] },
+    "fbref": { "status": "not_configured", "label": "FBref", "role": "xG/xGA y estadísticas avanzadas", "updatedAt": "", "notes": [] },
+    "weather": { "status": "not_configured", "label": "Clima", "role": "Contexto meteorológico y de cancha", "updatedAt": "", "notes": [] }
+  },
+  "sourceCoverage": [],
   "standings": { "status": "not_available", "home": null, "away": null, "source": "api-football", "updatedAt": "", "message": "" },
   "h2h": { "status": "not_available", "matches": [], "homeWins": null, "draws": null, "awayWins": null, "source": "api-football", "updatedAt": "", "message": "" },
   "odds": { "status": "not_available", "markets": [], "source": "api-football", "updatedAt": "", "message": "" },

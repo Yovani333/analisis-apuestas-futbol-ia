@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-pacific-live";
-import { footballDataService } from "./services.js?v=20260621-pacific-live";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260621-source-matrix";
+import { footballDataService } from "./services.js?v=20260621-source-matrix";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -33,6 +33,7 @@ const elements = {
   dataStatus: document.querySelector("#data-overall-status"),
   dataGrid: document.querySelector("#data-grid"),
   researchSummary: document.querySelector("#research-summary"),
+  sourceCoverage: document.querySelector("#source-coverage"),
   researchGrid: document.querySelector("#research-grid"),
   refreshResearch: document.querySelector("#refresh-research"),
   dataDialog: document.querySelector("#data-detail-dialog"),
@@ -70,6 +71,8 @@ function statusClass(status) {
     "En vivo": "live",
     "Parcial": "partial",
     "Falló": "failed",
+    "No configurada": "unavailable",
+    "Bloqueada": "failed",
     "Necesita revisión": "review",
     "Procesando": "processing",
     "No disponible": "unavailable"
@@ -99,7 +102,9 @@ const researchStatusLabels = Object.freeze({
   partial: "Parcial",
   not_available: "No disponible",
   failed: "Falló",
-  needs_review: "Necesita revisión"
+  needs_review: "Necesita revisión",
+  not_configured: "No configurada",
+  blocked: "Bloqueada"
 });
 
 const analysisStatusLabels = Object.freeze({ complete: "Completo", partial: "Parcial", needs_review: "Necesita revisión" });
@@ -239,6 +244,8 @@ function renderResearchData(research) {
   if (!research) {
     elements.researchSummary.className = "research-empty";
     elements.researchSummary.textContent = "Este partido todavía no tiene una investigación normalizada disponible.";
+    elements.sourceCoverage.hidden = true;
+    elements.sourceCoverage.innerHTML = "";
     elements.researchGrid.innerHTML = "";
     return;
   }
@@ -246,6 +253,7 @@ function renderResearchData(research) {
   const score = Math.max(0, Math.min(100, Number(research.totalConfidenceScore) || 0));
   const analysisLabel = analysisStatusLabels[research.analysisStatus] || "Necesita revisión";
   const critical = (research.criticalMissingData || []).map((item) => item.label).filter(Boolean);
+  const consultedSources = Object.values(research.sources || {}).filter((source) => ["available", "partial"].includes(source.status)).map((source) => source.label);
   elements.researchSummary.className = "research-summary";
   elements.researchSummary.innerHTML = `
     <div class="confidence-score confidence-score--${score >= 75 ? "high" : score >= 45 ? "medium" : "low"}">
@@ -255,8 +263,10 @@ function renderResearchData(research) {
       <div><strong>Nivel de confianza del análisis</strong>${statusBadge(analysisLabel)}</div>
       <div class="confidence-track" role="progressbar" aria-label="Nivel de confianza" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${score}"><span style="width:${score}%"></span></div>
       <p>${critical.length ? `<strong>Datos críticos faltantes:</strong> ${escapeHtml(critical.join(", "))}` : "No se detectaron tres o más faltantes críticos."}</p>
+      <p><strong>Fuentes consultadas:</strong> ${escapeHtml(consultedSources.join(", ") || "Ninguna fuente activa")}</p>
       <small>Última actualización: ${escapeHtml(formatUpdatedAt(research.lastUpdated))}</small>
     </div>`;
+  renderSourceCoverage(research);
 
   const primaryCards = RESEARCH_MODULES.map(({ key, label }) => {
     const module = research[key] || { status: "not_available" };
@@ -279,6 +289,21 @@ function renderResearchData(research) {
     </article>`;
   }).join("");
   elements.researchGrid.innerHTML = `${primaryCards}<section class="research-supporting"><div class="research-supporting__heading"><div><h3>Datos complementarios</h3><p>Amplían el contexto, pero no modifican por sí solos el puntaje de confianza.</p></div></div><div class="supporting-grid">${supportingCards}</div></section>`;
+}
+
+function renderSourceCoverage(research) {
+  const sources = Object.values(research.sources || {});
+  const rows = research.sourceCoverage || [];
+  elements.sourceCoverage.hidden = false;
+  elements.sourceCoverage.innerHTML = `
+    <section class="source-registry" aria-labelledby="source-registry-title">
+      <div class="source-registry__heading"><div><h3 id="source-registry-title">Estado de fuentes</h3><p>Solo API-Football está activa en esta etapa.</p></div></div>
+      <div class="source-pills">${sources.map((source) => `<span class="source-pill" title="${escapeHtml((source.notes || []).join(" "))}"><strong>${escapeHtml(source.label)}</strong>${statusBadge(researchStatusLabel(source.status))}</span>`).join("")}</div>
+    </section>
+    <section class="source-matrix" aria-labelledby="source-matrix-title">
+      <div class="source-registry__heading"><div><h3 id="source-matrix-title">Matriz por módulo</h3><p>Plan de fuente principal, respaldo y cobertura realmente disponible.</p></div></div>
+      <div class="detail-table-wrap"><table class="detail-table source-table"><thead><tr><th>Módulo</th><th>Fuente principal</th><th>Respaldo</th><th>Fuente activa</th><th>Estado</th><th>Actualización</th><th>Observación</th></tr></thead><tbody>${rows.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong></td><td>${escapeHtml(row.primarySources.join(" / ") || "—")}</td><td>${escapeHtml(row.secondarySources.join(" / ") || "—")}</td><td>${escapeHtml(row.activeSources.join(" / ") || "Ninguna")}</td><td>${statusBadge(researchStatusLabel(row.status))}</td><td>${escapeHtml(formatUpdatedAt(row.updatedAt))}</td><td>${escapeHtml(row.observation)}</td></tr>`).join("")}</tbody></table></div>
+    </section>`;
 }
 
 function researchMeta(moduleKey, module) {

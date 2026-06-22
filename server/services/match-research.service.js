@@ -1,8 +1,10 @@
 import { DATA_STATUS, MODULE_LABELS, MODULE_WEIGHTS } from "../constants/match-research.js";
+import { MODULE_SOURCE_PLAN, SOURCE_DEFINITIONS } from "../constants/source-catalog.js";
 import { calculateMatchConfidenceScore } from "./match-confidence.service.js";
 
 const SOURCE = "api-football";
 const nowIso = () => new Date().toISOString();
+const sourceLabel = (key) => SOURCE_DEFINITIONS[key]?.label || key;
 const statusForSides = (homeAvailable, awayAvailable) => {
   if (homeAvailable && awayAvailable) return DATA_STATUS.AVAILABLE;
   if (homeAvailable || awayAvailable) return DATA_STATUS.PARTIAL;
@@ -61,7 +63,7 @@ export function getH2HData(dataset) {
 }
 
 export function getOddsData(dataset) {
-  const markets = (dataset.marketAnalysis || []).map((market) => ({
+  const apiMarkets = (dataset.marketAnalysis || []).map((market) => ({
     marketKey: market.marketKey, selectionKey: market.selectionKey, market: market.market,
     selection: market.selection, decimalOdds: market.decimalOdds, bookmaker: dataset.preMatch?.odds?.bookmaker || "",
     impliedProbabilityPct: market.impliedProbabilityPct, noVigImpliedProbabilityPct: market.noVigImpliedProbabilityPct,
@@ -70,9 +72,23 @@ export function getOddsData(dataset) {
     requiresReview: market.requiresReview, method: market.method,
     updatedAt: dataset.preMatch?.odds?.updatedAt || dataset.fetchedAt
   }));
-  const status = markets.length >= 4 ? DATA_STATUS.AVAILABLE : markets.length ? DATA_STATUS.PARTIAL : DATA_STATUS.NOT_AVAILABLE;
+  const oddspedia = dataset.externalSources?.oddspedia;
+  const externalMarkets = apiMarkets.length ? [] : (oddspedia?.data?.markets || []).map((market, index) => ({
+    marketKey: `oddspedia_${index}`, selectionKey: `external_${index}`,
+    market: market.market, selection: market.selection, decimalOdds: market.decimalOdds,
+    bookmaker: market.bookmaker || "", impliedProbabilityPct: null, noVigImpliedProbabilityPct: null,
+    bookmakerMarginPct: null, estimatedProbabilityPct: null, fairOdds: null, expectedValuePct: null,
+    positiveValue: false, requiresReview: true, method: "Referencia externa sin modelo probabilístico",
+    sourceUrl: market.sourceUrl || "", updatedAt: oddspedia.updatedAt || dataset.fetchedAt
+  }));
+  const markets = apiMarkets.length ? apiMarkets : externalMarkets;
+  const source = apiMarkets.length ? SOURCE : externalMarkets.length ? "oddspedia" : SOURCE;
+  const status = apiMarkets.length >= 4 ? DATA_STATUS.AVAILABLE : markets.length ? DATA_STATUS.PARTIAL : DATA_STATUS.NOT_AVAILABLE;
+  const message = externalMarkets.length
+    ? "Cuotas complementarias de Oddspedia recuperadas mediante búsqueda web restringida; requieren revisión."
+    : markets.length ? "" : "No se encontraron cuotas principales verificables.";
   return {
-    ...moduleBase(status, dataset.preMatch?.odds?.updatedAt || dataset.fetchedAt, SOURCE, markets.length ? "" : "No se encontraron cuotas principales verificables."),
+    ...moduleBase(status, apiMarkets.length ? dataset.preMatch?.odds?.updatedAt || dataset.fetchedAt : oddspedia?.updatedAt || dataset.fetchedAt, source, message),
     markets
   };
 }
@@ -279,6 +295,44 @@ function safeModule(name, getter, dataset) {
   try { return getter(dataset); } catch (error) { return failedModule(name, error, dataset.fetchedAt || nowIso()); }
 }
 
+function buildSourceRegistry(dataset) {
+  return Object.fromEntries(Object.entries(SOURCE_DEFINITIONS).map(([key, definition]) => {
+    const adapterResult = dataset.externalSources?.[key];
+    return [key, {
+      status: key === "apiFootball" ? "available" : adapterResult?.status || definition.defaultStatus,
+      label: definition.label,
+      role: definition.role,
+      updatedAt: key === "apiFootball" ? dataset.fetchedAt : adapterResult?.updatedAt || "",
+      notes: adapterResult?.notes?.length ? [...adapterResult.notes] : [...definition.notes]
+    }];
+  }));
+}
+
+function buildSourceCoverage(normalized) {
+  return MODULE_SOURCE_PLAN.map((plan) => {
+    const moduleData = plan.module === "calendar"
+      ? { status: DATA_STATUS.AVAILABLE, source: SOURCE, updatedAt: normalized.lastUpdated, message: "Fixture confirmado por API-Football." }
+      : normalized[plan.module] || { status: DATA_STATUS.NOT_AVAILABLE, source: "", updatedAt: "", message: "Módulo no disponible." };
+    const activeSources = moduleData.source === SOURCE
+      ? [sourceLabel("apiFootball")]
+      : moduleData.source === "oddspedia" ? [sourceLabel("oddspedia")] : [];
+    const unavailablePrimary = plan.primary.filter((key) => normalized.sources[key]?.status !== "available").map(sourceLabel);
+    const observation = moduleData.message || (activeSources.length
+      ? `Datos activos desde ${activeSources.join(", ")}.`
+      : unavailablePrimary.length ? `Fuentes principales sin integrar: ${unavailablePrimary.join(", ")}.` : "Sin fuente activa para este módulo.");
+    return {
+      module: plan.module,
+      label: plan.label,
+      primarySources: plan.primary.map(sourceLabel),
+      secondarySources: plan.secondary.map(sourceLabel),
+      activeSources,
+      status: moduleData.status,
+      updatedAt: moduleData.updatedAt || "",
+      observation
+    };
+  });
+}
+
 export function normalizeMatchResearchData(dataset) {
   const updatedAt = dataset.fetchedAt || nowIso();
   const normalized = {
@@ -295,6 +349,7 @@ export function normalizeMatchResearchData(dataset) {
       neutral: Boolean(dataset.fixture.neutralVenue),
       terminology: dataset.fixture.neutralVenue ? "equipo_1_equipo_2" : "local_visitante"
     },
+    sources: buildSourceRegistry(dataset),
     standings: safeModule("standings", getStandingsData, dataset),
     h2h: safeModule("h2h", getH2HData, dataset),
     odds: safeModule("odds", getOddsData, dataset),
@@ -320,6 +375,7 @@ export function normalizeMatchResearchData(dataset) {
   normalized.missingData = Object.keys(MODULE_WEIGHTS)
     .filter((key) => normalized[key].status !== DATA_STATUS.AVAILABLE)
     .map((key) => ({ module: key, label: MODULE_LABELS[key], status: normalized[key].status, message: normalized[key].message || "" }));
+  normalized.sourceCoverage = buildSourceCoverage(normalized);
   return normalized;
 }
 

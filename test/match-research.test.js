@@ -83,6 +83,13 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.supportingData.playerPerformance.teams[0].players[0].rating, 7.5);
   assert.equal(normalized.supportingData.teamSeasonStatistics.home.played, 3);
   assert.equal(normalized.supportingData.teamSeasonStatistics.cutoffDate, "2026-06-21");
+  assert.equal(normalized.sources.apiFootball.status, "available");
+  assert.equal(normalized.sources.sofaScore.status, "not_configured");
+  assert.equal(normalized.sources.oddspedia.status, "blocked");
+  assert.equal(normalized.sourceCoverage.length, 10);
+  const oddsCoverage = normalized.sourceCoverage.find((item) => item.module === "odds");
+  assert.deepEqual(oddsCoverage.primarySources, ["Oddspedia"]);
+  assert.deepEqual(oddsCoverage.activeSources, ["API-Football"]);
   assert.ok(normalized.missingData.some((item) => item.module === "xgXga"));
   assert.equal(normalized.analysisStatus, ANALYSIS_STATUS.COMPLETE);
 });
@@ -106,6 +113,25 @@ test("un módulo fallido no impide normalizar los demás", () => {
   assert.equal(normalized.standings.status, DATA_STATUS.FAILED);
   assert.equal(normalized.statsForm.status, DATA_STATUS.AVAILABLE);
   assert.equal(normalized.standings.message, "El módulo no pudo procesarse.");
+});
+
+test("Oddspedia solo complementa cuotas faltantes y obliga revisión", () => {
+  const dataset = datasetFixture();
+  dataset.marketAnalysis = [];
+  dataset.externalSources = {
+    oddspedia: {
+      source: "oddspedia", status: "partial", updatedAt: "2026-06-21T12:30:00Z",
+      notes: ["Referencia externa"],
+      data: { markets: [{ market: "Ganador", selection: "Equipo Local", decimalOdds: 1.8, bookmaker: "Casa", sourceUrl: "https://oddspedia.com/evento", requiresReview: true }] }
+    }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.odds.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.odds.source, "oddspedia");
+  assert.equal(normalized.odds.markets[0].requiresReview, true);
+  assert.equal(normalized.odds.markets[0].expectedValuePct, null);
+  assert.equal(normalized.sources.oddspedia.status, "partial");
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "odds").activeSources, ["Oddspedia"]);
 });
 
 test("OpenAI no puede convertir un research parcial en análisis completo", () => {

@@ -282,6 +282,15 @@ button { touch-action: manipulation; }
 .research-summary__content small { color: var(--muted); font-size: .64rem; }
 .confidence-track { height: 6px; margin-top: 8px; overflow: hidden; background: #dce6f2; border-radius: 999px; }
 .confidence-track span { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); border-radius: inherit; }
+.source-coverage { display: grid; gap: 12px; margin-bottom: 12px; }
+.source-registry, .source-matrix { padding: 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 11px; }
+.source-registry__heading h3 { margin: 0; font-size: .8rem; }
+.source-registry__heading p { margin: 2px 0 9px; color: var(--muted); font-size: .66rem; }
+.source-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.source-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 7px; font-size: .65rem; background: white; border: 1px solid var(--border); border-radius: 9px; }
+.source-pill .status-badge { padding: 3px 6px; font-size: .58rem; }
+.source-table td:last-child { min-width: 260px; white-space: normal; }
+.source-table .status-badge { padding: 4px 7px; font-size: .62rem; }
 .research-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .research-card { min-width: 0; padding: 11px; background: var(--surface-subtle); border: 1px solid var(--border); border-left: 3px solid #94a3b8; border-radius: 10px; }
 .research-card--available { border-left-color: var(--success); }

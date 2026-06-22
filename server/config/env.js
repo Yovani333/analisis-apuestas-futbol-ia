@@ -8,7 +8,10 @@ export const env = Object.freeze({
   apiFootballKey: process.env.API_FOOTBALL_KEY || "",
   apiFootballBaseUrl: process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io",
   openaiApiKey: process.env.OPENAI_API_KEY || "",
-  openaiModel: process.env.OPENAI_MODEL || ""
+  openaiModel: process.env.OPENAI_MODEL || "",
+  sofaScoreAccessMode: process.env.SOFASCORE_ACCESS_MODE || "disabled",
+  oddspediaAccessMode: process.env.ODDSPEDIA_ACCESS_MODE || "disabled",
+  oddspediaSearchModel: process.env.ODDSPEDIA_SEARCH_MODEL || ""
 });
 
 export function requireLiveConfiguration() {

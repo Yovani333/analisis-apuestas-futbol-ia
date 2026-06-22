@@ -50,6 +50,14 @@ También existe una ruta específica para consultar la investigación sin genera
 
 La sección **Análisis de fuentes** muestra el nivel de confianza de 0 a 100, el estado general, los datos críticos faltantes y los nueve módulos evaluados. Cada tarjeta identifica estado, fuente, última actualización, puntos aportados y explicación del faltante. **Ver detalle** abre los datos normalizados y **Actualizar datos** renueva la investigación desde API-Football sin ejecutar OpenAI ni consumir sus créditos.
 
+La interfaz incluye una matriz de fuentes por módulo. API-Football es la única fuente activa por defecto; SofaScore, FotMob, WhoScored, FBref y clima aparecen como `not_configured`. Oddspedia aparece como `blocked` porque su sitio rechazó el acceso automatizado directo con HTTP 403. El proyecto no intenta evadir esa restricción ni hace scraping.
+
+SofaScore es el primer adaptador externo formal. Está conectado al orquestador de fuentes, pero opera en modo `disabled`: devuelve un resultado normalizado `not_configured` y no realiza solicitudes de red. Un modo distinto se bloquea mientras no exista un conector aprobado. Esto permite probar la arquitectura sin asumir que un endpoint no oficial está autorizado.
+
+Oddspedia es el segundo adaptador. En modo predeterminado `disabled` no realiza solicitudes. Opcionalmente puede usar `openai_web_search`: solo se ejecuta cuando API-Football no proporciona mercados, restringe la búsqueda a `oddspedia.com`, exige coincidencia exacta y una URL verificable del dominio, marca toda cuota como `partial` y `requiresReview`, y conserva una caché de 30 minutos. Esta opción consume créditos de OpenAI y posibles cargos de la herramienta de búsqueda web; nunca genera picks ni valor esperado a partir de esas cuotas por sí sola.
+
+Estados de fuente: `available`, `partial`, `not_available`, `not_configured`, `failed` y `blocked`. Estos estados describen la integración; el score continúa calculándose con el estado real de los nueve módulos y sus pesos documentados. Agregar una fuente al catálogo no aumenta la confianza si todavía no aporta datos normalizados.
+
 La misma sección incluye tres módulos complementarios: estadísticas agregadas de temporada, eventos del fixture y rendimiento individual de jugadores. Las estadísticas de temporada se consultan con corte al día anterior del partido. Eventos y rendimiento del mismo fixture se etiquetan `post_match_audit_only`, se muestran para evaluación retrospectiva y su detalle se elimina del paquete enviado a OpenAI para evitar fuga de información posterior al inicio.
 
 Todos los horarios visibles se convierten a la zona del Pacífico (`America/Los_Angeles`) y se identifican con `PT`. Los partidos finalizados muestran su marcador y deshabilitan las acciones de datos y análisis; los encuentros en vivo muestran marcador y minuto con una caché reducida de 60 segundos. En Copa Mundial se usa sede neutral y nombres de equipos en lugar de asumir localía.
@@ -120,7 +128,12 @@ OPENAI_MODEL=gpt-5.4
 DATA_MODE=mock
 PORT=3000
 API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
+SOFASCORE_ACCESS_MODE=disabled
+ODDSPEDIA_ACCESS_MODE=disabled
+ODDSPEDIA_SEARCH_MODEL=gpt-5.4
 ```
+
+Para activar conscientemente la búsqueda complementaria en Render, cambia únicamente `ODDSPEDIA_ACCESS_MODE=openai_web_search`. Si falla, no encuentra coincidencia exacta o no obtiene una fuente de `oddspedia.com`, el resto del análisis continúa y el módulo queda como no disponible o fallido.
 
 Para activar datos reales, completa un `.env` local y cambia `DATA_MODE=live`. Confirma que `OPENAI_MODEL` sea un identificador disponible en tu proyecto de OpenAI.
 
