@@ -46,6 +46,9 @@ test("partido en vivo con estadísticas completas calcula xG/xGA del fixture", (
   assert.equal(result.homeTeam.estimatedXGA, result.awayTeam.estimatedXG);
   assert.equal(result.awayTeam.estimatedXGA, result.homeTeam.estimatedXG);
   assert.equal(result.confidence.label, "high");
+  assert.deepEqual(result.diagnostics.statisticsAvailable, { home: true, away: true });
+  assert.equal(result.diagnostics.eventsAvailable, true);
+  assert.deepEqual(result.diagnostics.detectedPenalties, { home: 0, away: 0 });
   assert.match(result.warning, /No corresponde a xG oficial/);
 });
 
@@ -90,6 +93,7 @@ test("suma 0.76 por un penal detectado", () => {
     [{ team: { id: 1 }, type: "Goal", detail: "Penalty" }]
   ));
   assert.equal(result.homeTeam.rawStats.penalties, 1);
+  assert.equal(result.diagnostics.detectedPenalties.home, 1);
   assert.equal(result.homeTeam.estimatedXG, Number((base + 0.76).toFixed(2)));
 });
 

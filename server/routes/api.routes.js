@@ -6,6 +6,7 @@ import { AppError } from "../errors.js";
 import { parseFixtureId, parseFixtureQuery } from "../middleware/validate.js";
 import { getFixtureDataset, getFixtureResult, resolveLeague, searchFixtures } from "../services/api-football.service.js";
 import { generateAnalysis } from "../services/openai.service.js";
+import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 
 export const apiRouter = Router();
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -20,7 +21,10 @@ apiRouter.get("/health", (req, res) => {
     status: "ok",
     mode: env.dataMode,
     providers: {
-      apiFootball: { configured: Boolean(env.apiFootballKey) },
+      apiFootball: {
+        configured: Boolean(env.apiFootballKey),
+        observability: getApiFootballObservability()
+      },
       openai: { configured: Boolean(env.openaiApiKey && env.openaiModel) }
     },
     liveReady: missing.length === 0,

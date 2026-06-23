@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-xg-fixture";
-import { footballDataService } from "./services.js?v=20260623-xg-fixture";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-xg-observability";
+import { footballDataService } from "./services.js?v=20260623-xg-observability";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -431,10 +431,34 @@ function renderResearchModuleDetail(moduleKey, research) {
         ])
       )}</section>`
       : "";
+    const skippedReasonLabel = {
+      invalid_fixture: "Fixture inválido",
+      statistics_request_failed: "Falló la consulta de estadísticas",
+      insufficient_statistics: "Estadísticas insuficientes"
+    };
+    const diagnostics = historicalEstimated && module.diagnostics
+      ? `<section class="detail-section"><h3>Trazabilidad de la muestra</h3>${detailTable(
+        ["Equipo", "Intentados", "Usados", "Omitidos"],
+        ["home", "away"].map((side) => {
+          const item = module.diagnostics?.[side] || {};
+          const skipped = (item.skippedFixtures || []).map((fixture) =>
+            `${fixture.fixtureId || "Sin ID"}: ${skippedReasonLabel[fixture.reason] || fixture.reason}`
+          ).join("; ");
+          return [
+            escapeHtml(side === "home" ? research.homeTeam.name : research.awayTeam.name),
+            displayValue(item.attemptedFixtures, 0),
+            displayValue(item.usedFixtures, 0),
+            escapeHtml(skipped || "Ninguno")
+          ];
+        })
+      )}</section>`
+      : !historicalEstimated && estimated && module.diagnostics
+        ? `<div class="detail-note"><strong>Diagnóstico de cobertura</strong><span>Estadísticas local: ${module.diagnostics.statisticsAvailable?.home ? "sí" : "no"} · Estadísticas visitante: ${module.diagnostics.statisticsAvailable?.away ? "sí" : "no"} · Eventos: ${module.diagnostics.eventsAvailable ? "sí" : "no"} · Penales detectados: ${displayValue(module.diagnostics.detectedPenalties?.home, 0)} / ${displayValue(module.diagnostics.detectedPenalties?.away, 0)}</span></div>`
+        : "";
     const fixtures = fixtureRows.length
       ? `<section class="detail-section"><h3>Partidos usados</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "xG estimado", "xGA estimado"], fixtureRows)}</section>`
       : "";
-    content = `${metadata}${teams}${rawStats}${fixtures}`;
+    content = `${metadata}${teams}${diagnostics}${rawStats}${fixtures}`;
   } else if (moduleKey === "weatherPitch") {
     content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación verificada", module.matchedLocation], ["Cancha", module.pitchNotes]])}`;
   }

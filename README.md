@@ -62,6 +62,10 @@ Por seguridad temporal, las estadísticas del mismo fixture no sustituyen el his
 
 La respuesta de OpenAI pasa por guardas deterministas antes de mostrarse. El servidor corrige menciones incorrectas de “xG oficial”, añade una descripción canónica según `official`, `historical_estimated`, `fixture_estimated` o `not_available`, reemplaza cualquier inferencia cuando no existen datos y limita el histórico o fixture estimado de confianza baja a referencia secundaria. En modo Mundial también conserva la advertencia de muestra limitada.
 
+El servicio registra observabilidad sanitizada de API-Football: solicitudes de red, aciertos y fallos de caché, porcentaje de reutilización, fallos, último endpoint consultado y límites diario/minuto cuando el proveedor envía esas cabeceras. Este resumen aparece en `GET /api/health` y nunca incluye la clave, parámetros completos ni respuestas deportivas crudas. Un HTTP 429 se devuelve como `API_FOOTBALL_RATE_LIMIT`.
+
+El detalle xG/xGA conserva trazabilidad de cálculo. En histórico muestra fixtures intentados, usados y omitidos con un motivo estructurado; en vivo o postpartido muestra disponibilidad de estadísticas, eventos y penales detectados. Estas métricas explican la cobertura y no modifican la fórmula ni rellenan datos faltantes.
+
 `buildOpenAIPromptFromMatchData()` alimenta el flujo activo de OpenAI exclusivamente con `researchData`. OpenAI no recibe respuestas crudas del proveedor. Después de validar la respuesta estructurada, el servidor vuelve a imponer el estado de confianza, los datos faltantes y los cálculos deterministas, por lo que el modelo no puede convertir un estudio parcial en completo ni sustituir probabilidades, cuotas justas o valor esperado.
 
 También existe una ruta específica para consultar la investigación sin generar análisis ni consumir créditos de OpenAI: `GET /api/fixtures/:fixtureId/research`. Puede añadirse `?refresh=true` para invalidar la caché del fixture y solicitar datos actualizados a API-Football; esta operación está limitada para proteger el cupo del proveedor.

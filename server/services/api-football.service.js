@@ -9,6 +9,12 @@ import { normalizeMatchResearchData } from "./match-research.service.js";
 import { collectExternalSourceData } from "./source-orchestrator.service.js";
 import { buildEstimatedXgFromDataset } from "./xg/estimated-xg.service.js";
 import { getHistoricalEstimatedXgXga } from "./xg/historical-estimated-xg.service.js";
+import {
+  recordApiFootballCacheHit,
+  recordApiFootballCacheMiss,
+  recordApiFootballFailure,
+  recordApiFootballResponse
+} from "./api-football-observability.service.js";
 
 const leagueCache = new Map();
 const requestCache = new Map();
@@ -32,16 +38,40 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
   });
   const cacheKey = url.toString();
   const cached = getCached(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    recordApiFootballCacheHit();
+    return cached;
+  }
+  recordApiFootballCacheMiss();
 
-  const response = await fetch(url, {
-    headers: { "x-apisports-key": env.apiFootballKey },
-    signal: AbortSignal.timeout(12000)
-  });
-  if (!response.ok) throw new AppError("API-Football no respondió correctamente.", 502, "API_FOOTBALL_HTTP_ERROR", { status: response.status });
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: { "x-apisports-key": env.apiFootballKey },
+      signal: AbortSignal.timeout(12000)
+    });
+  } catch {
+    recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_NETWORK_ERROR" });
+    throw new AppError("No fue posible conectar con API-Football.", 502, "API_FOOTBALL_NETWORK_ERROR");
+  }
+  recordApiFootballResponse({ endpoint: url.pathname, headers: response.headers });
+  if (!response.ok) {
+    const rateLimited = response.status === 429;
+    const code = rateLimited ? "API_FOOTBALL_RATE_LIMIT" : "API_FOOTBALL_HTTP_ERROR";
+    recordApiFootballFailure({ endpoint: url.pathname, code, headers: response.headers });
+    throw new AppError(
+      rateLimited ? "API-Football alcanzó temporalmente su límite de solicitudes." : "API-Football no respondió correctamente.",
+      rateLimited ? 429 : 502,
+      code,
+      { status: response.status }
+    );
+  }
   const payload = await response.json();
   const providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
-  if (providerErrors?.length) throw new AppError("API-Football rechazó la consulta.", 502, "API_FOOTBALL_PROVIDER_ERROR", providerErrors);
+  if (providerErrors?.length) {
+    recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_PROVIDER_ERROR", headers: response.headers });
+    throw new AppError("API-Football rechazó la consulta.", 502, "API_FOOTBALL_PROVIDER_ERROR");
+  }
   const value = payload.response || [];
   requestCache.set(cacheKey, { value, expiresAt: Date.now() + cacheTtl });
   return value;

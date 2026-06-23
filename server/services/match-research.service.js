@@ -326,6 +326,10 @@ export function getXgXgaData(dataset) {
         home: historical.homeTeam.fixturesUsed,
         away: historical.awayTeam.fixturesUsed
       },
+      diagnostics: {
+        home: historical.homeTeam.diagnostics,
+        away: historical.awayTeam.diagnostics
+      },
       confidenceScore: historical.confidence.score,
       confidenceLabel: historical.confidence.label,
       homeConfidence: historical.homeTeam.confidence,
@@ -357,6 +361,7 @@ export function getXgXgaData(dataset) {
       awayConfidence: estimated.awayTeam.confidence,
       missingFields: estimated.confidence.missingFields,
       notes: estimated.confidence.notes,
+      diagnostics: estimated.diagnostics,
       warning: estimated.warning,
       rawStats: { home: estimated.homeTeam.rawStats, away: estimated.awayTeam.rawStats },
       analysisUse: dataset.fixture.status === "finished" ? "post_match_audit_only" : "live_match_context_only"

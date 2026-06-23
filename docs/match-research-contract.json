@@ -48,6 +48,17 @@
     "confidenceScore": 0,
     "confidenceLabel": "not_available",
     "missingFields": [],
+    "diagnostics": {
+      "historical": {
+        "home": { "attemptedFixtures": 0, "usedFixtures": 0, "skippedFixtures": [] },
+        "away": { "attemptedFixtures": 0, "usedFixtures": 0, "skippedFixtures": [] }
+      },
+      "currentFixture": {
+        "statisticsAvailable": { "home": false, "away": false },
+        "eventsAvailable": false,
+        "detectedPenalties": { "home": 0, "away": 0 }
+      }
+    },
     "warning": "",
     "source": "",
     "updatedAt": "",

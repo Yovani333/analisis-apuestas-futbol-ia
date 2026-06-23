@@ -82,6 +82,9 @@ test("partido programado con cinco partidos útiles produce histórico disponibl
   assert.equal(result.modelVersion, HISTORICAL_MODEL_VERSION);
   assert.equal(result.homeTeam.sampleSize, 5);
   assert.equal(result.awayTeam.sampleSize, 5);
+  assert.equal(result.homeTeam.diagnostics.attemptedFixtures, 5);
+  assert.equal(result.homeTeam.diagnostics.usedFixtures, 5);
+  assert.deepEqual(result.homeTeam.diagnostics.skippedFixtures, []);
   assert.ok(Number.isFinite(result.homeTeam.historicalEstimatedXGAvg));
   assert.ok(Number.isFinite(result.homeTeam.historicalEstimatedXGAAvg));
   assert.equal(result.confidence.label, "high");
@@ -102,6 +105,18 @@ test("sin estadísticas anteriores no calcula valores", async () => {
   assert.equal(result.homeTeam.historicalEstimatedXGAvg, null);
   assert.equal(result.awayTeam.historicalEstimatedXGAAvg, null);
   assert.equal(result.confidence.label, "not_available");
+});
+
+test("conserva el motivo cuando falla una consulta histórica", async () => {
+  const result = await getHistoricalEstimatedXgXga(input(1, 1, {
+    getFixtureStatistics: async () => { throw new Error("límite"); }
+  }));
+  assert.equal(result.status, "not_available");
+  assert.equal(result.homeTeam.diagnostics.attemptedFixtures, 1);
+  assert.equal(result.homeTeam.diagnostics.usedFixtures, 0);
+  assert.equal(result.homeTeam.diagnostics.skippedFixtures[0].reason, "statistics_request_failed");
+  assert.equal(result.awayTeam.diagnostics.skippedFixtures[0].reason, "statistics_request_failed");
+  assert.doesNotMatch(JSON.stringify(result), /límite/);
 });
 
 test("los porcentajes string se normalizan dentro de la muestra", async () => {

@@ -15,6 +15,10 @@ function statusFromConfidence(score) {
   return "not_available";
 }
 
+function hasRecordedValue(value) {
+  return value !== null && value !== undefined;
+}
+
 function emptyResult(fixtureId, homeTeam, awayTeam, updatedAt, note = "No hay estadísticas suficientes para ambos equipos.") {
   return {
     status: "not_available", type: "fixture_estimated", source: "api-football-internal-model",
@@ -22,6 +26,14 @@ function emptyResult(fixtureId, homeTeam, awayTeam, updatedAt, note = "No hay es
     homeTeam: { ...homeTeam, estimatedXG: null, estimatedXGA: null },
     awayTeam: { ...awayTeam, estimatedXG: null, estimatedXGA: null },
     confidence: { score: 0, label: "not_available", missingFields: [], notes: [note] },
+    diagnostics: {
+      statisticsAvailable: {
+        home: hasRecordedValue(homeTeam?.rawStats?.totalShots) || hasRecordedValue(homeTeam?.rawStats?.shotsOnGoal),
+        away: hasRecordedValue(awayTeam?.rawStats?.totalShots) || hasRecordedValue(awayTeam?.rawStats?.shotsOnGoal)
+      },
+      eventsAvailable: false,
+      detectedPenalties: { home: 0, away: 0 }
+    },
     warning: WARNING, updatedAt
   };
 }
@@ -65,6 +77,14 @@ export function buildEstimatedXgFromDataset(dataset) {
       confidence: awayConfidence
     },
     confidence: { score, label, missingFields, notes },
+    diagnostics: {
+      statisticsAvailable: { home: true, away: true },
+      eventsAvailable: extracted.homeTeam.eventsAvailable && extracted.awayTeam.eventsAvailable,
+      detectedPenalties: {
+        home: extracted.homeTeam.rawStats.penalties,
+        away: extracted.awayTeam.rawStats.penalties
+      }
+    },
     warning: WARNING, updatedAt
   };
 }
@@ -81,6 +101,11 @@ export async function getEstimatedXgForFixture(fixtureId, { loadFixtureDataset }
       status: "failed", type: "fixture_estimated", source: "api-football-internal-model",
       modelVersion: MODEL_VERSION, scope: "current_fixture", fixtureId: String(fixtureId), homeTeam: null, awayTeam: null,
       confidence: { score: 0, label: "not_available", missingFields: [], notes: ["No fue posible procesar las estadísticas del fixture."] },
+      diagnostics: {
+        statisticsAvailable: { home: false, away: false },
+        eventsAvailable: false,
+        detectedPenalties: { home: 0, away: 0 }
+      },
       warning: WARNING, updatedAt: new Date().toISOString()
     };
   }

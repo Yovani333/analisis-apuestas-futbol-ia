@@ -38,7 +38,12 @@ function emptyTeam(team) {
     historicalEstimatedXGAAvg: null,
     sampleSize: 0,
     fixturesUsed: [],
-    missingFields: []
+    missingFields: [],
+    diagnostics: {
+      attemptedFixtures: 0,
+      usedFixtures: 0,
+      skippedFixtures: []
+    }
   };
 }
 
@@ -101,12 +106,14 @@ async function buildTeamHistory({
   worldCup
 }) {
   const fixtures = previousFinishedFixtures(fixtureRows, currentFixtureDate, limit);
-  const records = (await Promise.all(fixtures.map(async (fixture) => {
+  const outcomes = await Promise.all(fixtures.map(async (fixture) => {
     const fixtureId = String(fixture?.fixture?.id || "");
     const homeId = fixture?.teams?.home?.id;
     const awayId = fixture?.teams?.away?.id;
     const opponentId = String(homeId) === String(team.id) ? awayId : homeId;
-    if (!fixtureId || opponentId === null || opponentId === undefined) return null;
+    if (!fixtureId || opponentId === null || opponentId === undefined) {
+      return { record: null, skipped: { fixtureId, reason: "invalid_fixture" } };
+    }
 
     const [statisticsResult, eventsResult] = await Promise.all([
       getFixtureStatistics(fixtureId).then((data) => ({ data, failed: false })).catch(() => ({ data: [], failed: true })),
@@ -114,14 +121,19 @@ async function buildTeamHistory({
     ]);
     const teamStats = extractTeamStatsFromApiFootball(statisticsResult.data, team.id);
     const opponentStats = extractTeamStatsFromApiFootball(statisticsResult.data, opponentId);
-    if (statisticsResult.failed || !hasMinimumInputs(teamStats) || !hasMinimumInputs(opponentStats)) return null;
+    if (statisticsResult.failed) {
+      return { record: null, skipped: { fixtureId, reason: "statistics_request_failed" } };
+    }
+    if (!hasMinimumInputs(teamStats) || !hasMinimumInputs(opponentStats)) {
+      return { record: null, skipped: { fixtureId, reason: "insufficient_statistics" } };
+    }
 
     teamStats.penalties = extractPenaltyCountFromEvents(eventsResult.data, team.id);
     opponentStats.penalties = extractPenaltyCountFromEvents(eventsResult.data, opponentId);
     const estimatedXG = calculateEstimatedXG(teamStats);
     const estimatedXGA = calculateEstimatedXG(opponentStats);
     const confidence = calculateEstimatedXgConfidence(teamStats, { eventsAvailable: !eventsResult.failed });
-    return {
+    return { record: {
       fixtureId,
       date: fixture?.fixture?.date?.slice(0, 10) || "",
       opponentId: String(opponentId),
@@ -132,8 +144,10 @@ async function buildTeamHistory({
       rawStats: teamStats,
       missingFields: confidence.missingFields,
       eventsAvailable: !eventsResult.failed
-    };
-  }))).filter(Boolean);
+    }, skipped: null };
+  }));
+  const records = outcomes.map((outcome) => outcome.record).filter(Boolean);
+  const skippedFixtures = outcomes.map((outcome) => outcome.skipped).filter(Boolean);
 
   const confidence = historicalConfidence(records, fixtures.length, { worldCup });
   const missingFields = [...new Set(records.flatMap((record) => record.missingFields))];
@@ -148,6 +162,11 @@ async function buildTeamHistory({
     sampleSize: records.length,
     fixturesUsed: records.map(({ rawStats, eventsAvailable, ...record }) => record),
     missingFields,
+    diagnostics: {
+      attemptedFixtures: fixtures.length,
+      usedFixtures: records.length,
+      skippedFixtures
+    },
     confidence: { ...confidence, notes }
   };
 }
