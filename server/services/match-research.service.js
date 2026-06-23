@@ -301,6 +301,41 @@ export function getXgXgaData(dataset) {
       warning: "Dato reportado por una fuente estadística especializada y recuperado como referencia verificable."
     };
   }
+  const historical = dataset.historicalEstimatedXg;
+  if (dataset.fixture.status === "scheduled" && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(historical?.status)) {
+    const missingFields = [...new Set([
+      ...(historical.homeTeam?.missingFields || []),
+      ...(historical.awayTeam?.missingFields || [])
+    ])];
+    return {
+      ...moduleBase(historical.status, historical.updatedAt || dataset.fetchedAt, "api-football-internal-model",
+        "Calculado con partidos anteriores; no requiere H2H."),
+      type: "historical_estimated",
+      scope: "previous_matches",
+      homeXG: historical.homeTeam.historicalEstimatedXGAvg,
+      homeXGA: historical.homeTeam.historicalEstimatedXGAAvg,
+      awayXG: historical.awayTeam.historicalEstimatedXGAvg,
+      awayXGA: historical.awayTeam.historicalEstimatedXGAAvg,
+      homeNPXG: null,
+      awayNPXG: null,
+      modelVersion: historical.modelVersion,
+      sampleSize: Math.min(historical.homeTeam.sampleSize, historical.awayTeam.sampleSize),
+      homeSampleSize: historical.homeTeam.sampleSize,
+      awaySampleSize: historical.awayTeam.sampleSize,
+      fixturesUsed: {
+        home: historical.homeTeam.fixturesUsed,
+        away: historical.awayTeam.fixturesUsed
+      },
+      confidenceScore: historical.confidence.score,
+      confidenceLabel: historical.confidence.label,
+      homeConfidence: historical.homeTeam.confidence,
+      awayConfidence: historical.awayTeam.confidence,
+      missingFields,
+      notes: historical.confidence.notes,
+      warning: historical.warning,
+      analysisUse: "pre_match_context"
+    };
+  }
   const estimated = dataset.estimatedXg;
   const canUseCurrentFixtureEstimate = dataset.fixture.status === "live" || dataset.fixture.status === "finished";
   if (canUseCurrentFixtureEstimate && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(estimated?.status)) {
@@ -457,7 +492,9 @@ function safeModule(name, getter, dataset) {
 
 function buildSourceRegistry(dataset) {
   return Object.fromEntries(Object.entries(SOURCE_DEFINITIONS).map(([key, definition]) => {
-    const adapterResult = key === "apiFootballInternalModel" ? dataset.estimatedXg : dataset.externalSources?.[key];
+    const adapterResult = key === "apiFootballInternalModel"
+      ? dataset.historicalEstimatedXg || dataset.estimatedXg
+      : dataset.externalSources?.[key];
     return [key, {
       status: key === "apiFootball" ? "available" : adapterResult?.status || definition.defaultStatus,
       label: definition.label,
@@ -561,10 +598,13 @@ La respuesta debe mantener la advertencia de juego responsable.
 `;
 
 export const XG_ANALYSIS_RULES = `
-El módulo xG/xGA puede contener datos oficiales, estimados o no disponibles.
+El módulo xG/xGA puede contener datos oficiales, históricos estimados, estimados del fixture actual o no disponibles.
 Si type es official, atribuye el dato a la fuente indicada sin aumentar su nivel de confianza.
-Si type es estimated, llámalo siempre "xG estimado" y "xGA estimado". Nunca lo presentes como xG oficial.
-Indica que fue calculado internamente con estadísticas disponibles de API-Football y considera confidenceLabel.
+Si type es historical_estimated, llámalo siempre "xG/xGA histórico estimado".
+Explica que se calculó con partidos anteriores de cada equipo y que no requiere que los equipos hayan jugado entre sí.
+Nunca lo presentes como xG oficial ni como xG del partido actual.
+Si type es estimated o fixture_estimated, llámalo siempre "xG/xGA estimado del partido".
+Indica que fue calculado internamente con estadísticas del fixture disponibles en API-Football. Nunca lo presentes como xG oficial.
 Si confidenceLabel es low, úsalo únicamente como referencia secundaria y nunca como base principal del pronóstico.
 Si confidenceLabel es medium, reconoce expresamente sus limitaciones.
 No generes picks fuertes basándote únicamente en el xG/xGA estimado, cualquiera que sea su confianza.

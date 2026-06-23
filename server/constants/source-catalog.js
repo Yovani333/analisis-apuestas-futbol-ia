@@ -16,7 +16,7 @@ export const SOURCE_DEFINITIONS = Object.freeze({
   },
   apiFootballInternalModel: {
     label: "API-Football + modelo interno",
-    role: "xG/xGA estimado del fixture",
+    role: "xG/xGA histórico estimado y estimado del fixture",
     defaultStatus: SOURCE_STATUS.NOT_AVAILABLE,
     notes: ["Cálculo interno; no corresponde a xG oficial de un proveedor estadístico."]
   },

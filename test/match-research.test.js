@@ -305,6 +305,39 @@ test("no usa estadísticas del fixture como xG prepartido", () => {
   assert.equal(normalized.xgXga.type, "not_available");
 });
 
+test("integra xG/xGA histórico estimado para un partido programado", () => {
+  const dataset = datasetFixture();
+  dataset.fixture.status = "scheduled";
+  dataset.historicalEstimatedXg = {
+    status: "available",
+    type: "historical_estimated",
+    source: "api-football-internal-model",
+    modelVersion: "historical-estimated-xg-v1",
+    scope: "previous_matches",
+    updatedAt: dataset.fetchedAt,
+    warning: "xG/xGA histórico estimado con partidos anteriores. No corresponde a xG oficial ni al xG del partido actual.",
+    confidence: { score: 90, label: "high", notes: [] },
+    homeTeam: {
+      historicalEstimatedXGAvg: 1.45, historicalEstimatedXGAAvg: 1.1, sampleSize: 5,
+      fixturesUsed: [{ fixtureId: "1", opponent: "Rival A", estimatedXG: 1.4, estimatedXGA: 1 }],
+      missingFields: [], confidence: { score: 90, label: "high", notes: [] }
+    },
+    awayTeam: {
+      historicalEstimatedXGAvg: 1.2, historicalEstimatedXGAAvg: 1.35, sampleSize: 5,
+      fixturesUsed: [{ fixtureId: "2", opponent: "Rival B", estimatedXG: 1.2, estimatedXGA: 1.3 }],
+      missingFields: [], confidence: { score: 90, label: "high", notes: [] }
+    }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.xgXga.type, "historical_estimated");
+  assert.equal(normalized.xgXga.scope, "previous_matches");
+  assert.equal(normalized.xgXga.homeXG, 1.45);
+  assert.equal(normalized.xgXga.sampleSize, 5);
+  assert.equal(normalized.xgXga.analysisUse, "pre_match_context");
+  assert.match(normalized.xgXga.message, /no requiere H2H/i);
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["API-Football + modelo interno"]);
+});
+
 test("xG especializado conserva prioridad sobre el modelo interno", () => {
   const dataset = datasetFixture();
   dataset.fixture.status = "live";
@@ -334,7 +367,7 @@ test("el prompt explica el tratamiento obligatorio del xG estimado", () => {
   ];
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
   const prompt = buildOpenAIPromptFromMatchData(normalizeMatchResearchData(dataset));
-  assert.match(prompt.instructions, /llámalo siempre "xG estimado"/);
+  assert.match(prompt.instructions, /llámalo siempre "xG\/xGA estimado del partido"/);
   assert.match(prompt.instructions, /live_match_context_only/);
   assert.match(prompt.input, /estimated-xg-v1/);
 });

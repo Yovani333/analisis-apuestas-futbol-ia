@@ -8,6 +8,7 @@ import {
 import { normalizeMatchResearchData } from "./match-research.service.js";
 import { collectExternalSourceData } from "./source-orchestrator.service.js";
 import { buildEstimatedXgFromDataset } from "./xg/estimated-xg.service.js";
+import { getHistoricalEstimatedXgXga } from "./xg/historical-estimated-xg.service.js";
 
 const leagueCache = new Map();
 const requestCache = new Map();
@@ -44,6 +45,18 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
   const value = payload.response || [];
   requestCache.set(cacheKey, { value, expiresAt: Date.now() + cacheTtl });
   return value;
+}
+
+export async function getPreviousFixturesForTeam(teamId, limit = 5) {
+  return apiRequest("/fixtures", { team: teamId, last: limit, timezone: "UTC" });
+}
+
+export async function getFixtureStatistics(fixtureId) {
+  return apiRequest("/fixtures/statistics", { fixture: fixtureId });
+}
+
+export async function getFixtureEvents(fixtureId) {
+  return apiRequest("/fixtures/events", { fixture: fixtureId });
 }
 
 function chooseSeason(seasons, requestedSeason, targetDate) {
@@ -282,9 +295,25 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     qualityAlerts: ["Los datos vacíos se conservan como no disponibles; no se completan por inferencia."]
   };
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
+  dataset.historicalEstimatedXg = fixture.status === "scheduled"
+    ? await getHistoricalEstimatedXgXga({
+      fixtureId: fixture.id,
+      fixtureDate: base.fixture.date,
+      homeTeam: { id: homeId, name: fixture.home },
+      awayTeam: { id: awayId, name: fixture.away },
+      homePreviousFixtures: homeRecentRows,
+      awayPreviousFixtures: awayRecentRows,
+      getFixtureStatistics,
+      getFixtureEvents,
+      limit: 5,
+      worldCup: fixture.leagueSlug === "world-cup",
+      updatedAt: dataset.fetchedAt
+    })
+    : null;
   dataset.externalSources = await collectExternalSourceData(dataset, { forceRefresh });
-  fixture.dataAvailability.xg = dataset.estimatedXg.status === "available"
-    ? "Disponible" : dataset.estimatedXg.status === "partial" ? "Necesita revisión" : fixture.dataAvailability.xg;
+  const activeInternalXg = fixture.status === "scheduled" ? dataset.historicalEstimatedXg : dataset.estimatedXg;
+  fixture.dataAvailability.xg = activeInternalXg?.status === "available"
+    ? "Disponible" : activeInternalXg?.status === "partial" ? "Necesita revisión" : fixture.dataAvailability.xg;
   dataset.researchData = normalizeMatchResearchData(dataset);
   dataset.analysisInput = buildAnalysisInput(dataset);
   datasetCache.set(fixtureId, { value: dataset, expiresAt: Date.now() + CACHE_TTL });

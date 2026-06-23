@@ -388,13 +388,37 @@ function renderResearchModuleDetail(moduleKey, research) {
     const awayPlayers = module.awayStartingXI?.length ? module.awayStartingXI : module.probableAwayXI;
     content = `<div class="detail-note"><strong>${module.confirmed ? "Alineaciones confirmadas" : "Alineaciones probables / sin confirmación"}</strong><span>La confirmación exige once inicial oficial para ambos equipos.</span></div><div class="lineups-grid">${playerList(research.homeTeam.name, module.homeFormation, homePlayers)}${playerList(research.awayTeam.name, module.awayFormation, awayPlayers)}</div>`;
   } else if (moduleKey === "xgXga") {
-    const estimated = module.type === "estimated";
+    const historicalEstimated = module.type === "historical_estimated";
+    const estimated = historicalEstimated || ["estimated", "fixture_estimated"].includes(module.type);
     const confidenceLabel = (value) => ({ high: "Alta", medium: "Media", low: "Baja", not_available: "No disponible" }[value] || "No disponible");
-    const xgLabel = estimated ? "xG estimado" : "xG";
-    const xgaLabel = estimated ? "xGA estimado" : "xGA";
-    const teams = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [[xgLabel, module.homeXG], [xgaLabel, module.homeXGA], ["Confianza", confidenceLabel(module.homeConfidence?.label || module.confidenceLabel)]])}${researchTeamStats(research.awayTeam.name, [[xgLabel, module.awayXG], [xgaLabel, module.awayXGA], ["Confianza", confidenceLabel(module.awayConfidence?.label || module.confidenceLabel)]])}</div>`;
-    const metadata = estimated ? `<div class="detail-note"><strong>Modelo ${escapeHtml(module.modelVersion || "estimated-xg-v1")}</strong><span>Este xG/xGA es estimado y fue calculado internamente con estadísticas disponibles de API-Football. No corresponde a xG oficial.</span></div>${module.missingFields?.length ? `<div class="detail-note"><strong>Datos faltantes</strong><span>${escapeHtml(module.missingFields.join(", "))}</span></div>` : ""}` : "";
-    content = `${metadata}${teams}`;
+    const modeLabel = historicalEstimated ? "Histórico" : estimated ? "Fixture actual" : "Oficial";
+    const teamRows = [
+      [escapeHtml(research.homeTeam.name), displayValue(module.homeXG), displayValue(module.homeXGA), modeLabel, displayValue(module.homeSampleSize ?? module.sampleSize), confidenceLabel(module.homeConfidence?.label || module.confidenceLabel)],
+      [escapeHtml(research.awayTeam.name), displayValue(module.awayXG), displayValue(module.awayXGA), modeLabel, displayValue(module.awaySampleSize ?? module.sampleSize), confidenceLabel(module.awayConfidence?.label || module.confidenceLabel)]
+    ];
+    const teams = detailTable(["Equipo", estimated ? "xG estimado" : "xG", estimated ? "xGA estimado" : "xGA", "Modo", "Muestra", "Confianza"], teamRows);
+    const mandatoryText = historicalEstimated
+      ? "xG/xGA histórico estimado calculado con partidos anteriores de cada equipo. No requiere enfrentamiento directo entre ambos equipos. No corresponde a xG oficial ni al xG del partido actual."
+      : "xG/xGA estimado calculado internamente con estadísticas del partido desde API-Football. No corresponde a xG oficial.";
+    const metadata = estimated
+      ? `<div class="detail-note detail-note--info"><strong>API-Football + modelo interno · ${escapeHtml(module.modelVersion || "estimated-xg-v1")}</strong><span>${escapeHtml(mandatoryText)}</span></div>
+        ${module.missingFields?.length ? `<div class="detail-note"><strong>Datos faltantes</strong><span>${escapeHtml(module.missingFields.join(", "))}</span></div>` : ""}
+        ${module.notes?.length ? `<div class="detail-note"><strong>Notas de revisión</strong><span>${escapeHtml(module.notes.join(" "))}</span></div>` : ""}`
+      : "";
+    const fixtureRows = historicalEstimated
+      ? ["home", "away"].flatMap((side) => (module.fixturesUsed?.[side] || []).map((fixture) => [
+        escapeHtml(side === "home" ? research.homeTeam.name : research.awayTeam.name),
+        displayValue(fixture.date),
+        displayValue(fixture.opponent),
+        fixture.venue === "home" ? "Local" : "Visitante",
+        displayValue(fixture.estimatedXG),
+        displayValue(fixture.estimatedXGA)
+      ]))
+      : [];
+    const fixtures = fixtureRows.length
+      ? `<section class="detail-section"><h3>Partidos usados</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "xG estimado", "xGA estimado"], fixtureRows)}</section>`
+      : "";
+    content = `${metadata}${teams}${fixtures}`;
   } else if (moduleKey === "weatherPitch") {
     content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación verificada", module.matchedLocation], ["Cancha", module.pitchNotes]])}`;
   }

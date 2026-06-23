@@ -28,14 +28,20 @@ function neutralizeVenueLanguage(value, homeTeam, awayTeam) {
     .replaceAll("__AWAY_TEAM__", awayTeam);
 }
 
-function enforceEstimatedXgLanguage(value) {
-  if (Array.isArray(value)) return value.map(enforceEstimatedXgLanguage);
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, enforceEstimatedXgLanguage(item)]));
+function enforceEstimatedXgLanguage(value, type = "estimated") {
+  if (Array.isArray(value)) return value.map((item) => enforceEstimatedXgLanguage(item, type));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, enforceEstimatedXgLanguage(item, type)]));
+  }
   if (typeof value !== "string") return value;
+  const historical = type === "historical_estimated";
+  const xgLabel = historical ? "xG histórico estimado" : "xG estimado";
+  const xgaLabel = historical ? "xGA histórico estimado" : "xGA estimado";
+  const dataLabel = historical ? "datos históricos estimados de xG" : "datos estimados de xG";
   return value
-    .replace(/\bxGA\s+oficial\b/gi, "xGA estimado")
-    .replace(/\bxG\s+oficial\b/gi, "xG estimado")
-    .replace(/\bdatos? oficiales? de xG\b/gi, "datos estimados de xG");
+    .replace(/\bxGA\s+oficial\b/gi, xgaLabel)
+    .replace(/\bxG\s+oficial\b/gi, xgLabel)
+    .replace(/\bdatos? oficiales? de xG\b/gi, dataLabel);
 }
 
 export function applyResearchGuardrails(parsed, dataset) {
@@ -45,7 +51,10 @@ export function applyResearchGuardrails(parsed, dataset) {
   const venueSafe = research?.venue?.neutral
     ? neutralizeVenueLanguage(parsed, research.homeTeam?.name || "equipo 1", research.awayTeam?.name || "equipo 2")
     : parsed;
-  const safeParsed = research?.xgXga?.type === "estimated" ? enforceEstimatedXgLanguage(venueSafe) : venueSafe;
+  const estimatedTypes = new Set(["estimated", "historical_estimated", "fixture_estimated"]);
+  const safeParsed = estimatedTypes.has(research?.xgXga?.type)
+    ? enforceEstimatedXgLanguage(venueSafe, research.xgXga.type)
+    : venueSafe;
   const researchBlocksMarkets = research?.analysisStatus === ANALYSIS_STATUS.NEEDS_REVIEW;
   const researchIsPartial = research?.analysisStatus === ANALYSIS_STATUS.PARTIAL;
   const verifiedMarkets = (safeParsed.mercados_sugeridos || []).slice(0, 3).map((market) => {
