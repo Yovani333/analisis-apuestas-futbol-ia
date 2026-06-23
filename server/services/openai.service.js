@@ -38,10 +38,58 @@ function enforceEstimatedXgLanguage(value, type = "estimated") {
   const xgLabel = historical ? "xG histórico estimado" : "xG estimado";
   const xgaLabel = historical ? "xGA histórico estimado" : "xGA estimado";
   const dataLabel = historical ? "datos históricos estimados de xG" : "datos estimados de xG";
-  return value
+  let normalized = value
     .replace(/\bxGA\s+oficial\b/gi, xgaLabel)
     .replace(/\bxG\s+oficial\b/gi, xgLabel)
     .replace(/\bdatos? oficiales? de xG\b/gi, dataLabel);
+  if (historical) {
+    normalized = normalized
+      .replace(/\bxG\/xGA\s+del partido actual\b/gi, "xG/xGA histórico estimado")
+      .replace(/\bxG\s+del partido actual\b/gi, "xG histórico estimado")
+      .replace(/\bxGA\s+del partido actual\b/gi, "xGA histórico estimado");
+  }
+  return normalized;
+}
+
+function xgCanonicalNote(xg = {}) {
+  if (xg.status === "not_available" || xg.type === "not_available") {
+    return "No hay información suficiente para calcular o reportar xG/xGA responsablemente.";
+  }
+  if (xg.type === "historical_estimated") {
+    const confidence = xg.confidenceLabel === "low"
+      ? " La confianza es baja y solo puede usarse como referencia secundaria."
+      : xg.confidenceLabel === "medium" ? " La confianza es media y debe interpretarse con cautela." : "";
+    const worldCup = String(xg.warning || "").includes("Modo Mundial")
+      ? " Modo Mundial: la muestra estadística es limitada." : "";
+    return `xG/xGA histórico estimado calculado con partidos anteriores de cada equipo; no requiere H2H y no corresponde al partido actual ni a xG oficial.${confidence}${worldCup}`;
+  }
+  if (xg.type === "fixture_estimated" || xg.type === "estimated") {
+    const confidence = xg.confidenceLabel === "low"
+      ? " La confianza es baja y solo puede usarse como referencia secundaria."
+      : xg.confidenceLabel === "medium" ? " La confianza es media y debe interpretarse con cautela." : "";
+    return `xG/xGA estimado del partido calculado internamente con estadísticas del fixture desde API-Football; no corresponde a xG oficial.${confidence}`;
+  }
+  if (xg.type === "official") {
+    return `xG/xGA oficial atribuido a ${xg.source || "la fuente especializada indicada"}.`;
+  }
+  return "";
+}
+
+function enforceXgAnalysisSummary(parsed, xg) {
+  if (!parsed?.analisis_cuantitativo || !xg) return parsed;
+  const canonical = xgCanonicalNote(xg);
+  if (!canonical) return parsed;
+  const current = String(parsed.analisis_cuantitativo.xg_xga || "").trim();
+  const replaceModelText = xg.status === "not_available"
+    || xg.type === "not_available"
+    || (["historical_estimated", "fixture_estimated", "estimated"].includes(xg.type) && xg.confidenceLabel === "low");
+  return {
+    ...parsed,
+    analisis_cuantitativo: {
+      ...parsed.analisis_cuantitativo,
+      xg_xga: !replaceModelText && current && !current.includes(canonical) ? `${current} ${canonical}` : canonical
+    }
+  };
 }
 
 export function applyResearchGuardrails(parsed, dataset) {
@@ -52,9 +100,10 @@ export function applyResearchGuardrails(parsed, dataset) {
     ? neutralizeVenueLanguage(parsed, research.homeTeam?.name || "equipo 1", research.awayTeam?.name || "equipo 2")
     : parsed;
   const estimatedTypes = new Set(["estimated", "historical_estimated", "fixture_estimated"]);
-  const safeParsed = estimatedTypes.has(research?.xgXga?.type)
+  const languageSafe = estimatedTypes.has(research?.xgXga?.type)
     ? enforceEstimatedXgLanguage(venueSafe, research.xgXga.type)
     : venueSafe;
+  const safeParsed = enforceXgAnalysisSummary(languageSafe, research?.xgXga);
   const researchBlocksMarkets = research?.analysisStatus === ANALYSIS_STATUS.NEEDS_REVIEW;
   const researchIsPartial = research?.analysisStatus === ANALYSIS_STATUS.PARTIAL;
   const verifiedMarkets = (safeParsed.mercados_sugeridos || []).slice(0, 3).map((market) => {
@@ -93,11 +142,17 @@ export function applyResearchGuardrails(parsed, dataset) {
         criticalMissingData: research.criticalMissingData,
         missingData: research.missingData,
         xgXga: research.xgXga ? {
+          status: research.xgXga.status,
           type: research.xgXga.type,
+          source: research.xgXga.source,
+          scope: research.xgXga.scope,
           modelVersion: research.xgXga.modelVersion,
           confidenceScore: research.xgXga.confidenceScore,
           confidenceLabel: research.xgXga.confidenceLabel,
-          analysisUse: research.xgXga.analysisUse
+          analysisUse: research.xgXga.analysisUse,
+          sampleSize: research.xgXga.sampleSize ?? null,
+          missingFields: research.xgXga.missingFields || [],
+          warning: research.xgXga.warning || ""
         } : null
       } : null
     }

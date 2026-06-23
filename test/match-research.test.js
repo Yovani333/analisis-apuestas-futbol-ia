@@ -387,6 +387,70 @@ test("las guardas corrigen cualquier mención de xG oficial cuando es estimado",
   assert.doesNotMatch(JSON.stringify(guarded), /dato oficial de xG/i);
 });
 
+test("las guardas identifican el histórico estimado y su confianza baja", () => {
+  const researchData = normalizeMatchResearchData(datasetFixture());
+  researchData.xgXga = {
+    status: "partial", type: "historical_estimated", source: "api-football-internal-model",
+    scope: "previous_matches", confidenceLabel: "low", sampleSize: 2,
+    warning: "Modo Mundial: muestra estadística limitada.", analysisUse: "pre_match_context"
+  };
+  const guarded = applyResearchGuardrails({
+    estado_analisis: "Necesita revisión", datos_faltantes: [],
+    resumen_partido: "El xG del partido actual favorece al equipo.",
+    analisis_cuantitativo: { xg_xga: "El xG oficial confirma una ventaja fuerte." },
+    mercados_sugeridos: [], apto_para_parlay: { respuesta: "No", razonamiento: "" }
+  }, { researchData, dataQuality: { canSuggest: false }, preMatch: {}, marketAnalysis: [] });
+  assert.match(guarded.resumen_partido, /xG histórico estimado/);
+  assert.match(guarded.analisis_cuantitativo.xg_xga, /no requiere H2H/i);
+  assert.match(guarded.analisis_cuantitativo.xg_xga, /referencia secundaria/i);
+  assert.match(guarded.analisis_cuantitativo.xg_xga, /Modo Mundial/i);
+  assert.doesNotMatch(JSON.stringify(guarded), /xG oficial confirma/i);
+});
+
+test("las guardas describen fixture estimado con confianza media y fuente interna", () => {
+  const researchData = normalizeMatchResearchData(datasetFixture());
+  researchData.xgXga = {
+    status: "partial", type: "fixture_estimated", source: "api-football-internal-model",
+    scope: "current_fixture", confidenceLabel: "medium", analysisUse: "live_match_context_only"
+  };
+  const guarded = applyResearchGuardrails({
+    estado_analisis: "Necesita revisión", datos_faltantes: [],
+    analisis_cuantitativo: { xg_xga: "" }, mercados_sugeridos: [],
+    apto_para_parlay: { respuesta: "No", razonamiento: "" }
+  }, { researchData, dataQuality: { canSuggest: false }, preMatch: {}, marketAnalysis: [] });
+  assert.match(guarded.analisis_cuantitativo.xg_xga, /estimado del partido/i);
+  assert.match(guarded.analisis_cuantitativo.xg_xga, /API-Football/);
+  assert.match(guarded.analisis_cuantitativo.xg_xga, /confianza es media/i);
+});
+
+test("las guardas no permiten inferir xG cuando el módulo no está disponible", () => {
+  const researchData = normalizeMatchResearchData(datasetFixture());
+  researchData.xgXga = {
+    status: "not_available", type: "not_available", source: "",
+    confidenceLabel: "not_available", analysisUse: "pre_match_context"
+  };
+  const guarded = applyResearchGuardrails({
+    estado_analisis: "Necesita revisión", datos_faltantes: [],
+    analisis_cuantitativo: { xg_xga: "Por los goles, el xG debe ser 2.5." },
+    mercados_sugeridos: [], apto_para_parlay: { respuesta: "No", razonamiento: "" }
+  }, { researchData, dataQuality: { canSuggest: false }, preMatch: {}, marketAnalysis: [] });
+  assert.match(guarded.analisis_cuantitativo.xg_xga, /No hay información suficiente/i);
+});
+
+test("las guardas conservan la atribución cuando el xG sí es oficial", () => {
+  const researchData = normalizeMatchResearchData(datasetFixture());
+  researchData.xgXga = {
+    status: "available", type: "official", source: "fbref",
+    confidenceLabel: "", analysisUse: "pre_match_context"
+  };
+  const guarded = applyResearchGuardrails({
+    estado_analisis: "Completo", datos_faltantes: [],
+    analisis_cuantitativo: { xg_xga: "Dato publicado por la fuente." },
+    mercados_sugeridos: [], apto_para_parlay: { respuesta: "No", razonamiento: "" }
+  }, { researchData, dataQuality: { canSuggest: false }, preMatch: {}, marketAnalysis: [] });
+  assert.match(guarded.analisis_cuantitativo.xg_xga, /oficial atribuido a fbref/i);
+});
+
 test("OpenAI no puede convertir un research parcial en análisis completo", () => {
   const researchData = normalizeMatchResearchData(datasetFixture());
   researchData.analysisStatus = ANALYSIS_STATUS.PARTIAL;

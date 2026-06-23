@@ -60,6 +60,8 @@ El tipo `historical_estimated` es contexto prepartido y muestra los fixtures usa
 
 Por seguridad temporal, las estadísticas del mismo fixture no sustituyen el histórico prepartido: en vivo se etiquetan `live_match_context_only` y tras finalizar se consideran `post_match_audit_only`. La interfaz muestra los datos base usados, campos faltantes y notas de revisión. OpenAI recibe el tipo, confianza, versión y advertencia, y no puede presentarlas como información oficial ni como base fuerte cuando la confianza es baja.
 
+La respuesta de OpenAI pasa por guardas deterministas antes de mostrarse. El servidor corrige menciones incorrectas de “xG oficial”, añade una descripción canónica según `official`, `historical_estimated`, `fixture_estimated` o `not_available`, reemplaza cualquier inferencia cuando no existen datos y limita el histórico o fixture estimado de confianza baja a referencia secundaria. En modo Mundial también conserva la advertencia de muestra limitada.
+
 `buildOpenAIPromptFromMatchData()` alimenta el flujo activo de OpenAI exclusivamente con `researchData`. OpenAI no recibe respuestas crudas del proveedor. Después de validar la respuesta estructurada, el servidor vuelve a imponer el estado de confianza, los datos faltantes y los cálculos deterministas, por lo que el modelo no puede convertir un estudio parcial en completo ni sustituir probabilidades, cuotas justas o valor esperado.
 
 También existe una ruta específica para consultar la investigación sin generar análisis ni consumir créditos de OpenAI: `GET /api/fixtures/:fixtureId/research`. Puede añadirse `?refresh=true` para invalidar la caché del fixture y solicitar datos actualizados a API-Football; esta operación está limitada para proteger el cupo del proveedor.

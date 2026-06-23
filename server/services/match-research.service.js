@@ -602,17 +602,21 @@ La respuesta debe mantener la advertencia de juego responsable.
 export const XG_ANALYSIS_RULES = `
 El módulo xG/xGA puede contener datos oficiales, históricos estimados, estimados del fixture actual o no disponibles.
 Si type es official, atribuye el dato a la fuente indicada sin aumentar su nivel de confianza.
+Solo usa la palabra "oficial" cuando type es official y conserva la atribución a source.
 Si type es historical_estimated, llámalo siempre "xG/xGA histórico estimado".
 Explica que se calculó con partidos anteriores de cada equipo y que no requiere que los equipos hayan jugado entre sí.
 Nunca lo presentes como xG oficial ni como xG del partido actual.
-Si type es estimated o fixture_estimated, llámalo siempre "xG/xGA estimado del partido".
+Si type es fixture_estimated, llámalo siempre "xG/xGA estimado del partido".
 Indica que fue calculado internamente con estadísticas del fixture disponibles en API-Football. Nunca lo presentes como xG oficial.
 Si confidenceLabel es low, úsalo únicamente como referencia secundaria y nunca como base principal del pronóstico.
 Si confidenceLabel es medium, reconoce expresamente sus limitaciones.
+Si confidenceLabel es high, no lo describas como seguro, exacto ni suficiente por sí solo.
 No generes picks fuertes basándote únicamente en el xG/xGA estimado, cualquiera que sea su confianza.
 Si analysisUse es live_match_context_only, no describas el dato como información prepartido.
 Si analysisUse es post_match_audit_only, no lo uses para justificar una predicción prepartido.
-Si status es not_available, indica que no existe información suficiente. No inventes ni redondees valores de forma engañosa.
+Si status es not_available, indica que no existe información suficiente y no infieras valores desde goles u otros resultados.
+Si warning contiene "Modo Mundial", menciona que la muestra es limitada, reduce el peso de H2H y usa el histórico estimado solo como referencia parcial.
+No inventes valores, no completes campos faltantes y no redondees de forma engañosa.
 `;
 
 export function buildOpenAIPromptFromMatchData(matchData) {
