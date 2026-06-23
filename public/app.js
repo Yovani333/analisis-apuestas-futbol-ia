@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-dashboard-flow";
-import { footballDataService } from "./services.js?v=20260623-dashboard-flow";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-xg-fixture";
+import { footballDataService } from "./services.js?v=20260623-xg-fixture";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -401,7 +401,7 @@ function renderResearchModuleDetail(moduleKey, research) {
       ? "xG/xGA histórico estimado calculado con partidos anteriores de cada equipo. No requiere enfrentamiento directo entre ambos equipos. No corresponde a xG oficial ni al xG del partido actual."
       : "xG/xGA estimado calculado internamente con estadísticas del partido desde API-Football. No corresponde a xG oficial.";
     const metadata = estimated
-      ? `<div class="detail-note detail-note--info"><strong>API-Football + modelo interno · ${escapeHtml(module.modelVersion || "estimated-xg-v1")}</strong><span>${escapeHtml(mandatoryText)}</span></div>
+      ? `<div class="detail-note detail-note--info"><strong>API-Football + modelo interno · ${escapeHtml(module.modelVersion || (historicalEstimated ? "historical-estimated-xg-v1" : "fixture-estimated-xg-v1"))}</strong><span>${escapeHtml(mandatoryText)}</span></div>
         ${module.missingFields?.length ? `<div class="detail-note"><strong>Datos faltantes</strong><span>${escapeHtml(module.missingFields.join(", "))}</span></div>` : ""}
         ${module.notes?.length ? `<div class="detail-note"><strong>Notas de revisión</strong><span>${escapeHtml(module.notes.join(" "))}</span></div>` : ""}`
       : "";
@@ -415,10 +415,26 @@ function renderResearchModuleDetail(moduleKey, research) {
         displayValue(fixture.estimatedXGA)
       ]))
       : [];
+    const rawStatLabels = {
+      totalShots: "Tiros totales", shotsOnGoal: "Tiros a puerta", shotsOffGoal: "Tiros fuera",
+      shotsInsideBox: "Tiros dentro del área", shotsOutsideBox: "Tiros fuera del área",
+      blockedShots: "Tiros bloqueados", cornerKicks: "Corners", ballPossession: "Posesión",
+      goalkeeperSaves: "Atajadas", penalties: "Penales detectados", dangerousAttacks: "Ataques peligrosos"
+    };
+    const rawStats = !historicalEstimated && estimated && module.rawStats
+      ? `<section class="detail-section"><h3>Datos base usados</h3>${detailTable(
+        ["Dato", research.homeTeam.name, research.awayTeam.name],
+        Object.entries(rawStatLabels).map(([key, label]) => [
+          escapeHtml(label),
+          displayValue(module.rawStats.home?.[key]),
+          displayValue(module.rawStats.away?.[key])
+        ])
+      )}</section>`
+      : "";
     const fixtures = fixtureRows.length
       ? `<section class="detail-section"><h3>Partidos usados</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "xG estimado", "xGA estimado"], fixtureRows)}</section>`
       : "";
-    content = `${metadata}${teams}${fixtures}`;
+    content = `${metadata}${teams}${rawStats}${fixtures}`;
   } else if (moduleKey === "weatherPitch") {
     content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación verificada", module.matchedLocation], ["Cancha", module.pitchNotes]])}`;
   }

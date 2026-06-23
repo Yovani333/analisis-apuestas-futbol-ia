@@ -35,14 +35,28 @@ test("normaliza porcentajes, vacíos y rechaza valores negativos", () => {
   assert.equal(normalizeNonNegativeNumber(-1), null);
 });
 
-test("calcula xG y xGA estimados con estadísticas completas", () => {
-  const result = buildEstimatedXgFromDataset(dataset(complete, { ...complete, totalShots: 10, shotsOnGoal: 4 }));
+test("partido en vivo con estadísticas completas calcula xG/xGA del fixture", () => {
+  const live = dataset(complete, { ...complete, totalShots: 10, shotsOnGoal: 4 });
+  live.fixture.status = "live";
+  const result = buildEstimatedXgFromDataset(live);
   assert.equal(result.status, "available");
-  assert.equal(result.type, "estimated");
+  assert.equal(result.type, "fixture_estimated");
+  assert.equal(result.scope, "current_fixture");
+  assert.equal(result.modelVersion, "fixture-estimated-xg-v1");
   assert.equal(result.homeTeam.estimatedXGA, result.awayTeam.estimatedXG);
   assert.equal(result.awayTeam.estimatedXGA, result.homeTeam.estimatedXG);
   assert.equal(result.confidence.label, "high");
   assert.match(result.warning, /No corresponde a xG oficial/);
+});
+
+test("partido finalizado con estadísticas completas conserva el cálculo del fixture", () => {
+  const finished = dataset(complete, { ...complete, totalShots: 9, shotsOnGoal: 3 });
+  finished.fixture.status = "finished";
+  const result = buildEstimatedXgFromDataset(finished);
+  assert.equal(result.status, "available");
+  assert.equal(result.type, "fixture_estimated");
+  assert.equal(result.scope, "current_fixture");
+  assert.ok(Number.isFinite(result.awayTeam.estimatedXG));
 });
 
 test("marca parcial cuando faltan tiros dentro y fuera del área", () => {
@@ -79,6 +93,22 @@ test("suma 0.76 por un penal detectado", () => {
   assert.equal(result.homeTeam.estimatedXG, Number((base + 0.76).toFixed(2)));
 });
 
+test("un penal fallado también suma 0.76 al xG estimado", () => {
+  const base = calculateEstimatedXG({ totalShots: 10, shotsOnGoal: 4, penalties: 0 });
+  const result = buildEstimatedXgFromDataset(dataset(
+    { totalShots: 10, shotsOnGoal: 4 }, { totalShots: 10, shotsOnGoal: 4 },
+    [{ team: { id: 1 }, type: "Goal", detail: "Missed Penalty" }]
+  ));
+  assert.equal(result.homeTeam.rawStats.penalties, 1);
+  assert.equal(result.homeTeam.estimatedXG, Number((base + 0.76).toFixed(2)));
+});
+
+test("sin eventos de penal agrega la nota obligatoria", () => {
+  const result = buildEstimatedXgFromDataset(dataset(complete, complete, []));
+  assert.equal(result.homeTeam.rawStats.penalties, 0);
+  assert.match(result.confidence.notes.join(" "), /No se detectaron eventos de penal/);
+});
+
 test("solo tiros totales y a puerta produce confianza baja", () => {
   const sparse = { totalShots: 8, shotsOnGoal: 3 };
   const result = buildEstimatedXgFromDataset(dataset(sparse, sparse));
@@ -88,6 +118,13 @@ test("solo tiros totales y a puerta produce confianza baja", () => {
 
 test("0 tiros produce xG 0 cuando no existen penales", () => {
   assert.equal(calculateEstimatedXG({ totalShots: 0, shotsOnGoal: 0, penalties: 0 }), 0);
+});
+
+test("no calcula usando únicamente goles cuando faltan tiros", () => {
+  const result = buildEstimatedXgFromDataset(dataset({}, {}));
+  assert.equal(result.status, "not_available");
+  assert.equal(result.homeTeam.estimatedXG, null);
+  assert.equal(result.awayTeam.estimatedXG, null);
 });
 
 test("estadísticas infladas generan una nota de revisión", () => {

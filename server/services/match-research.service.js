@@ -341,8 +341,9 @@ export function getXgXgaData(dataset) {
   if (canUseCurrentFixtureEstimate && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(estimated?.status)) {
     return {
       ...moduleBase(estimated.status, estimated.updatedAt || dataset.fetchedAt, "api-football-internal-model",
-        "xG/xGA estimado con estadísticas del mismo fixture; no corresponde a xG oficial."),
-      type: "estimated",
+        "Calculado con estadísticas del fixture actual."),
+      type: "fixture_estimated",
+      scope: "current_fixture",
       homeXG: estimated.homeTeam.estimatedXG,
       homeXGA: estimated.homeTeam.estimatedXGA,
       awayXG: estimated.awayTeam.estimatedXG,
@@ -355,6 +356,7 @@ export function getXgXgaData(dataset) {
       homeConfidence: estimated.homeTeam.confidence,
       awayConfidence: estimated.awayTeam.confidence,
       missingFields: estimated.confidence.missingFields,
+      notes: estimated.confidence.notes,
       warning: estimated.warning,
       rawStats: { home: estimated.homeTeam.rawStats, away: estimated.awayTeam.rawStats },
       analysisUse: dataset.fixture.status === "finished" ? "post_match_audit_only" : "live_match_context_only"

@@ -1,4 +1,4 @@
-const MODEL_VERSION = "estimated-xg-v1";
+const MODEL_VERSION = "fixture-estimated-xg-v1";
 
 function value(stats, key) {
   return Number.isFinite(stats?.[key]) ? stats[key] : 0;

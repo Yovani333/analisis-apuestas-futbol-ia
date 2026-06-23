@@ -284,10 +284,12 @@ test("integra xG estimado del mismo fixture únicamente cuando el partido inici�
   ];
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
   const normalized = normalizeMatchResearchData(dataset);
-  assert.equal(normalized.xgXga.type, "estimated");
+  assert.equal(normalized.xgXga.type, "fixture_estimated");
+  assert.equal(normalized.xgXga.scope, "current_fixture");
   assert.equal(normalized.xgXga.source, "api-football-internal-model");
   assert.equal(normalized.xgXga.analysisUse, "live_match_context_only");
-  assert.equal(normalized.xgXga.modelVersion, "estimated-xg-v1");
+  assert.equal(normalized.xgXga.modelVersion, "fixture-estimated-xg-v1");
+  assert.match(normalized.xgXga.message, /fixture actual/i);
   assert.match(normalized.xgXga.warning, /No corresponde a xG oficial/);
   assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["API-Football + modelo interno"]);
 });
@@ -369,12 +371,12 @@ test("el prompt explica el tratamiento obligatorio del xG estimado", () => {
   const prompt = buildOpenAIPromptFromMatchData(normalizeMatchResearchData(dataset));
   assert.match(prompt.instructions, /llámalo siempre "xG\/xGA estimado del partido"/);
   assert.match(prompt.instructions, /live_match_context_only/);
-  assert.match(prompt.input, /estimated-xg-v1/);
+  assert.match(prompt.input, /fixture-estimated-xg-v1/);
 });
 
 test("las guardas corrigen cualquier mención de xG oficial cuando es estimado", () => {
   const researchData = normalizeMatchResearchData(datasetFixture());
-  researchData.xgXga = { type: "estimated", confidenceLabel: "medium", analysisUse: "live_match_context_only" };
+  researchData.xgXga = { type: "fixture_estimated", confidenceLabel: "medium", analysisUse: "live_match_context_only" };
   const guarded = applyResearchGuardrails({
     estado_analisis: "Necesita revisión", datos_faltantes: [],
     resumen_partido: "El xG oficial favorece al equipo.", mercados_sugeridos: [],
