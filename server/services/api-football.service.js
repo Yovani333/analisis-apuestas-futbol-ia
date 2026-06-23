@@ -295,10 +295,14 @@ export async function getFixtureResult(fixtureId) {
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const row = fixtureRows[0];
   if (!row) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
+  const shortStatus = row.fixture.status?.short || "TBD";
   return {
     fixtureId: String(row.fixture.id),
-    status: row.fixture.status?.short || "TBD",
-    finished: ["FT", "AET", "PEN"].includes(row.fixture.status?.short),
+    status: shortStatus,
+    statusLabel: statusLabel(shortStatus),
+    appStatus: fixtureStatus(shortStatus),
+    elapsed: row.fixture.status?.elapsed ?? null,
+    finished: ["FT", "AET", "PEN"].includes(shortStatus),
     goals: { home: row.goals?.home ?? null, away: row.goals?.away ?? null },
     date: row.fixture.date,
     home: row.teams?.home?.name,

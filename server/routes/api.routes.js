@@ -46,7 +46,8 @@ apiRouter.get("/fixtures", requireLiveMode, asyncRoute(async (req, res) => {
 }));
 
 apiRouter.get("/fixtures/:fixtureId", requireLiveMode, asyncRoute(async (req, res) => {
-  res.json(await getFixtureDataset(parseFixtureId(req.params.fixtureId)));
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
+  res.json(await getFixtureDataset(parseFixtureId(req.params.fixtureId), { forceRefresh }));
 }));
 
 const researchLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });

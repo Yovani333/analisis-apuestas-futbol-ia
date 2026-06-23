@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260622-layout-updates";
-import { footballDataService } from "./services.js?v=20260622-layout-updates";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-dashboard-flow";
+import { footballDataService } from "./services.js?v=20260623-dashboard-flow";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -222,20 +222,48 @@ function renderFixtureData() {
   const venueLabel = fixture.neutralVenue ? " · Sede neutral; equipo 1 y equipo 2" : "";
   elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT · ${sourceLabel}${escapeHtml(venueLabel)}${escapeHtml(qualityLabel)}</span>`;
   updateAnalysisActionState();
-  elements.dataGrid.innerHTML = DATA_CATEGORIES.map((category) => {
-    const moduleKey = CATEGORY_TO_RESEARCH_MODULE[category.key];
-    const researchModule = fixture.researchData?.[moduleKey];
-    const status = researchModule ? researchStatusLabel(researchModule.status) : fixture.dataAvailability[category.key] || "No disponible";
-    const source = researchModule?.source ? researchSourceLabel(moduleKey, researchModule) : "API-Football";
-    return `
-    <button class="data-card" type="button" data-category="${escapeHtml(category.key)}" aria-label="Ver detalle de ${escapeHtml(category.label)}">
-      <h3>${escapeHtml(category.label)}</h3>
-      ${statusBadge(status)}
-      <small>${escapeHtml(source)}</small>
-      <span class="data-card__action">Ver detalle <span aria-hidden="true">→</span></span>
-    </button>`;
-  }).join("");
+  renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
+}
+
+function renderCoverageTable(fixture) {
+  const coverageRows = new Map((fixture.researchData?.sourceCoverage || []).map((row) => [row.moduleKey, row]));
+  elements.dataGrid.innerHTML = `
+    <div class="detail-table-wrap coverage-table-wrap">
+      <table class="detail-table coverage-table">
+        <thead>
+          <tr>
+            <th>Dato</th>
+            <th>Estado</th>
+            <th>Fuente principal</th>
+            <th>Respaldo</th>
+            <th>Fuente activa</th>
+            <th>Actualización</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${DATA_CATEGORIES.map((category) => {
+            const moduleKey = CATEGORY_TO_RESEARCH_MODULE[category.key];
+            const researchModule = fixture.researchData?.[moduleKey];
+            const coverage = coverageRows.get(moduleKey);
+            const status = researchModule ? researchStatusLabel(researchModule.status) : fixture.dataAvailability[category.key] || "No disponible";
+            const primary = coverage?.primarySources?.join(" / ") || "API-Football";
+            const backup = coverage?.secondarySources?.join(" / ") || "Sin respaldo activo";
+            const active = coverage?.activeSources?.join(" / ") || (researchModule?.source ? researchSourceLabel(moduleKey, researchModule) : "Ninguna");
+            return `<tr>
+              <td><strong>${escapeHtml(category.label)}</strong></td>
+              <td>${statusBadge(status)}</td>
+              <td>${escapeHtml(primary)}</td>
+              <td>${escapeHtml(backup)}</td>
+              <td>${escapeHtml(active)}</td>
+              <td>${escapeHtml(formatUpdatedAt(researchModule?.updatedAt || coverage?.updatedAt))}</td>
+              <td><button class="button button--secondary button--compact" type="button" data-category="${escapeHtml(category.key)}">Ver datos</button></td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 function updateAnalysisActionState() {
@@ -850,11 +878,12 @@ async function refreshFixtureStatuses() {
     state.fixtures = state.fixtures.map((fixture) => {
       const result = byId.get(String(fixture.id));
       if (!result) return fixture;
-      const live = !result.finished && ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(result.status);
       return {
         ...fixture,
-        status: result.finished ? "finished" : live ? "live" : fixture.status,
-        statusLabel: result.finished ? "Completo" : live ? "En vivo" : fixture.statusLabel,
+        status: result.appStatus || fixture.status,
+        statusLabel: result.statusLabel || fixture.statusLabel,
+        statusShort: result.status || fixture.statusShort,
+        elapsed: result.elapsed ?? fixture.elapsed,
         score: result.goals || fixture.score
       };
     });
@@ -875,13 +904,21 @@ async function refreshResearchData() {
   elements.refreshResearch.disabled = true;
   elements.refreshResearch.textContent = "Actualizando…";
   try {
-    const researchData = await footballDataService.getResearchData(fixture.id, true);
+    const detailedFixture = await footballDataService.getFixtureData(fixture, true);
     const fixtureIndex = state.fixtures.findIndex((item) => item.id === fixture.id);
-    if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = { ...state.fixtures[fixtureIndex], researchData };
-    renderResearchData(researchData);
-    showNotice("Datos de investigación actualizados desde API-Football.");
+    if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
+    renderFixtureData();
+    showNotice("Cobertura y fuentes actualizadas desde API-Football.");
   } catch (error) {
-    showNotice(error.message || "No fue posible actualizar la investigación.");
+    try {
+      const researchData = await footballDataService.getResearchData(fixture.id, true);
+      const fixtureIndex = state.fixtures.findIndex((item) => item.id === fixture.id);
+      if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = { ...state.fixtures[fixtureIndex], researchData };
+      renderFixtureData();
+      showNotice("Fuentes actualizadas; algunos datos del partido no se pudieron refrescar.");
+    } catch {
+      showNotice(error.message || "No fue posible actualizar la investigación.");
+    }
   } finally {
     state.isRefreshingResearch = false;
     elements.refreshResearch.disabled = !selectedFixture()?.researchData;
@@ -971,6 +1008,8 @@ elements.researchGrid.addEventListener("click", (event) => {
   if (button) openResearchDetail(button.dataset.researchModule);
 });
 elements.refreshResearch.addEventListener("click", refreshResearchData);
+elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
+elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.dataDialogClose.addEventListener("click", () => elements.dataDialog.close());
 elements.dataDialog.addEventListener("click", (event) => {
   if (event.target === elements.dataDialog) elements.dataDialog.close();

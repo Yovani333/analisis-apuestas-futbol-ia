@@ -65,7 +65,6 @@ export const SOURCE_DEFINITIONS = Object.freeze({
 });
 
 export const MODULE_SOURCE_PLAN = Object.freeze([
-  { module: "calendar", label: "Calendario", primary: ["apiFootball"], secondary: ["sofaScore", "oddspedia"] },
   { module: "statsForm", label: "Estadísticas / forma", primary: ["sofaScore"], secondary: ["apiFootball"] },
   { module: "h2h", label: "Head to head", primary: ["apiFootball"], secondary: ["soccerway", "sofaScore", "oddspedia"] },
   { module: "standings", label: "Clasificación", primary: ["apiFootball"], secondary: ["soccerway", "sofaScore"] },

@@ -1,4 +1,4 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260622-layout-updates";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-dashboard-flow";
 
 const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
@@ -77,10 +77,11 @@ export const footballDataService = {
     return payload.fixtures.map((fixture) => ({ ...fixture, dataSource: "api-football" }));
   },
 
-  async getFixtureData(fixture) {
+  async getFixtureData(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return fixture;
-    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}`);
+    const query = refresh ? "?refresh=true" : "";
+    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}${query}`);
     return {
       ...fixture,
       ...payload.fixture,

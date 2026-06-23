@@ -87,7 +87,7 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.sources.apiFootball.status, "available");
   assert.equal(normalized.sources.sofaScore.status, "not_configured");
   assert.equal(normalized.sources.oddspedia.status, "blocked");
-  assert.equal(normalized.sourceCoverage.length, 10);
+  assert.equal(normalized.sourceCoverage.length, 9);
   const oddsCoverage = normalized.sourceCoverage.find((item) => item.module === "odds");
   assert.deepEqual(oddsCoverage.primarySources, ["Oddspedia"]);
   assert.deepEqual(oddsCoverage.activeSources, ["API-Football"]);
