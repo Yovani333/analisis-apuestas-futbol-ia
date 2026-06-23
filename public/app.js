@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260622-estimated-xg";
-import { footballDataService } from "./services.js?v=20260622-estimated-xg";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260622-layout-updates";
+import { footballDataService } from "./services.js?v=20260622-layout-updates";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -14,7 +14,8 @@ const state = {
   hasSearched: false,
   isSearching: false,
   isAnalyzing: false,
-  isRefreshingResearch: false
+  isRefreshingResearch: false,
+  isRefreshingStatuses: false
 };
 
 const elements = {
@@ -28,6 +29,7 @@ const elements = {
   filterError: document.querySelector("#filter-error"),
   searchFeedback: document.querySelector("#search-feedback"),
   matchCount: document.querySelector("#match-count"),
+  refreshFixtureStatuses: document.querySelector("#refresh-fixture-statuses"),
   matchesList: document.querySelector("#matches-list"),
   selectedSummary: document.querySelector("#selected-match-summary"),
   dataStatus: document.querySelector("#data-overall-status"),
@@ -43,6 +45,7 @@ const elements = {
   dataDialogClose: document.querySelector("#data-detail-close"),
   analysisStatus: document.querySelector("#analysis-status"),
   analysisContent: document.querySelector("#analysis-content"),
+  generateSelectedAnalysis: document.querySelector("#generate-selected-analysis"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -90,6 +93,11 @@ const RESEARCH_MODULES = Object.freeze([
   { key: "h2h", label: "Head to head" },
   { key: "weatherPitch", label: "Clima / cancha" }
 ]);
+
+const CATEGORY_TO_RESEARCH_MODULE = Object.freeze({
+  standings: "standings", statistics: "statsForm", h2h: "h2h", injuries: "injuriesSuspensions",
+  lineups: "lineups", odds: "odds", xg: "xgXga", context: "contextCalendar", weather: "weatherPitch"
+});
 
 const SUPPORTING_MODULES = Object.freeze([
   { key: "teamSeasonStatistics", label: "Estadísticas de temporada", use: "Contexto prepartido" },
@@ -145,6 +153,7 @@ function formatDate(isoDate) {
 
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
+  elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
 
   if (!state.fixtures.length) {
     elements.matchesList.innerHTML = `<div class="empty-results">${state.hasSearched ? "No se encontraron partidos para los filtros seleccionados." : "Selecciona una liga y un rango de fechas para buscar partidos."}</div>`;
@@ -181,7 +190,7 @@ function renderMatches() {
               ${fixture.status === "live" && fixture.elapsed !== null ? `<small>${escapeHtml(fixture.elapsed)} minutos</small>` : ""}
             </div>
             <div class="match-card__actions">
-              <button class="button button--secondary" type="button" data-action="view" ${isFinished ? 'disabled title="Partido finalizado"' : ""}>Ver datos</button>
+              <button class="button button--secondary" type="button" data-action="view">Ver datos</button>
               <button class="button button--primary" type="button" data-action="analyze" ${isFinished ? 'disabled title="Partido finalizado"' : ""}>Generar análisis IA</button>
             </div>
           </article>`;
@@ -212,14 +221,28 @@ function renderFixtureData() {
   const qualityLabel = fixture.dataQuality ? ` · Calidad ${fixture.dataQuality.level} ${fixture.dataQuality.score}/100` : "";
   const venueLabel = fixture.neutralVenue ? " · Sede neutral; equipo 1 y equipo 2" : "";
   elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT · ${sourceLabel}${escapeHtml(venueLabel)}${escapeHtml(qualityLabel)}</span>`;
-  elements.dataGrid.innerHTML = DATA_CATEGORIES.map((category) => `
+  updateAnalysisActionState();
+  elements.dataGrid.innerHTML = DATA_CATEGORIES.map((category) => {
+    const moduleKey = CATEGORY_TO_RESEARCH_MODULE[category.key];
+    const researchModule = fixture.researchData?.[moduleKey];
+    const status = researchModule ? researchStatusLabel(researchModule.status) : fixture.dataAvailability[category.key] || "No disponible";
+    const source = researchModule?.source ? researchSourceLabel(moduleKey, researchModule) : "API-Football";
+    return `
     <button class="data-card" type="button" data-category="${escapeHtml(category.key)}" aria-label="Ver detalle de ${escapeHtml(category.label)}">
       <h3>${escapeHtml(category.label)}</h3>
-      ${statusBadge(fixture.dataAvailability[category.key] || "No disponible")}
+      ${statusBadge(status)}
+      <small>${escapeHtml(source)}</small>
       <span class="data-card__action">Ver detalle <span aria-hidden="true">→</span></span>
-    </button>
-  `).join("");
+    </button>`;
+  }).join("");
   renderResearchData(fixture.researchData);
+}
+
+function updateAnalysisActionState() {
+  const fixture = selectedFixture();
+  const disabled = !fixture || fixture.status === "finished" || state.isAnalyzing;
+  elements.generateSelectedAnalysis.disabled = disabled;
+  elements.generateSelectedAnalysis.textContent = state.isAnalyzing ? "Procesando…" : "Generar análisis IA";
 }
 
 function researchStatusLabel(status) {
@@ -276,19 +299,6 @@ function renderResearchData(research) {
     </div>`;
   renderSourceCoverage(research);
 
-  const primaryCards = RESEARCH_MODULES.map(({ key, label }) => {
-    const module = research[key] || { status: "not_available" };
-    const displayLabel = key === "xgXga" && module.type === "estimated" ? "xG / xGA estimado" : label;
-    const status = researchStatusLabel(module.status);
-    const source = researchSourceLabel(key, module);
-    const message = module.message || (module.status === "available" ? "Datos encontrados y normalizados." : "Cobertura parcial; revisa el detalle.");
-    return `<article class="research-card research-card--${escapeHtml(module.status || "not_available")}">
-      <div class="research-card__heading"><h3>${escapeHtml(displayLabel)}</h3>${statusBadge(status)}</div>
-      <dl><div><dt>Fuente</dt><dd>${escapeHtml(source)}</dd></div><div><dt>Actualizado</dt><dd>${escapeHtml(formatUpdatedAt(module.updatedAt))}</dd></div></dl>
-      <p>${escapeHtml(message)}</p>
-      <div class="research-card__footer"><span>Aporta ${displayValue(research.moduleScores?.[key], 0)} puntos</span><button class="button button--secondary button--compact" type="button" data-research-module="${escapeHtml(key)}">Ver detalle</button></div>
-    </article>`;
-  }).join("");
   const supportingCards = SUPPORTING_MODULES.map(({ key, label, use }) => {
     const module = research.supportingData?.[key] || { status: "not_available", source: "api-football" };
     return `<article class="supporting-card">
@@ -297,7 +307,7 @@ function renderResearchData(research) {
       <button class="button button--secondary button--compact" type="button" data-supporting-module="${escapeHtml(key)}">Ver detalle</button>
     </article>`;
   }).join("");
-  elements.researchGrid.innerHTML = `${primaryCards}<section class="research-supporting"><div class="research-supporting__heading"><div><h3>Datos complementarios</h3><p>Amplían el contexto, pero no modifican por sí solos el puntaje de confianza.</p></div></div><div class="supporting-grid">${supportingCards}</div></section>`;
+  elements.researchGrid.innerHTML = `<section class="research-supporting"><div class="research-supporting__heading"><div><h3>Datos complementarios</h3><p>Los módulos principales se consultan desde la tabla de cobertura para evitar información duplicada.</p></div></div><div class="supporting-grid">${supportingCards}</div></section>`;
 }
 
 function renderSourceCoverage(research) {
@@ -508,10 +518,14 @@ function openDataDetail(categoryKey) {
   const fixture = selectedFixture();
   const category = DATA_CATEGORIES.find((item) => item.key === categoryKey);
   if (!fixture || !category) return;
-  const status = fixture.dataAvailability?.[categoryKey] || "No disponible";
+  const moduleKey = CATEGORY_TO_RESEARCH_MODULE[categoryKey];
+  const research = fixture.researchData;
+  const status = research?.[moduleKey] ? researchStatusLabel(research[moduleKey].status) : fixture.dataAvailability?.[categoryKey] || "No disponible";
   elements.dataDialogTitle.textContent = category.label;
   elements.dataDialogSubtitle.textContent = `${fixture.home} vs ${fixture.away} · ${status}`;
-  elements.dataDialogContent.innerHTML = categoryDetail(categoryKey, fixture);
+  elements.dataDialogContent.innerHTML = research?.[moduleKey]
+    ? renderResearchModuleDetail(moduleKey, research)
+    : categoryDetail(categoryKey, fixture);
   if (fixture.dataSource !== "api-football") {
     elements.dataDialogContent.insertAdjacentHTML("afterbegin", '<div class="detail-note"><strong>Modo demostración</strong><span>No existen datos reales detallados para este escenario sintético.</span></div>');
   }
@@ -811,6 +825,46 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
     elements.analysisContent.innerHTML = `<div class="empty-state"><h3>No se pudo generar el análisis</h3><p>${escapeHtml(error.message)}</p></div>`;
   } finally {
     state.isAnalyzing = false;
+    updateAnalysisActionState();
+  }
+}
+
+async function analyzeSelectedFixture() {
+  const fixture = selectedFixture();
+  if (!fixture || fixture.status === "finished" || state.isAnalyzing) return;
+  await selectFixture(fixture.id, true);
+}
+
+async function refreshFixtureStatuses() {
+  const apiFixtures = state.fixtures.filter((fixture) => fixture.dataSource === "api-football");
+  if (!apiFixtures.length || state.isRefreshingStatuses) return;
+  state.isRefreshingStatuses = true;
+  elements.refreshFixtureStatuses.disabled = true;
+  elements.refreshFixtureStatuses.textContent = "Actualizando…";
+  try {
+    const updates = await Promise.all(apiFixtures.map(async (fixture) => {
+      try { return { id: String(fixture.id), result: await footballDataService.getFixtureResult(fixture.id) }; }
+      catch { return { id: String(fixture.id), result: null }; }
+    }));
+    const byId = new Map(updates.filter((item) => item.result).map((item) => [item.id, item.result]));
+    state.fixtures = state.fixtures.map((fixture) => {
+      const result = byId.get(String(fixture.id));
+      if (!result) return fixture;
+      const live = !result.finished && ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(result.status);
+      return {
+        ...fixture,
+        status: result.finished ? "finished" : live ? "live" : fixture.status,
+        statusLabel: result.finished ? "Completo" : live ? "En vivo" : fixture.statusLabel,
+        score: result.goals || fixture.score
+      };
+    });
+    renderMatches();
+    if (selectedFixture()) renderFixtureData();
+    showNotice(`Estados actualizados: ${byId.size} de ${apiFixtures.length} partido(s).`);
+  } finally {
+    state.isRefreshingStatuses = false;
+    elements.refreshFixtureStatuses.textContent = "Actualizar estados";
+    renderMatches();
   }
 }
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260622-estimated-xg" />
+    <link rel="stylesheet" href="styles.css?v=20260622-layout-updates" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -48,7 +48,7 @@
             <p class="eyebrow">Filtros</p>
             <h2 id="filters-title">Selecciona ligas</h2>
           </div>
-          <span id="league-count" class="count-badge">0 de 6</span>
+          <span id="league-count" class="count-badge">0 de 7</span>
         </div>
 
         <form id="filters-form">
@@ -62,7 +62,7 @@
           <div class="field">
             <label for="season">Temporada</label>
             <select id="season" name="season">
-              <option value="2026">2026 (Copa Mundial)</option>
+              <option value="2026">2026 (Copa Mundial / Liga MX Apertura)</option>
               <option value="2024" selected>2024/2025</option>
               <option value="2023">2023/2024</option>
               <option value="2022">2022/2023</option>
@@ -105,6 +105,7 @@
             <h2 id="matches-title"><span aria-hidden="true">▣</span> Partidos encontrados</h2>
           </div>
           <span id="match-count" class="muted-text">0 partidos</span>
+          <button id="refresh-fixture-statuses" class="button button--secondary button--compact" type="button" disabled>Actualizar estados</button>
         </div>
 
         <div id="search-feedback" class="search-feedback" role="status" aria-live="polite"></div>
@@ -147,7 +148,10 @@
               <p class="eyebrow">Evaluación responsable</p>
               <h2 id="analysis-title"><span aria-hidden="true">✦</span> Análisis IA</h2>
             </div>
-            <span id="analysis-status" class="status-badge status-badge--unavailable">No disponible</span>
+            <div class="panel-actions">
+              <button id="generate-selected-analysis" class="button button--primary button--compact" type="button" disabled>Generar análisis IA</button>
+              <span id="analysis-status" class="status-badge status-badge--unavailable">No disponible</span>
+            </div>
           </div>
           <div id="analysis-content" aria-live="polite">
             <div class="empty-state">
@@ -216,6 +220,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260622-estimated-xg"></script>
+    <script type="module" src="app.js?v=20260622-layout-updates"></script>
   </body>
 </html>

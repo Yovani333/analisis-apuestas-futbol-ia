@@ -4,6 +4,7 @@ export const ALLOWED_LEAGUES = Object.freeze([
   { slug: "bundesliga", name: "Bundesliga", country: "Alemania", code: "DEU", apiId: null, defaultSelected: false },
   { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal", code: "PRT", apiId: null, defaultSelected: false },
   { slug: "ligue-1", name: "Ligue 1", country: "Francia", code: "FRA", apiId: null, defaultSelected: false },
+  { slug: "liga-mx", name: "Liga MX Apertura", country: "México", code: "MEX", apiId: null, defaultSelected: false },
   { slug: "world-cup", name: "Copa Mundial FIFA", country: "Mundial", code: "FIFA", apiId: null, defaultSelected: false }
 ]);
 
@@ -50,5 +51,10 @@ export const MOCK_FIXTURES = Object.freeze([
     id: "demo-world-01", leagueSlug: "world-cup", leagueName: "Copa Mundial FIFA", home: "Selección Norte", away: "Selección Sur",
     date: "2026-06-21", time: "18:00", status: "scheduled", statusLabel: "Programado", stadium: "Estadio de demostración", country: "Mundial",
     dataAvailability: { standings: "Necesita revisión", statistics: "Disponible", h2h: "No disponible", injuries: "No disponible", lineups: "No disponible", odds: "Necesita revisión", xg: "No disponible", context: "Disponible", weather: "No disponible" }
+  },
+  {
+    id: "demo-mex-01", leagueSlug: "liga-mx", leagueName: "Liga MX Apertura", home: "Club Norte", away: "Deportivo Valle",
+    date: "2026-07-12", time: "19:00", status: "scheduled", statusLabel: "Programado", stadium: "Estadio de demostración", country: "México",
+    dataAvailability: { standings: "Necesita revisión", statistics: "Disponible", h2h: "Necesita revisión", injuries: "No disponible", lineups: "No disponible", odds: "Necesita revisión", xg: "No disponible", context: "Disponible", weather: "No disponible" }
   }
 ]);

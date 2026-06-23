@@ -5,6 +5,8 @@ export const ALLOWED_LEAGUES = Object.freeze([
   { slug: "bundesliga", name: "Bundesliga", country: "Germany", countryLabel: "Alemania", code: "DEU", apiId: 78, apiNames: ["Bundesliga"] },
   { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal", countryLabel: "Portugal", code: "PRT", apiId: 94, apiNames: ["Primeira Liga"] },
   { slug: "ligue-1", name: "Ligue 1", country: "France", countryLabel: "Francia", code: "FRA", apiId: 61, apiNames: ["Ligue 1"] },
+  // Liga MX usa el ID principal de API-Football; seleccionar temporada 2026 para Apertura 2026 si el proveedor la publica bajo esa temporada.
+  { slug: "liga-mx", name: "Liga MX Apertura", country: "Mexico", countryLabel: "México", code: "MEX", apiId: 262, apiNames: ["Liga MX"] },
   // ID y temporada verificados contra API-Football el 2026-06-20.
   { slug: "world-cup", name: "Copa Mundial FIFA", country: "World", countryLabel: "Mundial", code: "FIFA", apiId: 1, apiNames: ["World Cup"] }
 ]);

@@ -7,7 +7,7 @@ const ALLOWED_STATUSES = new Set(["all", "scheduled", "finished"]);
 export function parseFixtureQuery(query) {
   const leagues = String(query.leagues || "").split(",").filter(Boolean);
   if (!leagues.length) throw new AppError("Selecciona al menos una liga.", 400, "INVALID_LEAGUES");
-  if (leagues.length > 6 || leagues.some((slug) => !getAllowedLeague(slug))) {
+  if (leagues.length > 7 || leagues.some((slug) => !getAllowedLeague(slug))) {
     throw new AppError("La consulta contiene una liga no permitida.", 400, "INVALID_LEAGUES");
   }
 
