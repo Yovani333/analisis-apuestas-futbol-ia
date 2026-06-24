@@ -24,6 +24,10 @@ Los mercados sugeridos por un análisis real pueden agregarse a un cupón de par
 
 Antes de llamar a OpenAI, el backend construye una ficha prepartido con los últimos cinco encuentros por equipo, forma, goles, rendimiento local/visitante, descanso y cuotas principales. Calcula probabilidad implícita, margen de la casa, cuota justa y valor esperado con un método descriptivo y transparente. La primera versión cuantitativa se limita a doble oportunidad, Over/Under 2.5 y ambos equipos anotan. OpenAI explica esos cálculos, pero no puede reemplazarlos ni crear cifras nuevas.
 
+El EV se conserva como métrica matemática, pero ya no decide por sí solo el pick principal. Una capa determinista separa `highestEvPick` de `recommendedPick`, identifica al favorito real desde API-Football y clasifica la fuerza del favorito, la brecha de calidad, el valor y la confianza. Las categorías posibles son `pick_fuerte`, `pick_logico`, `value_sospechoso`, `agresivo_stake_bajo`, `evitar` y `sin_pick`.
+
+Una doble oportunidad a favor del underdog contra un favorito fuerte queda como `value_sospechoso` aunque tenga EV alto. Con dos confirmaciones deportivas puede avanzar únicamente a `agresivo_stake_bajo`; necesita al menos tres confirmaciones y confianza suficiente para ser `pick_logico`. Las confirmaciones disponibles incluyen bajas del favorito, mejor forma del underdog, xG/xGA competitivo, sede neutral, brecha reducida de clasificación y posible rotación. Si no existe un pick lateral coherente, el sistema puede mostrar como alternativa un mercado de goles o ambos anotan con valor verificado.
+
 ### Investigación normalizada — etapas 1 y 2
 
 El backend incorpora `normalizeMatchResearchData()` y agrega `researchData` a la respuesta de `GET /api/fixtures/:fixtureId`. El contrato completo está documentado en `docs/match-research-contract.json`.

@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-xg-observability";
-import { footballDataService } from "./services.js?v=20260623-xg-observability";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-pick-logic";
+import { footballDataService } from "./services.js?v=20260623-pick-logic";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -684,7 +684,9 @@ function addMarketToParlay(analysis, marketIndex) {
     showNotice("Las selecciones sintéticas o sin mercado verificable no pueden agregarse al historial.");
     return;
   }
-  if (market.requiere_revision || !analysis._context?.quality?.canSuggest) {
+  if (market.requiere_revision
+    || ["value_sospechoso", "agresivo_stake_bajo", "evitar", "sin_pick"].includes(market.pickCategory)
+    || !analysis._context?.quality?.canSuggest) {
     showNotice("La calidad o el valor esperado de esta selección requieren revisión; no puede agregarse al parlay.");
     return;
   }
@@ -838,12 +840,29 @@ function renderAnalysis(analysis) {
   const formCard = (team) => team ? `<article><span>${escapeHtml(team.team)}</span><strong>${displayValue(team.form)}</strong><small>${displayValue(team.avgGoalsFor)} GF · ${displayValue(team.avgGoalsAgainst)} GC · ${displayValue(team.restDays)} días descanso</small></article>` : "";
   const calculations = context?.marketAnalysis || [];
   const calculationRows = calculations.map((item) => `<tr><td>${escapeHtml(item.selection)}</td><td>${displayValue(item.decimalOdds)}</td><td>${displayValue(item.estimatedProbabilityPct)}%</td><td class="${item.expectedValuePct >= 0 ? "value-positive" : "value-negative"}">${displayValue(item.expectedValuePct)}%</td></tr>`).join("");
+  const pickReview = analysis.pickReview;
+  const categoryLabels = {
+    pick_fuerte: "Pick fuerte", pick_logico: "Pick lógico",
+    value_sospechoso: "Value sospechoso", agresivo_stake_bajo: "Agresivo · exposición baja",
+    evitar: "Evitar", sin_pick: "Sin pick"
+  };
+  const strengthLabels = { strong: "Fuerte", medium: "Medio", slight: "Ligero", none: "Sin favorito claro" };
+  const gapLabels = { very_high: "Muy alta", high: "Alta", medium: "Media", low: "Baja" };
+  const pickReviewHtml = pickReview ? `
+    <section class="pick-review">
+      <div><span>Favorito real</span><strong>${escapeHtml(pickReview.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(strengthLabels[pickReview.favoriteStrength] || pickReview.favoriteStrength)}</small></div>
+      <div><span>Brecha de calidad</span><strong>${escapeHtml(gapLabels[pickReview.qualityGap] || pickReview.qualityGap)}</strong></div>
+      <div><span>Mayor EV</span><strong>${escapeHtml(pickReview.highestEvPick?.selection || "Sin cálculo")}</strong><small>${displayValue(pickReview.highestEvPick?.expectedValuePct)}% · ${escapeHtml(categoryLabels[pickReview.highestEvPick?.pickCategory] || "Sin categoría")}</small></div>
+      <div><span>Pick lógico recomendado</span><strong>${escapeHtml(pickReview.recommendedPick?.selection || "Sin pick principal")}</strong><small>${escapeHtml(categoryLabels[pickReview.recommendedPick?.pickCategory] || "Sin pick")} · Confianza ${displayValue(pickReview.recommendedPick?.confidenceScore, 0)}/100</small></div>
+      <p>${escapeHtml(pickReview.warning || "Sin advertencias adicionales.")}</p>
+    </section>` : "";
 
   elements.analysisContent.innerHTML = `
     <div class="analysis-hero">
       <div class="analysis-hero__title"><h3>${escapeHtml(analysis.partido.local)} vs ${escapeHtml(analysis.partido.visitante)}</h3>${quality ? `<span class="quality-badge quality-badge--${quality.level.toLowerCase()}">Cobertura ${escapeHtml(quality.level)} · ${quality.score}/100</span>` : ""}</div>
       <p>${escapeHtml(analysis.resumen_partido)}</p>
     </div>
+    ${pickReviewHtml}
     ${context ? `<section class="analysis-context"><div class="form-summary">${formCard(context.preMatch?.home)}${formCard(context.preMatch?.away)}</div>${calculationRows ? `<div class="calculation-table"><h3>Cálculos verificados antes de la IA</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Selección</th><th>Cuota</th><th>Prob. estimada</th><th>EV</th></tr></thead><tbody>${calculationRows}</tbody></table></div></div>` : '<p class="analysis-context__empty">No hubo cuotas suficientes para calcular valor esperado.</p>'}</section>` : ""}
     <div class="analysis-grid">
       <section class="analysis-card">
@@ -860,7 +879,7 @@ function renderAnalysis(analysis) {
       </section>
       <section class="analysis-card">
         <h3>Mercados sugeridos</h3>
-        ${analysis.mercados_sugeridos.length ? analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Cuota ${displayValue(market.cuota_decimal)} · Prob. ${displayValue(market.probabilidad_modelo)}% · EV ${displayValue(market.valor_esperado)}%</small><small>Confianza ${escapeHtml(market.confianza)}${market.requiere_revision ? " · Requiere revisión" : ""}</small></div><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || market.requiere_revision || !quality?.canSuggest ? "disabled" : ""}>Agregar al parlay</button></div>`).join("") : '<p>No se identificó un mercado con cobertura y valor suficiente.</p>'}
+        ${analysis.mercados_sugeridos.length ? analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Cuota ${displayValue(market.cuota_decimal)} · Prob. ${displayValue(market.probabilidad_modelo)}% · EV ${displayValue(market.valor_esperado)}%</small><small>${escapeHtml(categoryLabels[market.pickCategory] || "Sin categoría")} · Confianza lógica ${displayValue(market.confidenceScore, 0)}/100${market.requiere_revision ? " · Requiere revisión" : ""}</small>${market.warning ? `<small>${escapeHtml(market.warning)}</small>` : ""}</div><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || market.requiere_revision || !quality?.canSuggest ? "disabled" : ""}>Agregar al parlay</button></div>`).join("") : '<p>No se identificó un mercado con cobertura y valor suficiente.</p>'}
         <p class="market-disclaimer">Agregar conserva la sugerencia para seguimiento; no realiza una apuesta.</p>
       </section>
       <section class="analysis-card analysis-card--wide">

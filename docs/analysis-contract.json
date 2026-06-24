@@ -39,6 +39,11 @@
     "cuota_decimal": null,
     "probabilidad_modelo": null,
     "valor_esperado": null,
+    "valueScore": null,
+    "confidenceScore": null,
+    "pickCategory": "pick_fuerte | pick_logico | value_sospechoso | agresivo_stake_bajo | evitar | sin_pick",
+    "warning": "",
+    "confirmaciones": [],
     "razonamiento": "",
     "nivel_riesgo": "Bajo | Medio | Alto",
     "confianza": "Baja | Media-baja | Media | Media-alta | Alta",
@@ -49,6 +54,15 @@
     "seleccion": "",
     "razonamiento": "",
     "confianza": "Baja | Media-baja | Media | Media-alta | Alta"
+  },
+  "pickReview": {
+    "favoriteTeam": "",
+    "favoriteStrength": "strong | medium | slight | none",
+    "qualityGap": "very_high | high | medium | low",
+    "highestEvPick": { "selection": "", "expectedValuePct": null, "pickCategory": "" },
+    "recommendedPick": { "selection": "", "confidenceScore": 0, "pickCategory": "" },
+    "pickCategory": "pick_fuerte | pick_logico | value_sospechoso | agresivo_stake_bajo | evitar | sin_pick",
+    "warning": ""
   },
   "apto_para_parlay": {
     "respuesta": "Sí | No | Solo con baja exposición",

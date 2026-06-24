@@ -555,6 +555,13 @@ export function normalizeMatchResearchData(dataset) {
     displayTimeZone: dataset.fixture.timezone || "America/Los_Angeles",
     homeTeam: { id: dataset.fixture.homeTeamId, name: dataset.fixture.home },
     awayTeam: { id: dataset.fixture.awayTeamId, name: dataset.fixture.away },
+    favorite: dataset.fixture.favorite ? {
+      teamId: dataset.fixture.favorite.teamId,
+      team: dataset.fixture.favorite.team,
+      percent: dataset.fixture.favorite.percent,
+      source: dataset.fixture.favorite.source,
+      note: dataset.fixture.favorite.note
+    } : null,
     venue: {
       stadium: dataset.fixture.stadium || "", city: dataset.fixture.city || "", country: dataset.fixture.country || "",
       surface: "", pitchCondition: "", pitchConditionStatus: DATA_STATUS.NOT_AVAILABLE, source: "",

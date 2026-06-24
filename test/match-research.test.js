@@ -483,3 +483,44 @@ test("research needs_review elimina mercados aunque el modelo los sugiera", () =
   assert.equal(guarded.mercados_sugeridos.length, 0);
   assert.equal(guarded.apto_para_parlay.respuesta, "No");
 });
+
+test("la guarda no convierte mayor EV sospechoso en pick principal", () => {
+  const researchData = normalizeMatchResearchData(datasetFixture());
+  researchData.analysisStatus = ANALYSIS_STATUS.COMPLETE;
+  const suspicious = {
+    marketKey: "double_chance", selectionKey: "X2", market: "Doble oportunidad",
+    selection: "Uzbekistan o empate (X2)", decimalOdds: 3.2, estimatedProbabilityPct: 40,
+    expectedValuePct: 28, positiveValue: true, requiresReview: false, sampleSize: 10
+  };
+  const logical = {
+    marketKey: "over_under_2_5", selectionKey: "over_2_5", market: "Total de goles 2.5",
+    selection: "Más de 2.5 goles", decimalOdds: 1.85, estimatedProbabilityPct: 58,
+    expectedValuePct: 8, positiveValue: true, requiresReview: false, sampleSize: 10
+  };
+  const pickRecommendation = {
+    favoriteTeam: "Portugal", favoriteStrength: "strong", qualityGap: "very_high",
+    highestEvPick: { ...suspicious, pickCategory: "value_sospechoso", confidenceScore: 88, valueScore: 100, warning: "Va contra favorito fuerte." },
+    recommendedPick: { ...logical, pickCategory: "pick_fuerte", confidenceScore: 88, valueScore: 66, warning: "" },
+    warning: "Va contra favorito fuerte.",
+    reviewedPicks: [
+      { ...suspicious, pickCategory: "value_sospechoso", confidenceScore: 88, valueScore: 100, warning: "Va contra favorito fuerte.", confirmations: [] },
+      { ...logical, pickCategory: "pick_fuerte", confidenceScore: 88, valueScore: 66, warning: "", confirmations: [] }
+    ]
+  };
+  const guarded = applyResearchGuardrails({
+    estado_analisis: "Completo", datos_faltantes: [],
+    mercados_sugeridos: [
+      { codigo_mercado: "double_chance", codigo_seleccion: "X2", requiere_revision: false },
+      { codigo_mercado: "over_under_2_5", codigo_seleccion: "over_2_5", requiere_revision: false }
+    ],
+    prediccion_prudente: { seleccion: "Uzbekistan X2", razonamiento: "Mayor EV", confianza: "Alta" },
+    apto_para_parlay: { respuesta: "Sí", razonamiento: "" }
+  }, {
+    researchData, dataQuality: { score: 82, canSuggest: true }, preMatch: {},
+    marketAnalysis: [suspicious, logical], pickRecommendation
+  });
+  assert.equal(guarded.pickReview.highestEvPick.pickCategory, "value_sospechoso");
+  assert.equal(guarded.mercados_sugeridos[0].requiere_revision, true);
+  assert.equal(guarded.mercados_sugeridos[1].requiere_revision, false);
+  assert.equal(guarded.prediccion_prudente.seleccion, "Más de 2.5 goles");
+});

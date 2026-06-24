@@ -6,6 +6,7 @@
   "displayTimeZone": "America/Los_Angeles",
   "homeTeam": { "id": 0, "name": "" },
   "awayTeam": { "id": 0, "name": "" },
+  "favorite": { "teamId": 0, "team": "", "percent": null, "source": "api-football-predictions", "note": "" },
   "venue": {
     "stadium": "",
     "city": "",

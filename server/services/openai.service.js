@@ -11,7 +11,10 @@ Solo puedes sugerir double_chance, over_under_2_5 o btts incluidos en matchData.
 Usa marketKey como codigo_mercado, selectionKey como codigo_seleccion, decimalOdds como cuota_decimal, estimatedProbabilityPct como probabilidad_modelo y expectedValuePct como valor_esperado.
 No sugieras mercados sin positiveValue=true, con requiresReview=true ni más de tres selecciones.
 Si matchData.analysisStatus es needs_review, devuelve mercados_sugeridos vacío y apto_para_parlay No.
-Head to head es una señal secundaria. Cuotas y valor esperado tienen prioridad.`;
+El mayor EV no equivale automáticamente al mejor pick.
+No uses como pick principal una doble oportunidad contra un favorito fuerte sin al menos dos o tres confirmaciones deportivas.
+Usa matchData.favorite como señal de jerarquía, sin tratar su porcentaje como garantía.
+Head to head es una señal secundaria. EV, jerarquía, confianza y coherencia deportiva deben evaluarse por separado.`;
 
 function neutralizeVenueLanguage(value, homeTeam, awayTeam) {
   if (Array.isArray(value)) return value.map((item) => neutralizeVenueLanguage(item, homeTeam, awayTeam));
@@ -106,11 +109,17 @@ export function applyResearchGuardrails(parsed, dataset) {
   const safeParsed = enforceXgAnalysisSummary(languageSafe, research?.xgXga);
   const researchBlocksMarkets = research?.analysisStatus === ANALYSIS_STATUS.NEEDS_REVIEW;
   const researchIsPartial = research?.analysisStatus === ANALYSIS_STATUS.PARTIAL;
+  const pickReview = dataset.pickRecommendation || null;
   const verifiedMarkets = (safeParsed.mercados_sugeridos || []).slice(0, 3).map((market) => {
     const calculation = calculations.find((item) => item.marketKey === market.codigo_mercado && item.selectionKey === market.codigo_seleccion);
     if (!calculation) {
       return { ...market, cuota_decimal: null, probabilidad_modelo: null, valor_esperado: null, requiere_revision: true };
     }
+    const reviewedPick = pickReview?.reviewedPicks?.find((item) =>
+      item.marketKey === calculation.marketKey && item.selectionKey === calculation.selectionKey
+    );
+    const requiresLogicalReview = ["value_sospechoso", "agresivo_stake_bajo", "evitar", "sin_pick"]
+      .includes(reviewedPick?.pickCategory);
     return {
       ...market,
       mercado: calculation.market,
@@ -118,18 +127,38 @@ export function applyResearchGuardrails(parsed, dataset) {
       cuota_decimal: calculation.decimalOdds,
       probabilidad_modelo: calculation.estimatedProbabilityPct,
       valor_esperado: calculation.expectedValuePct,
-      requiere_revision: market.requiere_revision || calculation.requiresReview || !calculation.positiveValue || !quality.canSuggest || researchIsPartial || researchBlocksMarkets
+      valueScore: reviewedPick?.valueScore ?? null,
+      confidenceScore: reviewedPick?.confidenceScore ?? null,
+      pickCategory: reviewedPick?.pickCategory || "sin_pick",
+      warning: reviewedPick?.warning || "",
+      confirmaciones: reviewedPick?.confirmations || [],
+      requiere_revision: market.requiere_revision || calculation.requiresReview || !calculation.positiveValue
+        || !quality.canSuggest || researchIsPartial || researchBlocksMarkets || requiresLogicalReview
     };
   });
   const usableMarkets = quality.canSuggest && !researchBlocksMarkets ? verifiedMarkets : [];
   const normalizedMissing = (research?.missingData || []).map((item) => `${item.label}: ${item.message || item.status}`);
   const datosFaltantes = [...new Set([...(safeParsed.datos_faltantes || []), ...normalizedMissing])];
   const researchComplete = research?.analysisStatus === ANALYSIS_STATUS.COMPLETE;
+  const recommended = pickReview?.recommendedPick;
+  const prudentPrediction = !pickReview ? safeParsed.prediccion_prudente : recommended
+    ? {
+      seleccion: recommended.selection,
+      razonamiento: `Pick lógico validado como ${recommended.pickCategory}. ${recommended.warning || "Coherente con la jerarquía y la cobertura disponibles."}`,
+      confianza: recommended.confidenceScore >= 75 ? "Alta" : recommended.confidenceScore >= 60 ? "Media-alta" : "Media"
+    }
+    : {
+      seleccion: "Sin pick principal",
+      razonamiento: pickReview?.warning || "No hay valor y coherencia suficientes para recomendar una selección principal.",
+      confianza: "Baja"
+    };
   return {
     ...safeParsed,
     estado_analisis: researchComplete ? safeParsed.estado_analisis : "Necesita revisión",
     datos_faltantes: datosFaltantes,
     mercados_sugeridos: usableMarkets,
+    prediccion_prudente: prudentPrediction,
+    pickReview,
     apto_para_parlay: researchComplete && quality.canSuggest && usableMarkets.some((market) => !market.requiere_revision)
       ? safeParsed.apto_para_parlay
       : { respuesta: "No", razonamiento: "La cobertura normalizada, los datos críticos o el valor esperado verificado no alcanzan el umbral para agregar selecciones al parlay." },

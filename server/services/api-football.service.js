@@ -15,6 +15,7 @@ import {
   recordApiFootballFailure,
   recordApiFootballResponse
 } from "./api-football-observability.service.js";
+import { evaluatePickRecommendations } from "./pick-recommendation.service.js";
 
 const leagueCache = new Map();
 const requestCache = new Map();
@@ -268,7 +269,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   const statisticsCutoffDate = new Date(Date.parse(base.fixture.date) - 86400000).toISOString().slice(0, 10);
   const safe = (promise) => promise.catch(() => []);
   const safeAdvanced = (promise) => promise.then((data) => ({ data, failed: false })).catch(() => ({ data: null, failed: true }));
-  const [statistics, standings, h2h, injuries, lineups, odds, homeRecentRows, awayRecentRows, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
+  const [statistics, standings, h2h, injuries, lineups, odds, homeRecentRows, awayRecentRows, predictions, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
     safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })),
     safe(apiRequest("/standings", { league: base.league.id, season })),
     safe(apiRequest("/fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 })),
@@ -277,6 +278,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     safe(apiRequest("/odds", { fixture: fixtureId })),
     safe(apiRequest("/fixtures", { team: homeId, last: 8, timezone: "UTC" })),
     safe(apiRequest("/fixtures", { team: awayId, last: 8, timezone: "UTC" })),
+    safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)),
     safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })),
     safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })),
     safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: homeId, date: statisticsCutoffDate })),
@@ -284,6 +286,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   ]);
 
   const fixture = normalizeFixture(base, leagueConfig);
+  fixture.favorite = normalizeFavorite(predictions, fixture);
   const homeForm = summarizeRecentFixtures(homeRecentRows, homeId, base.fixture.date);
   const awayForm = summarizeRecentFixtures(awayRecentRows, awayId, base.fixture.date);
   const oddsSummary = normalizeOdds(odds, { homeName: fixture.home, awayName: fixture.away });
@@ -345,6 +348,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   fixture.dataAvailability.xg = activeInternalXg?.status === "available"
     ? "Disponible" : activeInternalXg?.status === "partial" ? "Necesita revisión" : fixture.dataAvailability.xg;
   dataset.researchData = normalizeMatchResearchData(dataset);
+  dataset.pickRecommendation = evaluatePickRecommendations(dataset);
   dataset.analysisInput = buildAnalysisInput(dataset);
   datasetCache.set(fixtureId, { value: dataset, expiresAt: Date.now() + CACHE_TTL });
   return dataset;
