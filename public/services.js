@@ -1,6 +1,18 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-confidence-picks";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
 
 const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+function fixtureTeamLogos(payload) {
+  const rows = [
+    ...(payload.confirmed?.lineups || []),
+    ...(payload.confirmed?.statistics || [])
+  ];
+  const logoFor = (teamId) => rows.find((row) => row.team?.id === teamId)?.team?.logo || "";
+  return {
+    homeLogo: payload.fixture?.homeLogo || logoFor(payload.fixture?.homeTeamId),
+    awayLogo: payload.fixture?.awayLogo || logoFor(payload.fixture?.awayTeamId)
+  };
+}
 
 function buildMockAnalysis(fixture) {
   const confirmed = DATA_CATEGORIES.filter(({ key }) => fixture.dataAvailability[key] === "Disponible").map(({ label }) => `${label}: disponible en el escenario sintético.`);
@@ -82,9 +94,11 @@ export const footballDataService = {
     if (runtime.mode !== "live") return fixture;
     const query = refresh ? "?refresh=true" : "";
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}${query}`);
+    const teamLogos = fixtureTeamLogos(payload);
     return {
       ...fixture,
       ...payload.fixture,
+      ...teamLogos,
       confirmedData: payload.confirmed || {},
       preMatch: payload.preMatch || null,
       marketAnalysis: payload.marketAnalysis || [],

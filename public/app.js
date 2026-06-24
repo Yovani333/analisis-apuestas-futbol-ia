@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-confidence-picks";
-import { footballDataService } from "./services.js?v=20260624-confidence-picks";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
+import { footballDataService } from "./services.js?v=20260624-premium-dashboard-2";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -151,6 +151,17 @@ function formatDate(isoDate) {
   return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${isoDate}T00:00:00Z`));
 }
 
+function teamInitials(name = "") {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "FC";
+}
+
+function teamCrest(name, logo, size = "default") {
+  const modifier = size === "large" ? " team-crest--large" : "";
+  return logo
+    ? `<span class="team-crest${modifier}"><img src="${escapeHtml(logo)}" alt="Logo de ${escapeHtml(name)}" loading="lazy" /></span>`
+    : `<span class="team-crest team-crest--fallback${modifier}" aria-label="${escapeHtml(name)}">${escapeHtml(teamInitials(name))}</span>`;
+}
+
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
@@ -172,25 +183,30 @@ function renderMatches() {
         const selected = state.selectedFixtureId === fixture.id;
         const isFinished = fixture.status === "finished";
         const showScore = ["finished", "live"].includes(fixture.status) && fixture.score?.home !== null && fixture.score?.away !== null;
-        const homeFavorite = fixture.favorite?.teamId === fixture.homeTeamId;
-        const awayFavorite = fixture.favorite?.teamId === fixture.awayTeamId;
+        const homeFavorite = Boolean(fixture.favorite && fixture.favorite.teamId === fixture.homeTeamId);
+        const awayFavorite = Boolean(fixture.favorite && fixture.favorite.teamId === fixture.awayTeamId);
         const probabilities = fixture.favorite?.probabilities;
         const probabilitySummary = probabilities && [probabilities.home, probabilities.draw, probabilities.away].every((value) => value !== null)
           ? ` Local gana: ${probabilities.home}%. Empate: ${probabilities.draw}%. Visitante gana: ${probabilities.away}%.`
           : "";
         const favoriteTitle = fixture.favorite ? `${fixture.favorite.note}${probabilitySummary}` : "";
-        const teamName = (name, favorite) => `<strong class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${escapeHtml(name)}${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2: ${escapeHtml(fixture.favorite.team)}${fixture.favorite.percent !== null ? ` ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</strong>`;
+        const teamName = (name, logo, favorite) => `<div class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${teamCrest(name, logo)}<div><strong>${escapeHtml(name)}</strong>${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2${fixture.favorite.percent !== null ? ` · ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</div></div>`;
+        const quality = fixture.dataQuality;
         return `
           <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" ${selected ? 'aria-current="true"' : ""}>
-            <span class="match-card__favorite" aria-hidden="true">☆</span>
+            <div class="match-card__topline">
+              <span class="match-card__league">${escapeHtml(fixture.leagueName)}</span>
+              ${statusBadge(fixture.statusLabel)}
+            </div>
             <div class="match-card__teams">
-              ${teamName(fixture.home, homeFavorite)}
-              <span class="match-card__versus">${showScore ? `<strong class="match-score">${escapeHtml(fixture.score.home)} – ${escapeHtml(fixture.score.away)}</strong>` : "vs"}</span>
-              ${teamName(fixture.away, awayFavorite)}
+              ${teamName(fixture.home, fixture.homeLogo, homeFavorite)}
+              <span class="match-card__versus">${showScore ? `<strong class="match-score">${escapeHtml(fixture.score.home)} – ${escapeHtml(fixture.score.away)}</strong>` : "<strong>VS</strong>"}</span>
+              ${teamName(fixture.away, fixture.awayLogo, awayFavorite)}
             </div>
             <div class="match-card__meta">
               <time datetime="${escapeHtml(fixture.utcDateTime || `${fixture.date}T${fixture.time}`)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT</time>
-              ${statusBadge(fixture.statusLabel)}
+              <span>${escapeHtml(fixture.stadium || "Sede por confirmar")}</span>
+              ${quality ? `<span class="data-quality data-quality--${escapeHtml(String(quality.level || "").toLowerCase())}">Calidad ${escapeHtml(quality.level)} · ${escapeHtml(quality.score)}/100</span>` : ""}
               ${fixture.status === "live" && fixture.elapsed !== null ? `<small>${escapeHtml(fixture.elapsed)} minutos</small>` : ""}
             </div>
             <div class="match-card__actions">
@@ -228,7 +244,25 @@ function renderFixtureData() {
   const probabilityLine = probabilities && [probabilities.home, probabilities.draw, probabilities.away].every((value) => value !== null)
     ? `<small>1X2: ${escapeHtml(fixture.home)} ${escapeHtml(probabilities.home)}% · Empate ${escapeHtml(probabilities.draw)}% · ${escapeHtml(fixture.away)} ${escapeHtml(probabilities.away)}%</small>`
     : "";
-  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT · ${sourceLabel}${escapeHtml(venueLabel)}${escapeHtml(qualityLabel)}</span>${probabilityLine}`;
+  const score = ["finished", "live"].includes(fixture.status) && fixture.score?.home !== null && fixture.score?.away !== null
+    ? `${escapeHtml(fixture.score.home)} <i>–</i> ${escapeHtml(fixture.score.away)}`
+    : `<span>VS</span>`;
+  elements.selectedSummary.innerHTML = `
+    <div class="selected-match__meta">
+      <span>${escapeHtml(fixture.leagueName)}</span>
+      ${statusBadge(fixture.statusLabel)}
+    </div>
+    <div class="selected-match__scoreboard">
+      <div class="selected-match__team">${teamCrest(fixture.home, fixture.homeLogo, "large")}<strong>${escapeHtml(fixture.home)}</strong></div>
+      <div class="selected-match__score"><b>${score}</b><time>${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT</time></div>
+      <div class="selected-match__team">${teamCrest(fixture.away, fixture.awayLogo, "large")}<strong>${escapeHtml(fixture.away)}</strong></div>
+    </div>
+    <div class="selected-match__details">
+      <span>${escapeHtml(fixture.stadium || "Sede por confirmar")}${escapeHtml(venueLabel)}</span>
+      <span class="source-chip source-chip--api">${escapeHtml(sourceLabel)}</span>
+      ${fixture.dataQuality ? `<span class="data-quality data-quality--${escapeHtml(String(fixture.dataQuality.level || "").toLowerCase())}">Confianza de datos ${escapeHtml(fixture.dataQuality.score)}/100</span>` : ""}
+    </div>
+    ${probabilityLine}`;
   updateAnalysisActionState();
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
@@ -259,12 +293,13 @@ function renderCoverageTable(fixture) {
             const primary = coverage?.primarySources?.join(" / ") || "API-Football";
             const backup = coverage?.secondarySources?.join(" / ") || "Sin respaldo activo";
             const active = coverage?.activeSources?.join(" / ") || (researchModule?.source ? researchSourceLabel(moduleKey, researchModule) : "Ninguna");
-            return `<tr>
+            const sourceType = active.includes("modelo interno") ? "model" : active.includes("API-Football") ? "api" : "external";
+            return `<tr class="coverage-row coverage-row--${sourceType}">
               <td><strong>${escapeHtml(category.label)}</strong></td>
               <td>${statusBadge(status)}</td>
               <td>${escapeHtml(primary)}</td>
               <td>${escapeHtml(backup)}</td>
-              <td>${escapeHtml(active)}</td>
+              <td><span class="source-chip source-chip--${sourceType}">${escapeHtml(active)}</span></td>
               <td>${escapeHtml(formatUpdatedAt(researchModule?.updatedAt || coverage?.updatedAt))}</td>
               <td><button class="button button--secondary button--compact" type="button" data-category="${escapeHtml(category.key)}">Ver datos</button></td>
             </tr>`;
