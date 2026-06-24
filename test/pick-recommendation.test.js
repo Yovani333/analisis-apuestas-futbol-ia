@@ -90,3 +90,22 @@ test("EV negativo se clasifica como evitar", () => {
   assert.equal(result.highestEvPick.pickCategory, "evitar");
   assert.equal(result.recommendedPick, null);
 });
+
+test("genera hasta cinco picks ordenados por confianza evaluada", () => {
+  const dataset = baseDataset();
+  dataset.marketAnalysis = [
+    calculation("X2", "Uzbekistan o empate (X2)", 28, 3.2),
+    calculation("over_2_5", "Más de 2.5 goles", 8, 1.85),
+    calculation("under_2_5", "Menos de 2.5 goles", 2, 1.8),
+    { ...calculation("btts_yes", "Ambos anotan: Sí", 7, 1.9), marketKey: "btts" },
+    { ...calculation("btts_no", "Ambos anotan: No", -3, 1.9), marketKey: "btts" },
+    calculation("1X", "Portugal o empate (1X)", 6, 1.3)
+  ];
+  const result = evaluatePickRecommendations(dataset);
+  assert.equal(result.confidencePicks.length, 5);
+  assert.deepEqual(result.confidencePicks.map((pick) => pick.rank), [1, 2, 3, 4, 5]);
+  assert.ok(result.confidencePicks.every((pick, index, rows) =>
+    index === 0 || rows[index - 1].confidencePct >= pick.confidencePct
+  ));
+  assert.ok(result.confidencePicks.every((pick) => Number.isFinite(pick.confidencePct)));
+});

@@ -25,8 +25,8 @@ function neutralizeVenueLanguage(value, homeTeam, awayTeam) {
     .replace(/\bequipo visitante\b/gi, "__AWAY_TEAM__")
     .replace(/\bdel local\b/gi, "de __HOME_TEAM__")
     .replace(/\bdel visitante\b/gi, "de __AWAY_TEAM__")
-    .replace(/\blocal\b/gi, "__HOME_TEAM__")
-    .replace(/\bvisitante\b/gi, "__AWAY_TEAM__")
+    .replace(/(?<![\p{L}])local(?![\p{L}])/giu, "__HOME_TEAM__")
+    .replace(/(?<![\p{L}])visitante(?![\p{L}])/giu, "__AWAY_TEAM__")
     .replaceAll("__HOME_TEAM__", homeTeam)
     .replaceAll("__AWAY_TEAM__", awayTeam);
 }

@@ -119,6 +119,21 @@ function classifyPick({ calculation, contradiction, strength, confirmations, con
   return "sin_pick";
 }
 
+function evaluatedConfidence(baseConfidence, calculation, category, confirmations) {
+  const categoryAdjustment = {
+    pick_fuerte: 10,
+    pick_logico: 5,
+    agresivo_stake_bajo: -8,
+    value_sospechoso: -15,
+    evitar: -25,
+    sin_pick: -18
+  }[category] || 0;
+  const probability = Number(calculation.estimatedProbabilityPct);
+  const probabilityAdjustment = Number.isFinite(probability) ? Math.round((probability - 50) * 0.25) : 0;
+  const confirmationAdjustment = Math.min(confirmations.length * 3, 9);
+  return clamp(baseConfidence + categoryAdjustment + probabilityAdjustment + confirmationAdjustment);
+}
+
 function warningFor(category, favoriteName, confirmations) {
   if (category === "value_sospechoso") {
     return `EV positivo, pero contradice al favorito fuerte ${favoriteName}. No recomendado como pick principal sin validación adicional.`;
@@ -163,10 +178,11 @@ export function evaluatePickRecommendations(dataset = {}) {
     const pickCategory = classifyPick({
       calculation, contradiction, strength, confirmations, confidence
     });
+    const finalConfidence = evaluatedConfidence(confidence, calculation, pickCategory, confirmations);
     return {
       ...calculation,
       valueScore: valueScore(calculation),
-      confidenceScore: confidence,
+      confidenceScore: finalConfidence,
       pickCategory,
       contradictsFavorite: contradiction,
       confirmations,
@@ -178,6 +194,23 @@ export function evaluatePickRecommendations(dataset = {}) {
     .filter((item) => Number.isFinite(item.expectedValuePct))
     .sort((a, b) => b.expectedValuePct - a.expectedValuePct)[0] || null;
   const recommended = logicalAlternative(calculations, reviewed, favorite);
+  const confidencePicks = [...reviewed]
+    .sort((a, b) => b.confidenceScore - a.confidenceScore
+      || b.estimatedProbabilityPct - a.estimatedProbabilityPct
+      || b.expectedValuePct - a.expectedValuePct)
+    .slice(0, 5)
+    .map((item, index) => ({
+      rank: index + 1,
+      marketKey: item.marketKey,
+      selectionKey: item.selectionKey,
+      market: item.market,
+      selection: item.selection,
+      confidencePct: item.confidenceScore,
+      estimatedProbabilityPct: item.estimatedProbabilityPct,
+      expectedValuePct: item.expectedValuePct,
+      pickCategory: item.pickCategory,
+      warning: item.warning
+    }));
   return {
     favoriteTeam: favoriteName,
     favoriteTeamId: favorite?.teamId || null,
@@ -188,6 +221,7 @@ export function evaluatePickRecommendations(dataset = {}) {
     pickCategory: recommended?.pickCategory || "sin_pick",
     confidenceScore: recommended?.confidenceScore || 0,
     warning: highestEv?.warning || (recommended ? recommended.warning : "No hay valor suficiente para recomendar un pick principal."),
+    confidencePicks,
     reviewedPicks: reviewed
   };
 }

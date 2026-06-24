@@ -415,6 +415,20 @@ button { touch-action: manipulation; }
 .pick-review span, .pick-review small { color: var(--muted); font-size: .68rem; }
 .pick-review strong { font-size: .82rem; overflow-wrap: anywhere; }
 .pick-review p { grid-column: 1 / -1; margin: 0; padding: 10px 12px; color: #744204; font-size: .72rem; background: var(--warning-soft); }
+.confidence-picks { margin: 12px 0; }
+.confidence-picks__heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
+.confidence-picks__heading h3 { margin: 0; font-size: .83rem; }
+.confidence-picks__heading small, .confidence-picks > p { color: var(--muted); font-size: .64rem; }
+.confidence-picks__table { display: grid; gap: 5px; }
+.confidence-pick { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(145px, .45fr); gap: 9px; align-items: center; min-height: 48px; padding: 7px 9px; font-size: .68rem; background: white; border: 1px solid var(--border); border-left: 5px solid #64748b; border-radius: 6px; }
+.confidence-pick > span { font-weight: 800; text-align: center; }
+.confidence-pick > div { display: grid; min-width: 0; gap: 1px; }
+.confidence-pick strong { font-size: .72rem; overflow-wrap: anywhere; }
+.confidence-pick small { color: var(--muted); font-size: .61rem; }
+.confidence-pick--green { border-left-color: #15803d; background: #f0fdf4; }
+.confidence-pick--orange { border-left-color: #d97706; background: #fff7ed; }
+.confidence-pick--red { border-left-color: #dc2626; background: #fef2f2; }
+.confidence-picks > p { margin: 7px 0 0; }
 
 .parlay-slip {
   position: fixed;
@@ -525,6 +539,8 @@ button { touch-action: manipulation; }
 
 @media (max-width: 520px) {
   .pick-review { grid-template-columns: 1fr; }
+  .confidence-pick { grid-template-columns: 22px minmax(0, 1fr); }
+  .confidence-pick > div:last-child { grid-column: 2; }
   .app-header { align-items: flex-start; padding: 13px 13px 0; }
   .brand__mark { width: 46px; height: 46px; font-size: 1.5rem; }
   .brand h1 { font-size: 1.05rem; }

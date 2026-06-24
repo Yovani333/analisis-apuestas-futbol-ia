@@ -1,5 +1,5 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260623-pick-logic";
-import { footballDataService } from "./services.js?v=20260623-pick-logic";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-confidence-picks";
+import { footballDataService } from "./services.js?v=20260624-confidence-picks";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -856,6 +856,23 @@ function renderAnalysis(analysis) {
       <div><span>Pick lógico recomendado</span><strong>${escapeHtml(pickReview.recommendedPick?.selection || "Sin pick principal")}</strong><small>${escapeHtml(categoryLabels[pickReview.recommendedPick?.pickCategory] || "Sin pick")} · Confianza ${displayValue(pickReview.recommendedPick?.confidenceScore, 0)}/100</small></div>
       <p>${escapeHtml(pickReview.warning || "Sin advertencias adicionales.")}</p>
     </section>` : "";
+  const confidenceColor = (pick) => {
+    if (pick.confidencePct >= 70 && ["pick_fuerte", "pick_logico"].includes(pick.pickCategory)) return "green";
+    if (pick.confidencePct >= 50 && pick.pickCategory !== "evitar") return "orange";
+    return "red";
+  };
+  const confidencePicksHtml = pickReview?.confidencePicks?.length ? `
+    <section class="confidence-picks">
+      <div class="confidence-picks__heading"><h3>Posibles picks por confianza</h3><small>Ordenados por confianza evaluada, no únicamente por EV.</small></div>
+      <div class="confidence-picks__table" role="table" aria-label="Posibles picks ordenados por confianza">
+        ${pickReview.confidencePicks.map((pick) => `<div class="confidence-pick confidence-pick--${confidenceColor(pick)}" role="row">
+          <span role="cell">${pick.rank}</span>
+          <div role="cell"><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)} · ${escapeHtml(categoryLabels[pick.pickCategory] || pick.pickCategory)}</small>${pick.warning ? `<small>${escapeHtml(pick.warning)}</small>` : ""}</div>
+          <div role="cell"><strong>${displayValue(pick.confidencePct)}%</strong><small>Prob. modelo ${displayValue(pick.estimatedProbabilityPct)}% · EV ${displayValue(pick.expectedValuePct)}%</small></div>
+        </div>`).join("")}
+      </div>
+      <p>Verde: opción lógica con respaldo suficiente. Naranja: riesgo o validación parcial. Rojo: evitar o sin valor confirmado.</p>
+    </section>` : "";
 
   elements.analysisContent.innerHTML = `
     <div class="analysis-hero">
@@ -863,6 +880,7 @@ function renderAnalysis(analysis) {
       <p>${escapeHtml(analysis.resumen_partido)}</p>
     </div>
     ${pickReviewHtml}
+    ${confidencePicksHtml}
     ${context ? `<section class="analysis-context"><div class="form-summary">${formCard(context.preMatch?.home)}${formCard(context.preMatch?.away)}</div>${calculationRows ? `<div class="calculation-table"><h3>Cálculos verificados antes de la IA</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Selección</th><th>Cuota</th><th>Prob. estimada</th><th>EV</th></tr></thead><tbody>${calculationRows}</tbody></table></div></div>` : '<p class="analysis-context__empty">No hubo cuotas suficientes para calcular valor esperado.</p>'}</section>` : ""}
     <div class="analysis-grid">
       <section class="analysis-card">

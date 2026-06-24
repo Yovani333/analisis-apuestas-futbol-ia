@@ -28,6 +28,8 @@ El EV se conserva como métrica matemática, pero ya no decide por sí solo el p
 
 Una doble oportunidad a favor del underdog contra un favorito fuerte queda como `value_sospechoso` aunque tenga EV alto. Con dos confirmaciones deportivas puede avanzar únicamente a `agresivo_stake_bajo`; necesita al menos tres confirmaciones y confianza suficiente para ser `pick_logico`. Las confirmaciones disponibles incluyen bajas del favorito, mejor forma del underdog, xG/xGA competitivo, sede neutral, brecha reducida de clasificación y posible rotación. Si no existe un pick lateral coherente, el sistema puede mostrar como alternativa un mercado de goles o ambos anotan con valor verificado.
 
+Después de generar el análisis IA, **Evaluación responsable** muestra una tabla vertical con hasta cinco opciones ordenadas por confianza evaluada. El porcentaje combina cobertura, confianza normalizada, muestra y coherencia de la categoría; no sustituye la probabilidad estimada del mercado. Verde identifica opciones lógicas con respaldo suficiente, naranja indica riesgo o validación parcial y rojo marca opciones a evitar o sin valor confirmado. La tabla siempre conserva probabilidad del modelo y EV para transparencia.
+
 ### Investigación normalizada — etapas 1 y 2
 
 El backend incorpora `normalizeMatchResearchData()` y agrega `researchData` a la respuesta de `GET /api/fixtures/:fixtureId`. El contrato completo está documentado en `docs/match-research-contract.json`.
