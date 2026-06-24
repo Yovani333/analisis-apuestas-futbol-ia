@@ -264,6 +264,7 @@ button { touch-action: manipulation; }
 .selected-summary { margin: -3px 0 15px; padding: 12px 14px; font-size: .82rem; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 10px; }
 .selected-summary strong { display: block; margin-bottom: 2px; }
 .selected-summary span { color: var(--muted); }
+.selected-summary small { display: block; margin-top: 5px; color: var(--text); }
 .selected-summary--empty { color: var(--muted); }
 .data-grid { display: block; }
 .coverage-table-wrap { border-radius: 10px; }

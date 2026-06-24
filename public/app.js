@@ -174,8 +174,12 @@ function renderMatches() {
         const showScore = ["finished", "live"].includes(fixture.status) && fixture.score?.home !== null && fixture.score?.away !== null;
         const homeFavorite = fixture.favorite?.teamId === fixture.homeTeamId;
         const awayFavorite = fixture.favorite?.teamId === fixture.awayTeamId;
-        const favoriteTitle = fixture.favorite ? `${fixture.favorite.note}${fixture.favorite.percent !== null ? ` Confianza del modelo: ${fixture.favorite.percent}%.` : ""}` : "";
-        const teamName = (name, favorite) => `<strong class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${escapeHtml(name)}${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito${fixture.favorite.percent !== null ? ` ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</strong>`;
+        const probabilities = fixture.favorite?.probabilities;
+        const probabilitySummary = probabilities && [probabilities.home, probabilities.draw, probabilities.away].every((value) => value !== null)
+          ? ` Local gana: ${probabilities.home}%. Empate: ${probabilities.draw}%. Visitante gana: ${probabilities.away}%.`
+          : "";
+        const favoriteTitle = fixture.favorite ? `${fixture.favorite.note}${probabilitySummary}` : "";
+        const teamName = (name, favorite) => `<strong class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${escapeHtml(name)}${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2: ${escapeHtml(fixture.favorite.team)}${fixture.favorite.percent !== null ? ` ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</strong>`;
         return `
           <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" ${selected ? 'aria-current="true"' : ""}>
             <span class="match-card__favorite" aria-hidden="true">☆</span>
@@ -220,7 +224,11 @@ function renderFixtureData() {
   const sourceLabel = fixture.dataSource === "api-football" ? "API-Football" : "escenario sintético";
   const qualityLabel = fixture.dataQuality ? ` · Calidad ${fixture.dataQuality.level} ${fixture.dataQuality.score}/100` : "";
   const venueLabel = fixture.neutralVenue ? " · Sede neutral; equipo 1 y equipo 2" : "";
-  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT · ${sourceLabel}${escapeHtml(venueLabel)}${escapeHtml(qualityLabel)}</span>`;
+  const probabilities = fixture.favorite?.probabilities;
+  const probabilityLine = probabilities && [probabilities.home, probabilities.draw, probabilities.away].every((value) => value !== null)
+    ? `<small>1X2: ${escapeHtml(fixture.home)} ${escapeHtml(probabilities.home)}% · Empate ${escapeHtml(probabilities.draw)}% · ${escapeHtml(fixture.away)} ${escapeHtml(probabilities.away)}%</small>`
+    : "";
+  elements.selectedSummary.innerHTML = `<strong>${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</strong><span>${escapeHtml(fixture.leagueName)} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT · ${sourceLabel}${escapeHtml(venueLabel)}${escapeHtml(qualityLabel)}</span>${probabilityLine}`;
   updateAnalysisActionState();
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
@@ -926,6 +934,7 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
   try {
     const detailedFixture = await footballDataService.getFixtureData(selectedFixture());
     if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
+    renderMatches();
     renderFixtureData();
   } catch (error) {
     elements.filterError.hidden = false;

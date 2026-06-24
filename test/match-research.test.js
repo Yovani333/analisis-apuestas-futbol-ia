@@ -89,7 +89,7 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.sources.oddspedia.status, "blocked");
   assert.equal(normalized.sourceCoverage.length, 9);
   const oddsCoverage = normalized.sourceCoverage.find((item) => item.module === "odds");
-  assert.deepEqual(oddsCoverage.primarySources, ["Oddspedia"]);
+  assert.deepEqual(oddsCoverage.primarySources, ["API-Football"]);
   assert.deepEqual(oddsCoverage.activeSources, ["API-Football"]);
   assert.ok(normalized.missingData.some((item) => item.module === "xgXga"));
   assert.equal(normalized.analysisStatus, ANALYSIS_STATUS.COMPLETE);
@@ -164,6 +164,28 @@ test("FotMob complementa módulos críticos como parciales sin confirmar alineac
   assert.equal(normalized.xgXga.status, DATA_STATUS.PARTIAL);
   assert.equal(normalized.sources.fotmob.status, "partial");
   assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["FotMob"]);
+});
+
+test("SofaScore tiene prioridad sobre FotMob como respaldo de alineaciones", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.lineups = [];
+  dataset.externalSources = {
+    sofaScore: {
+      source: "sofaScore", status: "partial", updatedAt: "2026-06-21T12:45:00Z",
+      data: { lineups: { probableHomeXI: [{ name: "Sofa Local" }], probableAwayXI: [{ name: "Sofa Visitante" }] } }
+    },
+    fotmob: {
+      source: "fotmob", status: "partial", updatedAt: "2026-06-21T13:00:00Z",
+      data: { lineups: { probableHomeXI: [{ name: "FotMob Local" }], probableAwayXI: [{ name: "FotMob Visitante" }] } }
+    }
+  };
+
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.lineups.source, "sofaScore");
+  assert.equal(normalized.lineups.confirmed, false);
+  assert.equal(normalized.lineups.probableHomeXI[0].name, "Sofa Local");
+  assert.match(normalized.lineups.message, /no confirmadas/i);
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "lineups").activeSources, ["SofaScore"]);
 });
 
 test("WhoScored actúa como respaldo parcial de bajas y alineaciones", () => {
@@ -340,7 +362,7 @@ test("integra xG/xGA histórico estimado para un partido programado", () => {
   assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["API-Football + modelo interno"]);
 });
 
-test("xG especializado conserva prioridad sobre el modelo interno", () => {
+test("el cálculo de API-Football conserva prioridad y la fuente externa queda de respaldo", () => {
   const dataset = datasetFixture();
   dataset.fixture.status = "live";
   dataset.confirmed.statistics = [
@@ -355,9 +377,9 @@ test("xG especializado conserva prioridad sobre el modelo interno", () => {
     }
   };
   const normalized = normalizeMatchResearchData(dataset);
-  assert.equal(normalized.xgXga.type, "official");
-  assert.equal(normalized.xgXga.source, "fbref");
-  assert.equal(normalized.xgXga.homeXG, 1.4);
+  assert.equal(normalized.xgXga.type, "fixture_estimated");
+  assert.equal(normalized.xgXga.source, "api-football-internal-model");
+  assert.notEqual(normalized.xgXga.homeXG, 1.4);
 });
 
 test("el prompt explica el tratamiento obligatorio del xG estimado", () => {

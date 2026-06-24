@@ -214,6 +214,7 @@ function lineupForTeam(rows, teamId) {
 
 export function getLineupsData(dataset) {
   const rows = dataset.confirmed?.lineups || [];
+  const sofaScore = dataset.externalSources?.sofaScore;
   const fotmob = dataset.externalSources?.fotmob;
   const whoScored = dataset.externalSources?.whoScored;
   const home = lineupForTeam(rows, dataset.fixture.homeTeamId);
@@ -225,13 +226,29 @@ export function getLineupsData(dataset) {
     id: item.player?.id || null, name: item.player?.name || "", number: item.player?.number ?? null,
     position: item.player?.pos || "", grid: item.player?.grid || ""
   }));
+  if (!rows.length && sofaScore?.data?.lineups) {
+    const external = sofaScore.data.lineups;
+    const hasExternal = external.homeStartingXI?.length || external.awayStartingXI?.length || external.probableHomeXI?.length || external.probableAwayXI?.length;
+    if (hasExternal) {
+      return {
+        ...moduleBase(DATA_STATUS.PARTIAL, sofaScore.updatedAt || dataset.fetchedAt, "sofaScore",
+          "Alineaciones probables no confirmadas."),
+        confirmed: false,
+        homeFormation: external.homeFormation || "", awayFormation: external.awayFormation || "",
+        homeStartingXI: external.homeStartingXI || [], awayStartingXI: external.awayStartingXI || [],
+        homeSubstitutes: [], awaySubstitutes: [],
+        probableHomeXI: external.probableHomeXI || [], probableAwayXI: external.probableAwayXI || [],
+        sourceUrl: sofaScore.data.eventUrl || ""
+      };
+    }
+  }
   if (!rows.length && fotmob?.data?.lineups) {
     const external = fotmob.data.lineups;
     const hasExternal = external.homeStartingXI?.length || external.awayStartingXI?.length || external.probableHomeXI?.length || external.probableAwayXI?.length;
     if (hasExternal) {
       return {
         ...moduleBase(DATA_STATUS.PARTIAL, fotmob.updatedAt || dataset.fetchedAt, "fotmob",
-          "Alineaciones reportadas por FotMob mediante búsqueda web; se mantienen como probables y requieren revisión."),
+          "Alineaciones probables no confirmadas."),
         confirmed: false,
         homeFormation: external.homeFormation || "", awayFormation: external.awayFormation || "",
         homeStartingXI: external.homeStartingXI || [], awayStartingXI: external.awayStartingXI || [],
@@ -247,7 +264,7 @@ export function getLineupsData(dataset) {
     if (hasExternal) {
       return {
         ...moduleBase(DATA_STATUS.PARTIAL, whoScored.updatedAt || dataset.fetchedAt, "whoScored",
-          "Alineaciones probables recuperadas de WhoScored mediante búsqueda web; requieren revisión."),
+          "Alineaciones probables no confirmadas."),
         confirmed: false,
         homeFormation: external.homeFormation || "", awayFormation: external.awayFormation || "",
         homeStartingXI: [], awayStartingXI: [], homeSubstitutes: [], awaySubstitutes: [],
@@ -258,7 +275,7 @@ export function getLineupsData(dataset) {
   }
   return {
     ...moduleBase(status, dataset.fetchedAt, status === DATA_STATUS.NOT_AVAILABLE ? "" : SOURCE,
-      status === DATA_STATUS.NOT_AVAILABLE ? "API-Football todavía no publicó alineaciones." : ""),
+      status === DATA_STATUS.NOT_AVAILABLE ? "Alineaciones no disponibles todavía." : ""),
     confirmed: homeConfirmed && awayConfirmed,
     homeFormation: home?.formation || "", awayFormation: away?.formation || "",
     homeStartingXI: players(home?.startXI), awayStartingXI: players(away?.startXI),
@@ -268,10 +285,18 @@ export function getLineupsData(dataset) {
 }
 
 export function getXgXgaData(dataset) {
+  const historical = dataset.historicalEstimatedXg;
+  const hasHistoricalEstimate = dataset.fixture.status === "scheduled"
+    && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(historical?.status);
+  const estimated = dataset.estimatedXg;
+  const canUseCurrentFixtureEstimate = dataset.fixture.status === "live" || dataset.fixture.status === "finished";
+  const hasCurrentFixtureEstimate = canUseCurrentFixtureEstimate
+    && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(estimated?.status);
+  const hasInternalEstimate = hasHistoricalEstimate || hasCurrentFixtureEstimate;
   const fotmob = dataset.externalSources?.fotmob;
   const external = fotmob?.data?.xgXga;
   const hasExternal = external && [external.homeXG, external.homeXGA, external.awayXG, external.awayXGA].some(Number.isFinite);
-  if (hasExternal && ["pre_match_team_aggregate", "season_average"].includes(external.scope)) {
+  if (!hasInternalEstimate && hasExternal && ["pre_match_team_aggregate", "season_average"].includes(external.scope)) {
     return {
       ...moduleBase(DATA_STATUS.PARTIAL, fotmob.updatedAt || dataset.fetchedAt, "fotmob",
         "xG/xGA prepartido recuperado de FotMob mediante búsqueda web; requiere revisión."),
@@ -286,7 +311,7 @@ export function getXgXgaData(dataset) {
   const fbrefData = fbref?.data;
   const hasFbref = fbrefData?.scope === "season_per_match"
     && [fbrefData.home?.xg, fbrefData.home?.xga, fbrefData.away?.xg, fbrefData.away?.xga].some(Number.isFinite);
-  if (hasFbref) {
+  if (!hasInternalEstimate && hasFbref) {
     return {
       ...moduleBase(DATA_STATUS.PARTIAL, fbref.updatedAt || dataset.fetchedAt, "fbref",
         "xG/xGA de temporada recuperado de FBref mediante búsqueda web; requiere revisión y puede tener cobertura parcial."),
@@ -301,15 +326,14 @@ export function getXgXgaData(dataset) {
       warning: "Dato reportado por una fuente estadística especializada y recuperado como referencia verificable."
     };
   }
-  const historical = dataset.historicalEstimatedXg;
-  if (dataset.fixture.status === "scheduled" && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(historical?.status)) {
+  if (hasHistoricalEstimate) {
     const missingFields = [...new Set([
       ...(historical.homeTeam?.missingFields || []),
       ...(historical.awayTeam?.missingFields || [])
     ])];
     return {
       ...moduleBase(historical.status, historical.updatedAt || dataset.fetchedAt, "api-football-internal-model",
-        "Calculado con partidos anteriores; no requiere H2H."),
+        "Calculado con partidos anteriores de cada equipo; no requiere H2H."),
       type: "historical_estimated",
       scope: "previous_matches",
       homeXG: historical.homeTeam.historicalEstimatedXGAvg,
@@ -340,9 +364,7 @@ export function getXgXgaData(dataset) {
       analysisUse: "pre_match_context"
     };
   }
-  const estimated = dataset.estimatedXg;
-  const canUseCurrentFixtureEstimate = dataset.fixture.status === "live" || dataset.fixture.status === "finished";
-  if (canUseCurrentFixtureEstimate && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(estimated?.status)) {
+  if (hasCurrentFixtureEstimate) {
     return {
       ...moduleBase(estimated.status, estimated.updatedAt || dataset.fetchedAt, "api-football-internal-model",
         "Calculado con estadísticas del fixture actual."),
@@ -526,7 +548,8 @@ function buildSourceCoverage(normalized) {
           : moduleData.source === "whoScored" ? [sourceLabel("whoScored")]
             : moduleData.source === "fbref" ? [sourceLabel("fbref")]
               : moduleData.source === "weather" ? [sourceLabel("weather")]
-                : moduleData.source === "soccerway" ? [sourceLabel("soccerway")] : [];
+                : moduleData.source === "soccerway" ? [sourceLabel("soccerway")]
+                  : moduleData.source === "sofaScore" ? [sourceLabel("sofaScore")] : [];
     if (moduleData.source === "api-football-internal-model") activeSources.push(sourceLabel("apiFootballInternalModel"));
     const unavailablePrimary = plan.primary.filter((key) => normalized.sources[key]?.status !== "available").map(sourceLabel);
     const observation = moduleData.message || (activeSources.length
@@ -559,6 +582,8 @@ export function normalizeMatchResearchData(dataset) {
       teamId: dataset.fixture.favorite.teamId,
       team: dataset.fixture.favorite.team,
       percent: dataset.fixture.favorite.percent,
+      market: dataset.fixture.favorite.market,
+      probabilities: dataset.fixture.favorite.probabilities,
       source: dataset.fixture.favorite.source,
       note: dataset.fixture.favorite.note
     } : null,

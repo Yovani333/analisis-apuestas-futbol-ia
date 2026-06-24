@@ -65,13 +65,13 @@ export const SOURCE_DEFINITIONS = Object.freeze({
 });
 
 export const MODULE_SOURCE_PLAN = Object.freeze([
-  { module: "statsForm", label: "Estadísticas / forma", primary: ["sofaScore"], secondary: ["apiFootball"] },
+  { module: "statsForm", label: "Estadísticas / forma", primary: ["apiFootball"], secondary: ["sofaScore"] },
   { module: "h2h", label: "Head to head", primary: ["apiFootball"], secondary: ["soccerway", "sofaScore", "oddspedia"] },
   { module: "standings", label: "Clasificación", primary: ["apiFootball"], secondary: ["soccerway", "sofaScore"] },
-  { module: "odds", label: "Cuotas / momios", primary: ["oddspedia"], secondary: ["apiFootball"] },
-  { module: "lineups", label: "Alineaciones", primary: ["sofaScore"], secondary: ["fotmob", "apiFootball"] },
-  { module: "injuriesSuspensions", label: "Lesiones / sanciones", primary: ["fotmob", "whoScored"], secondary: ["apiFootball", "sofaScore"] },
-  { module: "xgXga", label: "xG / xGA", primary: ["fbref", "fotmob"], secondary: ["apiFootballInternalModel", "sofaScore"] },
+  { module: "odds", label: "Cuotas / momios", primary: ["apiFootball"], secondary: ["oddspedia"] },
+  { module: "lineups", label: "Alineaciones", primary: ["apiFootball"], secondary: ["sofaScore", "fotmob", "whoScored"] },
+  { module: "injuriesSuspensions", label: "Lesiones / sanciones", primary: ["apiFootball"], secondary: ["fotmob", "whoScored", "sofaScore"] },
+  { module: "xgXga", label: "xG / xGA", primary: ["apiFootballInternalModel"], secondary: ["fbref", "fotmob", "sofaScore"] },
   { module: "weatherPitch", label: "Clima / cancha", primary: ["weather"], secondary: [] },
   { module: "contextCalendar", label: "Contexto / calendario", primary: ["apiFootball"], secondary: ["sofaScore"] }
 ]);

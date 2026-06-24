@@ -165,14 +165,32 @@ function fixtureStatus(short) {
 export function normalizeFavorite(rows = [], fixture) {
   const prediction = rows[0]?.predictions;
   const winner = prediction?.winner;
-  if (!winner?.id || !winner?.name) return null;
-  const side = winner.id === fixture.homeTeamId ? "home" : winner.id === fixture.awayTeamId ? "away" : null;
-  const rawPercent = side ? prediction.percent?.[side] : null;
-  const percent = Number.parseFloat(String(rawPercent || "").replace("%", ""));
+  const parsePercent = (value) => {
+    const parsed = Number.parseFloat(String(value ?? "").replace("%", ""));
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
+  const probabilities = {
+    home: parsePercent(prediction?.percent?.home),
+    draw: parsePercent(prediction?.percent?.draw),
+    away: parsePercent(prediction?.percent?.away)
+  };
+  const highestSide = Object.entries(probabilities)
+    .filter(([, value]) => value !== null)
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  if (highestSide === "draw") return null;
+  const side = highestSide || (
+    winner?.id === fixture.homeTeamId ? "home" :
+      winner?.id === fixture.awayTeamId ? "away" : null
+  );
+  if (!side) return null;
+  const teamId = side === "home" ? fixture.homeTeamId : fixture.awayTeamId;
+  const team = side === "home" ? fixture.home : fixture.away;
+  if (!teamId || !team) return null;
+
   return {
-    teamId: winner.id, team: winner.name, percent: Number.isFinite(percent) ? percent : null,
-    comment: winner.comment || "", source: "api-football-predictions",
-    note: "Favorito estadístico del proveedor; no representa una votación pública de usuarios."
+    teamId, team, side, market: "1X2", percent: probabilities[side], probabilities,
+    comment: winner?.comment || "", source: "api-football-predictions",
+    note: "Probabilidades 1X2 del proveedor: local, empate y visitante se muestran por separado."
   };
 }
 
@@ -212,24 +230,24 @@ export function normalizeFixture(item, league) {
   };
 }
 
-export async function searchFixtures(filters) {
+export async function searchFixtures(filters, { request = apiRequest, leagueResolver = resolveLeague } = {}) {
   const groups = await Promise.all(filters.leagues.map(async (slug) => {
-    const league = await resolveLeague(slug, filters.season === "auto");
+    const league = await leagueResolver(slug, filters.season === "auto");
     const season = chooseSeason(league.seasons, filters.season, filters.dateFrom);
     if (!season) throw new AppError(`No se encontró temporada válida para ${league.name}.`, 422, "SEASON_NOT_RESOLVED");
-    const fixtures = await apiRequest("/fixtures", {
+    const fixtures = await request("/fixtures", {
       league: league.apiId, season, from: filters.dateFrom, to: filters.dateTo, status: providerStatus(filters.status), timezone: PACIFIC_TIME_ZONE
     }, LIVE_CACHE_TTL);
     const normalized = fixtures
       .map((item) => normalizeFixture(item, league))
-      .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
-      .slice(0, 5);
-    return Promise.all(normalized.map(async (fixture) => {
-      const predictions = await apiRequest("/predictions", { fixture: fixture.id }, PREDICTION_CACHE_TTL).catch(() => []);
-      return { ...fixture, favorite: normalizeFavorite(predictions, fixture) };
-    }));
+      .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+    return normalized;
   }));
   return groups.flat().sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+}
+
+export function shouldLoadCurrentFixtureData(status) {
+  return fixtureStatus(status) !== "scheduled";
 }
 
 function availability(value) {
@@ -266,21 +284,22 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   const homeId = base.teams.home.id;
   const awayId = base.teams.away.id;
   const season = base.league.season;
+  const loadCurrentFixtureData = shouldLoadCurrentFixtureData(base.fixture.status?.short);
   const statisticsCutoffDate = new Date(Date.parse(base.fixture.date) - 86400000).toISOString().slice(0, 10);
   const safe = (promise) => promise.catch(() => []);
   const safeAdvanced = (promise) => promise.then((data) => ({ data, failed: false })).catch(() => ({ data: null, failed: true }));
   const [statistics, standings, h2h, injuries, lineups, odds, homeRecentRows, awayRecentRows, predictions, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
-    safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })),
+    loadCurrentFixtureData ? safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })) : Promise.resolve([]),
     safe(apiRequest("/standings", { league: base.league.id, season })),
     safe(apiRequest("/fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 })),
     safe(apiRequest("/injuries", { fixture: fixtureId })),
     safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })),
     safe(apiRequest("/odds", { fixture: fixtureId })),
-    safe(apiRequest("/fixtures", { team: homeId, last: 8, timezone: "UTC" })),
-    safe(apiRequest("/fixtures", { team: awayId, last: 8, timezone: "UTC" })),
+    safe(apiRequest("/fixtures", { team: homeId, last: 5, timezone: "UTC" })),
+    safe(apiRequest("/fixtures", { team: awayId, last: 5, timezone: "UTC" })),
     safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)),
-    safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })),
-    safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })),
+    loadCurrentFixtureData ? safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
+    loadCurrentFixtureData ? safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
     safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: homeId, date: statisticsCutoffDate })),
     safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: awayId, date: statisticsCutoffDate }))
   ]);
