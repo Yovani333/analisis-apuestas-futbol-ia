@@ -34,30 +34,31 @@ export async function collectExternalSourceData(matchData, {
   forceRefresh = false, adapters = DEFAULT_ADAPTERS, config = env
 } = {}) {
   const common = { apiKey: config.openaiApiKey, forceRefresh };
+  const economicalModel = config.openaiModelDefault || config.openaiModel;
   const [sofaScore, oddspedia, fotmob, weather, soccerway] = await Promise.all([
     safeSource("sofaScore", () => adapters.sofaScore(matchData, { accessMode: config.sofaScoreAccessMode, forceRefresh })),
     safeSource("oddspedia", () => adapters.oddspedia(matchData, {
-      ...common, accessMode: config.oddspediaAccessMode, model: config.oddspediaSearchModel || config.openaiModel
+      ...common, accessMode: config.oddspediaAccessMode, model: config.oddspediaSearchModel || economicalModel
     })),
     safeSource("fotmob", () => adapters.fotmob(matchData, {
-      ...common, accessMode: config.fotmobAccessMode, model: config.fotmobSearchModel || config.openaiModel
+      ...common, accessMode: config.fotmobAccessMode, model: config.fotmobSearchModel || economicalModel
     })),
     safeSource("weather", () => adapters.weather(matchData, {
-      ...common, accessMode: config.weatherAccessMode, model: config.weatherSearchModel || config.openaiModel
+      ...common, accessMode: config.weatherAccessMode, model: config.weatherSearchModel || economicalModel
     })),
     safeSource("soccerway", () => adapters.soccerway(matchData, {
-      ...common, accessMode: config.soccerwayAccessMode, model: config.soccerwaySearchModel || config.openaiModel
+      ...common, accessMode: config.soccerwayAccessMode, model: config.soccerwaySearchModel || economicalModel
     }))
   ]);
 
   const [whoScored, fbref] = await Promise.all([
     safeSource("whoScored", () => adapters.whoScored(matchData, {
       ...common, accessMode: config.whoScoredAccessMode,
-      model: config.whoScoredSearchModel || config.openaiModel, fotmobResult: fotmob
+      model: config.whoScoredSearchModel || economicalModel, fotmobResult: fotmob
     })),
     safeSource("fbref", () => adapters.fbref(matchData, {
       ...common, accessMode: config.fbrefAccessMode,
-      model: config.fbrefSearchModel || config.openaiModel, fotmobResult: fotmob
+      model: config.fbrefSearchModel || economicalModel, fotmobResult: fotmob
     }))
   ]);
   return { sofaScore, oddspedia, fotmob, whoScored, fbref, weather, soccerway };

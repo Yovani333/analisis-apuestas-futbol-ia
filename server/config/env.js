@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { AI_MODEL_DEFAULT, AI_MODEL_PREMIUM } from "./ai-models.js";
 
 dotenv.config({ override: true, quiet: true });
 
@@ -8,7 +9,9 @@ export const env = Object.freeze({
   apiFootballKey: process.env.API_FOOTBALL_KEY || "",
   apiFootballBaseUrl: process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io",
   openaiApiKey: process.env.OPENAI_API_KEY || "",
-  openaiModel: process.env.OPENAI_MODEL || "",
+  openaiModelDefault: process.env.OPENAI_MODEL_DEFAULT || AI_MODEL_DEFAULT,
+  openaiModelPremium: process.env.OPENAI_MODEL_PREMIUM || AI_MODEL_PREMIUM,
+  aiDebug: process.env.AI_DEBUG === "true",
   sofaScoreAccessMode: process.env.SOFASCORE_ACCESS_MODE || "disabled",
   oddspediaAccessMode: process.env.ODDSPEDIA_ACCESS_MODE || "disabled",
   oddspediaSearchModel: process.env.ODDSPEDIA_SEARCH_MODEL || "",
@@ -28,6 +31,7 @@ export function requireLiveConfiguration() {
   const missing = [];
   if (!env.apiFootballKey) missing.push("API_FOOTBALL_KEY");
   if (!env.openaiApiKey) missing.push("OPENAI_API_KEY");
-  if (!env.openaiModel) missing.push("OPENAI_MODEL");
+  if (!env.openaiModelDefault) missing.push("OPENAI_MODEL_DEFAULT");
+  if (!env.openaiModelPremium) missing.push("OPENAI_MODEL_PREMIUM");
   return missing;
 }

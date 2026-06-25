@@ -25,7 +25,7 @@ apiRouter.get("/health", (req, res) => {
         configured: Boolean(env.apiFootballKey),
         observability: getApiFootballObservability()
       },
-      openai: { configured: Boolean(env.openaiApiKey && env.openaiModel) }
+      openai: { configured: Boolean(env.openaiApiKey && env.openaiModelDefault && env.openaiModelPremium) }
     },
     liveReady: missing.length === 0,
     missing

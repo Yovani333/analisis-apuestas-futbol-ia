@@ -164,23 +164,25 @@ npm run dev
 ```dotenv
 API_FOOTBALL_KEY=
 OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.4
+OPENAI_MODEL_DEFAULT=gpt-5.4-mini
+OPENAI_MODEL_PREMIUM=gpt-5.4
+AI_DEBUG=false
 DATA_MODE=mock
 PORT=3000
 API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
 SOFASCORE_ACCESS_MODE=disabled
 ODDSPEDIA_ACCESS_MODE=disabled
-ODDSPEDIA_SEARCH_MODEL=gpt-5.4
+ODDSPEDIA_SEARCH_MODEL=gpt-5.4-mini
 FOTMOB_ACCESS_MODE=disabled
-FOTMOB_SEARCH_MODEL=gpt-5.4
+FOTMOB_SEARCH_MODEL=gpt-5.4-mini
 WHOSCORED_ACCESS_MODE=disabled
-WHOSCORED_SEARCH_MODEL=gpt-5.4
+WHOSCORED_SEARCH_MODEL=gpt-5.4-mini
 FBREF_ACCESS_MODE=disabled
-FBREF_SEARCH_MODEL=gpt-5.4
+FBREF_SEARCH_MODEL=gpt-5.4-mini
 WEATHER_ACCESS_MODE=disabled
-WEATHER_SEARCH_MODEL=gpt-5.4
+WEATHER_SEARCH_MODEL=gpt-5.4-mini
 SOCCERWAY_ACCESS_MODE=disabled
-SOCCERWAY_SEARCH_MODEL=gpt-5.4
+SOCCERWAY_SEARCH_MODEL=gpt-5.4-mini
 ```
 
 Para activar conscientemente la búsqueda complementaria en Render, cambia únicamente `ODDSPEDIA_ACCESS_MODE=openai_web_search`. Si falla, no encuentra coincidencia exacta o no obtiene una fuente de `oddspedia.com`, el resto del análisis continúa y el módulo queda como no disponible o fallido.
@@ -195,7 +197,9 @@ Clima se activa con `WEATHER_ACCESS_MODE=openai_web_search`. Solo consulta encue
 
 Soccerway se activa con `SOCCERWAY_ACCESS_MODE=openai_web_search`. No consume una búsqueda cuando API-Football ya proporcionó clasificación y H2H. Sus resultados nunca sustituyen datos confirmados del proveedor principal.
 
-Para activar datos reales, completa un `.env` local y cambia `DATA_MODE=live`. Confirma que `OPENAI_MODEL` sea un identificador disponible en tu proyecto de OpenAI.
+Para activar datos reales, completa un `.env` local y cambia `DATA_MODE=live`. `OPENAI_MODEL_DEFAULT` atiende los análisis normales y `OPENAI_MODEL_PREMIUM` se reserva para partidos complejos, premium, contradictorios o de alta importancia. Si el modelo económico falla, el backend realiza un único intento con el modelo premium.
+
+El selector central evalúa confianza, valor, jerarquía del favorito, contradicciones, importancia de la competición, parlays y datos críticos. `AI_DEBUG=true` agrega metadatos técnicos del modelo a la respuesta; mantenlo desactivado en producción si no necesitas depuración.
 
 La interfaz incluye temporadas históricas y la temporada 2026 para la Copa Mundial FIFA. La cobertura real de cada competición depende del plan vigente de API-Football; cuando corresponda puede usarse la opción automática.
 
