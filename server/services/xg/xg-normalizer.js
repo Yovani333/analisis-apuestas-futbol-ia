@@ -18,6 +18,7 @@ export function emptyEstimatedXgStats() {
     ballPossession: null,
     goalkeeperSaves: null,
     penalties: 0,
+    bigChances: null,
     dangerousAttacks: null
   };
 }

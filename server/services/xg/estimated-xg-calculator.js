@@ -16,6 +16,7 @@ export function calculateEstimatedXG(stats = {}) {
     value(stats, "blockedShots") * 0.015 +
     value(stats, "cornerKicks") * 0.02 +
     penalties * 0.76 +
+    value(stats, "bigChances") * 0.18 +
     value(stats, "dangerousAttacks") * 0.003;
   return Number(estimatedXG.toFixed(2));
 }

@@ -38,6 +38,8 @@
   "xgXga": {
     "status": "not_available",
     "type": "official | historical_estimated | fixture_estimated | not_available",
+    "dataSource": "historical_api_estimate | api-football-internal-model | provider",
+    "calculationStatus": "estimated_from_previous_matches | current_fixture | not_available",
     "scope": "previous_matches | current_fixture",
     "modelVersion": "",
     "homeXG": null,

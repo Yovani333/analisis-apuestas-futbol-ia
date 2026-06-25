@@ -12,6 +12,8 @@ const STAT_KEYS = Object.freeze({
   "corner kicks": "cornerKicks",
   "ball possession": "ballPossession",
   "goalkeeper saves": "goalkeeperSaves",
+  "big chances": "bigChances",
+  "big chances created": "bigChances",
   "dangerous attacks": "dangerousAttacks"
 });
 

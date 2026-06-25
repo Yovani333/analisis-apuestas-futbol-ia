@@ -431,17 +431,22 @@ function renderResearchModuleDetail(moduleKey, research) {
     const awayPlayers = module.awayStartingXI?.length ? module.awayStartingXI : module.probableAwayXI;
     content = `<div class="detail-note"><strong>${module.confirmed ? "Alineaciones confirmadas" : "Alineaciones probables / sin confirmación"}</strong><span>La confirmación exige once inicial oficial para ambos equipos.</span></div><div class="lineups-grid">${playerList(research.homeTeam.name, module.homeFormation, homePlayers)}${playerList(research.awayTeam.name, module.awayFormation, awayPlayers)}</div>`;
   } else if (moduleKey === "xgXga") {
-    const historicalEstimated = module.type === "historical_estimated";
+    const historicalEstimated = module.type === "historical_estimated" || module.dataSource === "historical_api_estimate";
     const estimated = historicalEstimated || ["estimated", "fixture_estimated"].includes(module.type);
-    const confidenceLabel = (value) => ({ high: "Alta", medium: "Media", low: "Baja", not_available: "No disponible" }[value] || "No disponible");
-    const modeLabel = historicalEstimated ? "Histórico" : estimated ? "Fixture actual" : "Oficial";
+    const confidenceLabel = (value) => ({
+      high: historicalEstimated ? "Aceptable" : "Alta",
+      medium: "Media",
+      low: "Baja",
+      not_available: "No disponible"
+    }[value] || "No disponible");
+    const modeLabel = historicalEstimated ? "Estimado con partidos anteriores" : estimated ? "Fixture actual" : "Oficial";
     const teamRows = [
       [escapeHtml(research.homeTeam.name), displayValue(module.homeXG), displayValue(module.homeXGA), modeLabel, displayValue(module.homeSampleSize ?? module.sampleSize), confidenceLabel(module.homeConfidence?.label || module.confidenceLabel)],
       [escapeHtml(research.awayTeam.name), displayValue(module.awayXG), displayValue(module.awayXGA), modeLabel, displayValue(module.awaySampleSize ?? module.sampleSize), confidenceLabel(module.awayConfidence?.label || module.confidenceLabel)]
     ];
     const teams = detailTable(["Equipo", estimated ? "xG estimado" : "xG", estimated ? "xGA estimado" : "xGA", "Modo", "Muestra", "Confianza"], teamRows);
     const mandatoryText = historicalEstimated
-      ? "xG/xGA histórico estimado calculado con partidos anteriores de cada equipo. No requiere enfrentamiento directo entre ambos equipos. No corresponde a xG oficial ni al xG del partido actual."
+      ? "xG / xGA estimado con base en partidos anteriores. No requiere enfrentamiento directo entre ambos equipos. No corresponde a xG real ni oficial del partido actual."
       : "xG/xGA estimado calculado internamente con estadísticas del partido desde API-Football. No corresponde a xG oficial.";
     const metadata = estimated
       ? `<div class="detail-note detail-note--info"><strong>API-Football + modelo interno · ${escapeHtml(module.modelVersion || (historicalEstimated ? "historical-estimated-xg-v1" : "fixture-estimated-xg-v1"))}</strong><span>${escapeHtml(mandatoryText)}</span></div>
@@ -462,7 +467,8 @@ function renderResearchModuleDetail(moduleKey, research) {
       totalShots: "Tiros totales", shotsOnGoal: "Tiros a puerta", shotsOffGoal: "Tiros fuera",
       shotsInsideBox: "Tiros dentro del área", shotsOutsideBox: "Tiros fuera del área",
       blockedShots: "Tiros bloqueados", cornerKicks: "Corners", ballPossession: "Posesión",
-      goalkeeperSaves: "Atajadas", penalties: "Penales detectados", dangerousAttacks: "Ataques peligrosos"
+      goalkeeperSaves: "Atajadas", penalties: "Penales detectados", bigChances: "Grandes ocasiones",
+      dangerousAttacks: "Ataques peligrosos"
     };
     const rawStats = !historicalEstimated && estimated && module.rawStats
       ? `<section class="detail-section"><h3>Datos base usados</h3>${detailTable(

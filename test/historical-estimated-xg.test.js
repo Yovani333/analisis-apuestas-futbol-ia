@@ -47,6 +47,12 @@ function previousFixture(id, teamId, opponentId, day) {
   };
 }
 
+function fixtureWithStatus(id, teamId, opponentId, day, status) {
+  const fixture = previousFixture(id, teamId, opponentId, day);
+  fixture.fixture.status.short = status;
+  return fixture;
+}
+
 function createLoaders() {
   return {
     getFixtureStatistics: async (fixtureId) => {
@@ -75,10 +81,12 @@ function input(homeCount, awayCount, options = {}) {
   };
 }
 
-test("partido programado con cinco partidos útiles produce histórico disponible", async () => {
+test("partido programado con cinco partidos útiles produce histórico parcial de confianza media", async () => {
   const result = await getHistoricalEstimatedXgXga(input(5, 5));
-  assert.equal(result.status, "available");
+  assert.equal(result.status, "partial");
   assert.equal(result.type, "historical_estimated");
+  assert.equal(result.dataSource, "historical_api_estimate");
+  assert.equal(result.calculationStatus, "estimated_from_previous_matches");
   assert.equal(result.modelVersion, HISTORICAL_MODEL_VERSION);
   assert.equal(result.homeTeam.sampleSize, 5);
   assert.equal(result.awayTeam.sampleSize, 5);
@@ -87,8 +95,20 @@ test("partido programado con cinco partidos útiles produce histórico disponibl
   assert.deepEqual(result.homeTeam.diagnostics.skippedFixtures, []);
   assert.ok(Number.isFinite(result.homeTeam.historicalEstimatedXGAvg));
   assert.ok(Number.isFinite(result.homeTeam.historicalEstimatedXGAAvg));
-  assert.equal(result.confidence.label, "high");
+  assert.equal(result.confidence.label, "medium");
+  assert.equal(result.sampleSizeHome, 5);
+  assert.equal(result.sampleSizeAway, 5);
+  assert.equal(result.homeXGHistoricalAverage, result.homeTeam.historicalEstimatedXGAvg);
+  assert.equal(result.fixturesUsedHome.length, 5);
+  assert.match(result.confidence.notes.join(" "), /confiabilidad histórica es media/i);
   assert.match(result.warning, /No corresponde a xG oficial/);
+});
+
+test("seis partidos útiles producen una muestra histórica aceptable", async () => {
+  const result = await getHistoricalEstimatedXgXga(input(6, 6, { limit: 10 }));
+  assert.equal(result.status, "available");
+  assert.equal(result.confidence.label, "high");
+  assert.match(result.confidence.notes.join(" "), /muestra histórica es aceptable/i);
 });
 
 test("una sola observación útil conserva confianza baja", async () => {
@@ -105,6 +125,26 @@ test("sin estadísticas anteriores no calcula valores", async () => {
   assert.equal(result.homeTeam.historicalEstimatedXGAvg, null);
   assert.equal(result.awayTeam.historicalEstimatedXGAAvg, null);
   assert.equal(result.confidence.label, "not_available");
+  assert.match(result.confidence.notes.join(" "), /No hay partidos anteriores/i);
+});
+
+test("ignora fixtures programados, pospuestos y cancelados del historial", async () => {
+  const base = input(0, 0, { limit: 10 });
+  base.homePreviousFixtures = [
+    previousFixture(101, 1, 1101, 1),
+    fixtureWithStatus(102, 1, 1102, 2, "NS"),
+    fixtureWithStatus(103, 1, 1103, 3, "PST"),
+    fixtureWithStatus(104, 1, 1104, 4, "CANC")
+  ];
+  base.awayPreviousFixtures = [
+    previousFixture(201, 2, 1201, 1),
+    fixtureWithStatus(202, 2, 1202, 2, "TBD")
+  ];
+  const result = await getHistoricalEstimatedXgXga(base);
+  assert.equal(result.homeTeam.diagnostics.attemptedFixtures, 1);
+  assert.equal(result.awayTeam.diagnostics.attemptedFixtures, 1);
+  assert.equal(result.homeTeam.sampleSize, 1);
+  assert.equal(result.awayTeam.sampleSize, 1);
 });
 
 test("conserva el motivo cuando falla una consulta histórica", async () => {

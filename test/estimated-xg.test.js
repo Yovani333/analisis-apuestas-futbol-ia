@@ -97,6 +97,12 @@ test("suma 0.76 por un penal detectado", () => {
   assert.equal(result.homeTeam.estimatedXG, Number((base + 0.76).toFixed(2)));
 });
 
+test("Big Chances aumenta el xG estimado cuando API-Football lo proporciona", () => {
+  const base = calculateEstimatedXG({ totalShots: 10, shotsOnGoal: 4, bigChances: 0 });
+  const withBigChances = calculateEstimatedXG({ totalShots: 10, shotsOnGoal: 4, bigChances: 2 });
+  assert.equal(withBigChances, Number((base + 0.36).toFixed(2)));
+});
+
 test("un penal fallado también suma 0.76 al xG estimado", () => {
   const base = calculateEstimatedXG({ totalShots: 10, shotsOnGoal: 4, penalties: 0 });
   const result = buildEstimatedXgFromDataset(dataset(

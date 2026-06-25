@@ -295,8 +295,8 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     safe(apiRequest("/injuries", { fixture: fixtureId })),
     safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })),
     safe(apiRequest("/odds", { fixture: fixtureId })),
-    safe(apiRequest("/fixtures", { team: homeId, last: 5, timezone: "UTC" })),
-    safe(apiRequest("/fixtures", { team: awayId, last: 5, timezone: "UTC" })),
+    safe(apiRequest("/fixtures", { team: homeId, last: 10, timezone: "UTC" })),
+    safe(apiRequest("/fixtures", { team: awayId, last: 10, timezone: "UTC" })),
     safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)),
     loadCurrentFixtureData ? safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
     loadCurrentFixtureData ? safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
@@ -347,7 +347,17 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     qualityAlerts: ["Los datos vacíos se conservan como no disponibles; no se completan por inferencia."]
   };
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
-  dataset.historicalEstimatedXg = fixture.status === "scheduled"
+  const currentFixtureXgAvailable = ["available", "partial"].includes(dataset.estimatedXg?.status);
+  const historicalXgMode = fixture.status === "scheduled" || !currentFixtureXgAvailable;
+  console.info("[xg-mode]", {
+    fixtureId: fixture.id,
+    fixtureStatus: fixture.status,
+    providerStatus: base.fixture.status?.short || "",
+    mode: historicalXgMode ? "historical" : "current_fixture",
+    homePreviousFixturesFound: homeRecentRows.length,
+    awayPreviousFixturesFound: awayRecentRows.length
+  });
+  dataset.historicalEstimatedXg = historicalXgMode
     ? await getHistoricalEstimatedXgXga({
       fixtureId: fixture.id,
       fixtureDate: base.fixture.date,
@@ -357,13 +367,27 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
       awayPreviousFixtures: awayRecentRows,
       getFixtureStatistics,
       getFixtureEvents,
-      limit: 5,
+      limit: 10,
       worldCup: fixture.leagueSlug === "world-cup",
       updatedAt: dataset.fetchedAt
     })
     : null;
+  if (dataset.historicalEstimatedXg) {
+    const historical = dataset.historicalEstimatedXg;
+    console.info("[xg-historical-result]", {
+      fixtureId: fixture.id,
+      status: historical.status,
+      homeValidFixtures: historical.homeTeam?.sampleSize || 0,
+      awayValidFixtures: historical.awayTeam?.sampleSize || 0,
+      homeXG: historical.homeTeam?.historicalEstimatedXGAvg ?? null,
+      homeXGA: historical.homeTeam?.historicalEstimatedXGAAvg ?? null,
+      awayXG: historical.awayTeam?.historicalEstimatedXGAvg ?? null,
+      awayXGA: historical.awayTeam?.historicalEstimatedXGAAvg ?? null,
+      reason: historical.confidence?.notes?.join(" ") || ""
+    });
+  }
   dataset.externalSources = await collectExternalSourceData(dataset, { forceRefresh });
-  const activeInternalXg = fixture.status === "scheduled" ? dataset.historicalEstimatedXg : dataset.estimatedXg;
+  const activeInternalXg = currentFixtureXgAvailable ? dataset.estimatedXg : dataset.historicalEstimatedXg;
   fixture.dataAvailability.xg = activeInternalXg?.status === "available"
     ? "Disponible" : activeInternalXg?.status === "partial" ? "Necesita revisión" : fixture.dataAvailability.xg;
   dataset.researchData = normalizeMatchResearchData(dataset);

@@ -6,7 +6,7 @@ import {
 } from "./xg-data-extractor.js";
 
 export const HISTORICAL_MODEL_VERSION = "historical-estimated-xg-v1";
-export const HISTORICAL_XG_WARNING = "xG/xGA histórico estimado con partidos anteriores. No corresponde a xG oficial ni al xG del partido actual.";
+export const HISTORICAL_XG_WARNING = "xG / xGA estimado con base en partidos anteriores. No corresponde a xG oficial ni al xG del partido actual.";
 export const WORLD_CUP_XG_WARNING = "Modo Mundial: muestra estadística limitada. El xG/xGA histórico estimado usa partidos anteriores de cada selección y debe interpretarse con cautela.";
 
 const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
@@ -64,7 +64,7 @@ function historicalConfidence(records, attemptedCount, { worldCup = false } = {}
     total + REQUIRED_FIELDS.filter((key) => record.rawStats[key] !== null).length, 0);
   const availableFieldsRatio = availableFields / (records.length * REQUIRED_FIELDS.length);
   let score = Math.round(availableFieldsRatio * 100);
-  if (records.length >= 5) score += 10;
+  if (records.length >= 6) score += 10;
   if (records.length < 3) score -= 25;
   score = Math.max(1, Math.min(100, score));
 
@@ -72,7 +72,7 @@ function historicalConfidence(records, attemptedCount, { worldCup = false } = {}
   if (records.length < 3) {
     score = Math.min(score, 49);
     label = "low";
-  } else if (records.length < 5) {
+  } else if (records.length < 6) {
     score = Math.min(score, 79);
     label = score >= 50 ? "medium" : "low";
   }
@@ -82,6 +82,9 @@ function historicalConfidence(records, attemptedCount, { worldCup = false } = {}
   }
 
   const notes = [];
+  if (records.length < 3) notes.push("Con menos de 3 partidos útiles, la confiabilidad histórica es baja.");
+  else if (records.length <= 5) notes.push("Con 3 a 5 partidos útiles, la confiabilidad histórica es media.");
+  else notes.push("Con 6 o más partidos útiles, la muestra histórica es aceptable.");
   if (attemptedCount > records.length) notes.push(`${attemptedCount - records.length} partido(s) se omitieron por datos insuficientes.`);
   if (records.some((record) => !record.eventsAvailable) || !records.some((record) => record.rawStats.penalties > 0)) {
     notes.push("No se detectaron eventos de penal o la fuente no los proporcionó.");
@@ -204,11 +207,21 @@ export async function getHistoricalEstimatedXgXga({
       status: statusFromScore(score),
       type: "historical_estimated",
       source: "api-football-internal-model",
+      dataSource: "historical_api_estimate",
+      calculationStatus: "estimated_from_previous_matches",
       modelVersion: HISTORICAL_MODEL_VERSION,
       scope: "previous_matches",
       fixtureId: String(fixtureId || ""),
       homeTeam: home,
       awayTeam: away,
+      homeXGHistoricalAverage: home.historicalEstimatedXGAvg,
+      homeXGAHistoricalAverage: home.historicalEstimatedXGAAvg,
+      awayXGHistoricalAverage: away.historicalEstimatedXGAvg,
+      awayXGAHistoricalAverage: away.historicalEstimatedXGAAvg,
+      sampleSizeHome: home.sampleSize,
+      sampleSizeAway: away.sampleSize,
+      fixturesUsedHome: home.fixturesUsed,
+      fixturesUsedAway: away.fixturesUsed,
       confidence: {
         score,
         label: score >= 80 ? "high" : score >= 50 ? "medium" : score > 0 ? "low" : "not_available",
@@ -222,6 +235,8 @@ export async function getHistoricalEstimatedXgXga({
       status: "failed",
       type: "historical_estimated",
       source: "api-football-internal-model",
+      dataSource: "historical_api_estimate",
+      calculationStatus: "failed",
       modelVersion: HISTORICAL_MODEL_VERSION,
       scope: "previous_matches",
       fixtureId: String(fixtureId || ""),

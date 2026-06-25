@@ -286,12 +286,12 @@ export function getLineupsData(dataset) {
 
 export function getXgXgaData(dataset) {
   const historical = dataset.historicalEstimatedXg;
-  const hasHistoricalEstimate = dataset.fixture.status === "scheduled"
-    && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(historical?.status);
   const estimated = dataset.estimatedXg;
   const canUseCurrentFixtureEstimate = dataset.fixture.status === "live" || dataset.fixture.status === "finished";
   const hasCurrentFixtureEstimate = canUseCurrentFixtureEstimate
     && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(estimated?.status);
+  const hasHistoricalEstimate = !hasCurrentFixtureEstimate
+    && [DATA_STATUS.AVAILABLE, DATA_STATUS.PARTIAL].includes(historical?.status);
   const hasInternalEstimate = hasHistoricalEstimate || hasCurrentFixtureEstimate;
   const fotmob = dataset.externalSources?.fotmob;
   const external = fotmob?.data?.xgXga;
@@ -335,6 +335,8 @@ export function getXgXgaData(dataset) {
       ...moduleBase(historical.status, historical.updatedAt || dataset.fetchedAt, "api-football-internal-model",
         "Calculado con partidos anteriores de cada equipo; no requiere H2H."),
       type: "historical_estimated",
+      dataSource: historical.dataSource || "historical_api_estimate",
+      calculationStatus: historical.calculationStatus || "estimated_from_previous_matches",
       scope: "previous_matches",
       homeXG: historical.homeTeam.historicalEstimatedXGAvg,
       homeXGA: historical.homeTeam.historicalEstimatedXGAAvg,
@@ -346,6 +348,18 @@ export function getXgXgaData(dataset) {
       sampleSize: Math.min(historical.homeTeam.sampleSize, historical.awayTeam.sampleSize),
       homeSampleSize: historical.homeTeam.sampleSize,
       awaySampleSize: historical.awayTeam.sampleSize,
+      homeTeam: {
+        xGHistoricalAverage: historical.homeTeam.historicalEstimatedXGAvg,
+        xGAHistoricalAverage: historical.homeTeam.historicalEstimatedXGAAvg
+      },
+      awayTeam: {
+        xGHistoricalAverage: historical.awayTeam.historicalEstimatedXGAvg,
+        xGAHistoricalAverage: historical.awayTeam.historicalEstimatedXGAAvg
+      },
+      sampleSizeHome: historical.homeTeam.sampleSize,
+      sampleSizeAway: historical.awayTeam.sampleSize,
+      fixturesUsedHome: historical.homeTeam.fixturesUsed,
+      fixturesUsedAway: historical.awayTeam.fixturesUsed,
       fixturesUsed: {
         home: historical.homeTeam.fixturesUsed,
         away: historical.awayTeam.fixturesUsed
@@ -391,7 +405,7 @@ export function getXgXgaData(dataset) {
   }
   return {
     ...moduleBase(DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, "",
-      "No hay xG/xGA especializado prepartido ni estadísticas suficientes del fixture para un cálculo interno responsable."),
+      historical?.confidence?.notes?.[0] || "Datos históricos insuficientes para calcular xG/xGA responsablemente."),
     type: "not_available", homeXG: null, homeXGA: null, awayXG: null, awayXGA: null,
     homeNPXG: null, awayNPXG: null, modelVersion: "", confidenceScore: 0,
     confidenceLabel: "not_available", warning: "No se inventaron valores de xG/xGA."
