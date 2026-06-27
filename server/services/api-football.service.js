@@ -392,6 +392,13 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     ? "Disponible" : activeInternalXg?.status === "partial" ? "Necesita revisión" : fixture.dataAvailability.xg;
   dataset.researchData = normalizeMatchResearchData(dataset);
   dataset.pickRecommendation = evaluatePickRecommendations(dataset);
+  dataset.researchData.pickDecision = dataset.pickRecommendation;
+  dataset.researchData.odds.markets = (dataset.researchData.odds.markets || []).map((market) => {
+    const reviewed = dataset.pickRecommendation.reviewedPicks.find((pick) =>
+      pick.marketKey === market.marketKey && pick.selectionKey === market.selectionKey
+    );
+    return reviewed ? { ...market, ...reviewed } : market;
+  });
   dataset.analysisInput = buildAnalysisInput(dataset);
   datasetCache.set(fixtureId, { value: dataset, expiresAt: Date.now() + CACHE_TTL });
   return dataset;

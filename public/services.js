@@ -102,6 +102,7 @@ export const footballDataService = {
       confirmedData: payload.confirmed || {},
       preMatch: payload.preMatch || null,
       marketAnalysis: payload.marketAnalysis || [],
+      pickRecommendation: payload.pickRecommendation || null,
       dataQuality: payload.dataQuality || null,
       researchData: payload.researchData || null,
       unavailableData: payload.unavailable || [],

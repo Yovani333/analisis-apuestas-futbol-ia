@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260624-premium-dashboard-2";
+import { footballDataService } from "./services.js?v=20260627-pick-classification";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
   saveParlayDraft, saveSavedParlays, settleLegResult
@@ -414,8 +414,25 @@ function renderResearchModuleDetail(moduleKey, research) {
     const rows = (module.matches || []).map((match) => [displayValue(match.date), displayValue(match.homeTeam), `<strong>${displayValue(match.homeGoals)} – ${displayValue(match.awayGoals)}</strong>`, displayValue(match.awayTeam)]);
     content = `<div class="research-kpis"><span>Victorias ${escapeHtml(research.homeTeam.name)} <strong>${displayValue(module.homeWins)}</strong></span><span>Empates <strong>${displayValue(module.draws)}</strong></span><span>Victorias ${escapeHtml(research.awayTeam.name)} <strong>${displayValue(module.awayWins)}</strong></span></div>${rows.length ? detailTable(["Fecha", "Local", "Marcador", "Visitante"], rows) : emptyDetail("No hay enfrentamientos disponibles.")}`;
   } else if (moduleKey === "odds") {
-    const rows = (module.markets || []).map((market) => [displayValue(market.market), displayValue(market.selection), displayValue(market.decimalOdds), `${displayValue(market.impliedProbabilityPct)}%`, `${displayValue(market.estimatedProbabilityPct)}%`, `${displayValue(market.expectedValuePct)}%`, market.requiresReview ? "Revisar" : "Verificado"]);
-    content = rows.length ? detailTable(["Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Control"], rows) : emptyDetail("No hay cuotas principales verificables.");
+    const decision = research.pickDecision || {};
+    const roleFor = (market) => market.selectionKey === decision.recommendedPick?.selectionKey ? "Mejor pick"
+      : market.selectionKey === decision.conservativeAlternative?.selectionKey ? "Conservador"
+        : market.selectionKey === decision.valueAlternative?.selectionKey ? "Valor"
+          : market.highlightColor === "red" ? "Evitar" : "Evaluado";
+    const rows = (module.markets || []).map((market) => [
+      `<span class="pick-highlight pick-highlight--${escapeHtml(market.highlightColor || "orange")}">${escapeHtml(market.colorMeaning || "Riesgo")}</span>`,
+      displayValue(market.market),
+      `<strong>${displayValue(market.selection)}</strong><small class="pick-role">${escapeHtml(roleFor(market))}</small>`,
+      displayValue(market.decimalOdds),
+      `${displayValue(market.impliedProbabilityPct)}%`,
+      `${displayValue(market.estimatedProbabilityPct)}%`,
+      `${displayValue(market.expectedValuePct)}%`,
+      `<strong>${escapeHtml(market.confidenceLevel || "Baja")}</strong><small>${displayValue(market.finalPickScore, 0)}/100</small>`,
+      `<span title="${escapeHtml(market.explanation || "Sin explicación adicional")}">${escapeHtml(market.explanation || (market.requiresReview ? "Requiere revisión" : "Verificado"))}</span>`
+    ]);
+    const legend = `<div class="pick-color-legend" aria-label="Leyenda de colores"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Confiable</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>`;
+    const summary = decision.matchProfile ? `<div class="pick-decision-summary"><div><span>Favorito real</span><strong>${escapeHtml(decision.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(decision.favoriteStrength || "none")}</small></div><div><span>Perfil</span><strong>${escapeHtml(decision.matchProfile)}</strong></div><div><span>Mejor pick</span><strong>${escapeHtml(decision.recommendedPick?.selection || "Sin pick")}</strong></div><div><span>Alternativa conservadora</span><strong>${escapeHtml(decision.conservativeAlternative?.selection || "Sin alternativa")}</strong></div></div>` : "";
+    content = rows.length ? `${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación"], rows)}` : emptyDetail("No hay cuotas principales verificables.");
   } else if (moduleKey === "contextCalendar") {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
   } else if (moduleKey === "statsForm") {
@@ -892,7 +909,8 @@ function renderAnalysis(analysis) {
   const pickReview = analysis.pickReview;
   const categoryLabels = {
     pick_fuerte: "Pick fuerte", pick_logico: "Pick lógico",
-    value_sospechoso: "Value sospechoso", agresivo_stake_bajo: "Agresivo · exposición baja",
+    value_sospechoso: "Value sospechoso", high_risk_value: "Falso valor probable",
+    agresivo_stake_bajo: "Agresivo · exposición baja",
     evitar: "Evitar", sin_pick: "Sin pick"
   };
   const strengthLabels = { strong: "Fuerte", medium: "Medio", slight: "Ligero", none: "Sin favorito claro" };
@@ -906,6 +924,7 @@ function renderAnalysis(analysis) {
       <p>${escapeHtml(pickReview.warning || "Sin advertencias adicionales.")}</p>
     </section>` : "";
   const confidenceColor = (pick) => {
+    if (pick.highlightColor) return pick.highlightColor;
     if (pick.confidencePct >= 70 && ["pick_fuerte", "pick_logico"].includes(pick.pickCategory)) return "green";
     if (pick.confidencePct >= 50 && pick.pickCategory !== "evitar") return "orange";
     return "red";

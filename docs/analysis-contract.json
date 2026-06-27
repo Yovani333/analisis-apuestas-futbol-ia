@@ -41,7 +41,7 @@
     "valor_esperado": null,
     "valueScore": null,
     "confidenceScore": null,
-    "pickCategory": "pick_fuerte | pick_logico | value_sospechoso | agresivo_stake_bajo | evitar | sin_pick",
+    "pickCategory": "pick_fuerte | pick_logico | high_risk_value | value_sospechoso | agresivo_stake_bajo | evitar | sin_pick",
     "warning": "",
     "confirmaciones": [],
     "razonamiento": "",
@@ -59,8 +59,12 @@
     "favoriteTeam": "",
     "favoriteStrength": "strong | medium | slight | none",
     "qualityGap": "very_high | high | medium | low",
-    "highestEvPick": { "selection": "", "expectedValuePct": null, "pickCategory": "" },
-    "recommendedPick": { "selection": "", "confidenceScore": 0, "pickCategory": "" },
+    "matchProfile": "favorite_open | favorite_defensive | closed_balanced | competitive_open | false_value_risk",
+    "highestEvPick": { "selection": "", "expectedValuePct": null, "pickCategory": "", "highlightColor": "green | orange | red" },
+    "recommendedPick": { "selection": "", "valueScore": 0, "confidenceScore": 0, "safetyScore": 0, "riskScore": 0, "finalPickScore": 0, "pickCategory": "", "highlightColor": "green | orange | red", "explanation": "" },
+    "conservativeAlternative": { "selection": "", "finalPickScore": 0, "highlightColor": "green | orange | red" },
+    "valueAlternative": { "selection": "", "finalPickScore": 0, "highlightColor": "green | orange | red" },
+    "discardedPicks": [{ "selection": "", "discardReason": "", "riskFlags": [] }],
     "confidencePicks": [{
       "rank": 1,
       "selection": "",
@@ -71,7 +75,7 @@
       "pickCategory": "",
       "warning": ""
     }],
-    "pickCategory": "pick_fuerte | pick_logico | value_sospechoso | agresivo_stake_bajo | evitar | sin_pick",
+    "pickCategory": "pick_fuerte | pick_logico | high_risk_value | value_sospechoso | agresivo_stake_bajo | evitar | sin_pick",
     "warning": ""
   },
   "apto_para_parlay": {

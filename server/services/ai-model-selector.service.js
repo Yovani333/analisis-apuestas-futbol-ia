@@ -67,7 +67,7 @@ function analysisSignals(dataset = {}) {
     dataset.analysisOptions?.hasContradictions
     || suspiciousHighValue
     || recommendedAgainstStrongFavorite
-    || ["value_sospechoso", "agresivo_stake_bajo"].includes(highestEv?.pickCategory)
+    || ["value_sospechoso", "high_risk_value", "agresivo_stake_bajo"].includes(highestEv?.pickCategory)
   );
   const competitionName = `${dataset.fixture?.leagueName || ""} ${research.league?.name || ""}`;
   const round = `${dataset.fixture?.round || ""} ${dataset.analysisOptions?.competitionStage || ""}`;

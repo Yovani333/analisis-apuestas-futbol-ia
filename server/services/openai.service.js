@@ -119,7 +119,7 @@ export function applyResearchGuardrails(parsed, dataset) {
     const reviewedPick = pickReview?.reviewedPicks?.find((item) =>
       item.marketKey === calculation.marketKey && item.selectionKey === calculation.selectionKey
     );
-    const requiresLogicalReview = ["value_sospechoso", "agresivo_stake_bajo", "evitar", "sin_pick"]
+    const requiresLogicalReview = ["value_sospechoso", "high_risk_value", "agresivo_stake_bajo", "evitar", "sin_pick"]
       .includes(reviewedPick?.pickCategory);
     return {
       ...market,
