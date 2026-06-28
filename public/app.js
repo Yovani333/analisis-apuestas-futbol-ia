@@ -15,7 +15,8 @@ const state = {
   isSearching: false,
   isAnalyzing: false,
   isRefreshingResearch: false,
-  isRefreshingStatuses: false
+  isRefreshingStatuses: false,
+  autoRefreshTimer: null
 };
 
 const elements = {
@@ -24,16 +25,21 @@ const elements = {
   leagueCount: document.querySelector("#league-count"),
   dateFrom: document.querySelector("#date-from"),
   dateTo: document.querySelector("#date-to"),
+  setToday: document.querySelector("#set-today"),
   season: document.querySelector("#season"),
   status: document.querySelector("#match-status"),
   filterError: document.querySelector("#filter-error"),
   searchFeedback: document.querySelector("#search-feedback"),
   matchCount: document.querySelector("#match-count"),
   refreshFixtureStatuses: document.querySelector("#refresh-fixture-statuses"),
+  autoRefresh: document.querySelector("#auto-refresh"),
   matchesList: document.querySelector("#matches-list"),
   selectedSummary: document.querySelector("#selected-match-summary"),
   dataStatus: document.querySelector("#data-overall-status"),
   dataGrid: document.querySelector("#data-grid"),
+  refreshCoverage: document.querySelector("#refresh-coverage"),
+  researchContent: document.querySelector("#research-content"),
+  toggleResearch: document.querySelector("#toggle-research"),
   researchSummary: document.querySelector("#research-summary"),
   sourceCoverage: document.querySelector("#source-coverage"),
   researchGrid: document.querySelector("#research-grid"),
@@ -151,6 +157,12 @@ function formatDate(isoDate) {
   return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${isoDate}T00:00:00Z`));
 }
 
+function pacificToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Tijuana", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(new Date());
+}
+
 function teamInitials(name = "") {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "FC";
 }
@@ -264,6 +276,7 @@ function renderFixtureData() {
     </div>
     ${probabilityLine}`;
   updateAnalysisActionState();
+  elements.refreshCoverage.disabled = state.isRefreshingResearch;
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
 }
@@ -295,13 +308,13 @@ function renderCoverageTable(fixture) {
             const active = coverage?.activeSources?.join(" / ") || (researchModule?.source ? researchSourceLabel(moduleKey, researchModule) : "Ninguna");
             const sourceType = active.includes("modelo interno") ? "model" : active.includes("API-Football") ? "api" : "external";
             return `<tr class="coverage-row coverage-row--${sourceType}">
-              <td><strong>${escapeHtml(category.label)}</strong></td>
-              <td>${statusBadge(status)}</td>
-              <td>${escapeHtml(primary)}</td>
-              <td>${escapeHtml(backup)}</td>
-              <td><span class="source-chip source-chip--${sourceType}">${escapeHtml(active)}</span></td>
-              <td>${escapeHtml(formatUpdatedAt(researchModule?.updatedAt || coverage?.updatedAt))}</td>
-              <td><button class="button button--secondary button--compact" type="button" data-category="${escapeHtml(category.key)}">Ver datos</button></td>
+              <td data-label="Dato"><strong>${escapeHtml(category.label)}</strong></td>
+              <td data-label="Estado">${statusBadge(status)}</td>
+              <td data-label="Fuente principal">${escapeHtml(primary)}</td>
+              <td data-label="Respaldo">${escapeHtml(backup)}</td>
+              <td data-label="Fuente activa"><span class="source-chip source-chip--${sourceType}">${escapeHtml(active)}</span></td>
+              <td data-label="Actualización">${escapeHtml(formatUpdatedAt(researchModule?.updatedAt || coverage?.updatedAt))}</td>
+              <td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-category="${escapeHtml(category.key)}">Ver datos</button></td>
             </tr>`;
           }).join("")}
         </tbody>
@@ -342,7 +355,7 @@ function researchSourceLabel(moduleKey, module) {
 }
 
 function renderResearchData(research) {
-  elements.refreshResearch.disabled = !research || state.isRefreshingResearch;
+  elements.refreshResearch.disabled = !selectedFixture() || state.isRefreshingResearch;
   if (!research) {
     elements.researchSummary.className = "research-empty";
     elements.researchSummary.textContent = "Este partido todavía no tiene una investigación normalizada disponible.";
@@ -392,7 +405,7 @@ function renderSourceCoverage(research) {
     </section>
     <section class="source-matrix" aria-labelledby="source-matrix-title">
       <div class="source-registry__heading"><div><h3 id="source-matrix-title">Matriz por módulo</h3><p>Plan de fuente principal, respaldo y cobertura realmente disponible.</p></div></div>
-      <div class="detail-table-wrap"><table class="detail-table source-table"><thead><tr><th>Módulo</th><th>Fuente principal</th><th>Respaldo</th><th>Fuente activa</th><th>Estado</th><th>Actualización</th><th>Observación</th></tr></thead><tbody>${rows.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong></td><td>${escapeHtml(row.primarySources.join(" / ") || "—")}</td><td>${escapeHtml(row.secondarySources.join(" / ") || "—")}</td><td>${escapeHtml(row.activeSources.join(" / ") || "Ninguna")}</td><td>${statusBadge(researchStatusLabel(row.status))}</td><td>${escapeHtml(formatUpdatedAt(row.updatedAt))}</td><td>${escapeHtml(row.observation)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="detail-table-wrap"><table class="detail-table source-table"><thead><tr><th>Módulo</th><th>Fuente principal</th><th>Respaldo</th><th>Fuente activa</th><th>Estado</th><th>Actualización</th><th>Observación</th></tr></thead><tbody>${rows.map((row) => `<tr><td data-label="Módulo"><strong>${escapeHtml(row.label)}</strong></td><td data-label="Fuente principal">${escapeHtml(row.primarySources.join(" / ") || "—")}</td><td data-label="Respaldo">${escapeHtml(row.secondarySources.join(" / ") || "—")}</td><td data-label="Fuente activa">${escapeHtml(row.activeSources.join(" / ") || "Ninguna")}</td><td data-label="Estado">${statusBadge(researchStatusLabel(row.status))}</td><td data-label="Actualización">${escapeHtml(formatUpdatedAt(row.updatedAt))}</td><td data-label="Observación">${escapeHtml(row.observation)}</td></tr>`).join("")}</tbody></table></div>
     </section>`;
 }
 
@@ -428,11 +441,12 @@ function renderResearchModuleDetail(moduleKey, research) {
       `${displayValue(market.estimatedProbabilityPct)}%`,
       `${displayValue(market.expectedValuePct)}%`,
       `<strong>${escapeHtml(market.confidenceLevel || "Baja")}</strong><small>${displayValue(market.finalPickScore, 0)}/100</small>`,
-      `<span title="${escapeHtml(market.explanation || "Sin explicación adicional")}">${escapeHtml(market.explanation || (market.requiresReview ? "Requiere revisión" : "Verificado"))}</span>`
+      `<span title="${escapeHtml(market.explanation || "Sin explicación adicional")}">${escapeHtml(market.explanation || (market.requiresReview ? "Requiere revisión" : "Verificado"))}</span>`,
+      `<button class="button button--add" type="button" data-add-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!["green", "orange"].includes(market.highlightColor) || !market.selectionKey ? "disabled" : ""}>Agregar a parlay</button>`
     ]);
     const legend = `<div class="pick-color-legend" aria-label="Leyenda de colores"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Confiable</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>`;
     const summary = decision.matchProfile ? `<div class="pick-decision-summary"><div><span>Favorito real</span><strong>${escapeHtml(decision.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(decision.favoriteStrength || "none")}</small></div><div><span>Perfil</span><strong>${escapeHtml(decision.matchProfile)}</strong></div><div><span>Mejor pick</span><strong>${escapeHtml(decision.recommendedPick?.selection || "Sin pick")}</strong></div><div><span>Alternativa conservadora</span><strong>${escapeHtml(decision.conservativeAlternative?.selection || "Sin alternativa")}</strong></div></div>` : "";
-    content = rows.length ? `${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación"], rows)}` : emptyDetail("No hay cuotas principales verificables.");
+    content = rows.length ? `${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación", "Acción"], rows)}` : emptyDetail("No hay cuotas principales verificables.");
   } else if (moduleKey === "contextCalendar") {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
   } else if (moduleKey === "statsForm") {
@@ -583,7 +597,7 @@ function emptyDetail(message) {
 
 function detailTable(headers, rows) {
   if (!rows.length) return "";
-  return `<div class="detail-table-wrap"><table class="detail-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  return `<div class="detail-table-wrap"><table class="detail-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell, index) => `<td data-label="${escapeHtml(headers[index] || "Dato")}">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
 function renderStandingsDetail(data, fixture) {
@@ -792,6 +806,39 @@ function addMarketToParlay(analysis, marketIndex) {
   persistParlayDraft();
   renderParlayDraft(true);
   showNotice("Selección agregada a Mi parlay.");
+}
+
+function addOddsPickToParlay(selectionKey) {
+  const fixture = selectedFixture();
+  const market = fixture?.researchData?.odds?.markets?.find((item) => item.selectionKey === selectionKey);
+  if (!fixture || !market || !["green", "orange"].includes(market.highlightColor)) {
+    showNotice("Esta cuota no cumple los controles mínimos para agregarla al parlay.");
+    return;
+  }
+  const id = `${fixture.id}:${market.marketKey}:${market.selectionKey}`;
+  if (state.parlayDraft.some((leg) => leg.id === id)) {
+    showNotice("Esta selección ya está incluida en el parlay.");
+    renderParlayDraft(true);
+    return;
+  }
+  if (state.parlayDraft.length >= 12) {
+    showNotice("El cupón admite hasta 12 selecciones.");
+    return;
+  }
+  state.parlayDraft.push({
+    id, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away,
+    date: fixture.date, market: market.market, selection: market.selection,
+    marketCode: market.marketKey, selectionCode: market.selectionKey,
+    decimalOdds: market.decimalOdds, estimatedProbability: market.estimatedProbabilityPct,
+    expectedValue: market.expectedValuePct, reasoning: market.explanation || "",
+    confidence: market.confidenceLevel || "Media", risk: market.colorMeaning || "Riesgo",
+    requiresReview: market.highlightColor !== "green", analysisStatus: fixture.researchData.analysisStatus,
+    source: market.source || "api-football"
+  });
+  persistParlayDraft();
+  renderParlayDraft(true);
+  elements.dataDialog.close();
+  showNotice("Cuota agregada a Mi parlay.");
 }
 
 function saveCurrentParlay() {
@@ -1072,6 +1119,8 @@ async function refreshResearchData() {
   if (!fixture || state.isRefreshingResearch) return;
   state.isRefreshingResearch = true;
   elements.refreshResearch.disabled = true;
+  elements.refreshCoverage.disabled = true;
+  elements.refreshCoverage.textContent = "Actualizando…";
   elements.refreshResearch.textContent = "Actualizando…";
   try {
     const detailedFixture = await footballDataService.getFixtureData(fixture, true);
@@ -1092,8 +1141,24 @@ async function refreshResearchData() {
   } finally {
     state.isRefreshingResearch = false;
     elements.refreshResearch.disabled = !selectedFixture()?.researchData;
+    elements.refreshCoverage.disabled = !selectedFixture();
     elements.refreshResearch.textContent = "Actualizar datos";
+    elements.refreshCoverage.textContent = "Actualizar";
   }
+}
+
+async function runAutomaticRefresh() {
+  if (!elements.autoRefresh.checked || document.visibilityState !== "visible" || !state.fixtures.length) return;
+  await refreshFixtureStatuses();
+  if (selectedFixture()) await refreshResearchData();
+}
+
+function configureAutomaticRefresh() {
+  if (state.autoRefreshTimer) window.clearInterval(state.autoRefreshTimer);
+  state.autoRefreshTimer = null;
+  if (!elements.autoRefresh.checked) return;
+  state.autoRefreshTimer = window.setInterval(runAutomaticRefresh, 5 * 60 * 1000);
+  showNotice("Actualización automática activada cada cinco minutos mientras la página esté visible.");
 }
 
 function validateFilters() {
@@ -1164,6 +1229,12 @@ function handleFilterChange(event) {
 
 elements.form.addEventListener("change", handleFilterChange);
 elements.form.addEventListener("submit", searchFixtures);
+elements.setToday.addEventListener("click", () => {
+  const today = pacificToday();
+  elements.dateFrom.value = today;
+  elements.dateTo.value = today;
+});
+elements.autoRefresh.addEventListener("change", configureAutomaticRefresh);
 elements.dataGrid.addEventListener("click", (event) => {
   const card = event.target.closest("[data-category]");
   if (card) openDataDetail(card.dataset.category);
@@ -1178,9 +1249,20 @@ elements.researchGrid.addEventListener("click", (event) => {
   if (button) openResearchDetail(button.dataset.researchModule);
 });
 elements.refreshResearch.addEventListener("click", refreshResearchData);
+elements.refreshCoverage.addEventListener("click", refreshResearchData);
+elements.toggleResearch.addEventListener("click", () => {
+  const expanded = elements.toggleResearch.getAttribute("aria-expanded") === "true";
+  elements.toggleResearch.setAttribute("aria-expanded", String(!expanded));
+  elements.toggleResearch.textContent = expanded ? "Mostrar" : "Ocultar";
+  elements.researchContent.hidden = expanded;
+});
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.dataDialogClose.addEventListener("click", () => elements.dataDialog.close());
+elements.dataDialogContent.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-add-odds-pick]");
+  if (button) addOddsPickToParlay(button.dataset.addOddsPick);
+});
 elements.dataDialog.addEventListener("click", (event) => {
   if (event.target === elements.dataDialog) elements.dataDialog.close();
 });

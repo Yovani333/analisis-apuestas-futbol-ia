@@ -207,6 +207,8 @@ export function normalizeFixture(item, league) {
     season: item.league.season,
     home: item.teams.home.name,
     away: item.teams.away.name,
+    homeLogo: item.teams.home.logo || "",
+    awayLogo: item.teams.away.logo || "",
     homeTeamId: item.teams.home.id,
     awayTeamId: item.teams.away.id,
     date: pacific.date,

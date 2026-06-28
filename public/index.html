@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260627-pick-classification" />
+    <link rel="stylesheet" href="styles.css?v=20260627-mobile-refresh" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -80,6 +80,7 @@
               <input id="date-to" name="dateTo" type="date" />
             </div>
           </div>
+          <button id="set-today" class="button button--secondary button--compact" type="button">Hoy</button>
 
           <div class="field">
             <label for="match-status">Estado</label>
@@ -105,6 +106,10 @@
             <h2 id="matches-title"><span aria-hidden="true">▣</span> Partidos encontrados</h2>
           </div>
           <span id="match-count" class="muted-text">0 partidos</span>
+          <label class="auto-refresh-control" title="Actualiza estados y el partido seleccionado cada cinco minutos mientras esta pestaña esté visible">
+            <input id="auto-refresh" type="checkbox" />
+            <span>Auto · 5 min</span>
+          </label>
           <button id="refresh-fixture-statuses" class="button button--secondary button--compact" type="button" disabled>Actualizar estados</button>
         </div>
 
@@ -119,7 +124,10 @@
               <p class="eyebrow">Cobertura</p>
               <h2 id="data-title">Datos del partido</h2>
             </div>
-            <span id="data-overall-status" class="status-badge status-badge--unavailable">No disponible</span>
+            <div class="panel-actions">
+              <button id="refresh-coverage" class="button button--secondary button--compact" type="button" disabled>Actualizar</button>
+              <span id="data-overall-status" class="status-badge status-badge--unavailable">No disponible</span>
+            </div>
           </div>
           <div id="selected-match-summary" class="selected-summary selected-summary--empty">
             Selecciona un partido para revisar la cobertura de datos.
@@ -133,13 +141,18 @@
               <p class="eyebrow">Transparencia de datos</p>
               <h2 id="research-title">Análisis de fuentes</h2>
             </div>
-            <button id="refresh-research" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button>
+            <div class="panel-actions">
+              <button id="toggle-research" class="button button--secondary button--compact" type="button" aria-expanded="false">Mostrar</button>
+              <button id="refresh-research" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button>
+            </div>
           </div>
-          <div id="research-summary" class="research-empty">
-            Selecciona un partido para consultar el nivel de confianza y las fuentes utilizadas.
+          <div id="research-content" hidden>
+            <div id="research-summary" class="research-empty">
+              Selecciona un partido para consultar el nivel de confianza y las fuentes utilizadas.
+            </div>
+            <div id="source-coverage" class="source-coverage" hidden></div>
+            <div id="research-grid" class="research-grid"></div>
           </div>
-          <div id="source-coverage" class="source-coverage" hidden></div>
-          <div id="research-grid" class="research-grid"></div>
         </section>
 
         <section id="analysis-panel" class="panel analysis-panel" aria-labelledby="analysis-title">
@@ -172,7 +185,7 @@
           <p>Registra el resultado de cada selección. El estado general se calcula automáticamente.</p>
         </div>
         <div class="saved-view__actions">
-          <button id="update-parlay-results" class="button button--primary" type="button">Actualizar resultados</button>
+          <div class="saved-refresh-box"><strong>Actualizar datos</strong><span>Consulta marcadores finales y liquida cada selección y el parlay completo.</span><button id="update-parlay-results" class="button button--primary" type="button">Actualizar resultados</button></div>
           <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
         </div>
       </section>
@@ -220,6 +233,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260627-pick-classification"></script>
+    <script type="module" src="app.js?v=20260627-mobile-refresh"></script>
   </body>
 </html>

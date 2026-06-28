@@ -18,7 +18,10 @@ function providerFixture(status = "NS") {
       venue: { name: "Estadio", city: "Los Ángeles" }
     },
     league: { id: 1, season: 2026 },
-    teams: { home: { id: 10, name: "Equipo Uno" }, away: { id: 20, name: "Equipo Dos" } },
+    teams: {
+      home: { id: 10, name: "Equipo Uno", logo: "https://media.api-sports.io/football/teams/10.png" },
+      away: { id: 20, name: "Equipo Dos", logo: "https://media.api-sports.io/football/teams/20.png" }
+    },
     goals: { home: 2, away: 1 }
   };
 }
@@ -29,6 +32,8 @@ test("convierte fecha y hora UTC al horario del Pacífico", () => {
   assert.equal(fixture.time, "19:00");
   assert.equal(fixture.timezone, "America/Los_Angeles");
   assert.equal(fixture.neutralVenue, true);
+  assert.match(fixture.homeLogo, /teams\/10\.png$/);
+  assert.match(fixture.awayLogo, /teams\/20\.png$/);
 });
 
 test("normaliza marcador y estado en vivo", () => {
