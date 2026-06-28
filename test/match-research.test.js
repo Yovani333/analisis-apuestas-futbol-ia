@@ -95,6 +95,24 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.analysisStatus, ANALYSIS_STATUS.COMPLETE);
 });
 
+test("H2H conserva solo partidos finalizados anteriores al fixture actual", () => {
+  const dataset = datasetFixture();
+  const match = (id, date, status, homeGoals, awayGoals) => ({
+    fixture: { id, date, status: { short: status } },
+    teams: { home: { id: 10, name: "Equipo Local" }, away: { id: 20, name: "Equipo Visitante" } },
+    goals: { home: homeGoals, away: awayGoals }
+  });
+  dataset.confirmed.h2h = [
+    match(9, "2025-01-01T12:00:00Z", "FT", 1, 0),
+    match(100, dataset.fixture.utcDateTime, "NS", null, null),
+    match(103, "2026-06-22T10:00:00-07:00", "FT", 2, 2),
+    match(101, "2026-06-24T01:00:00Z", "NS", null, null),
+    match(102, "2026-06-20T01:00:00Z", "PST", null, null)
+  ];
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.deepEqual(normalized.h2h.matches.map((item) => item.fixtureId), ["9"]);
+});
+
 test("el constructor para OpenAI usa solo matchData normalizado", () => {
   const normalized = normalizeMatchResearchData(datasetFixture());
   normalized.lineups.errorCode = "INTERNAL_TEST";

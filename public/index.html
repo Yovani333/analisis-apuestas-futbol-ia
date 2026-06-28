@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260627-mobile-refresh" />
+    <link rel="stylesheet" href="styles.css?v=20260627-alerts-account" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -23,15 +23,24 @@
         <button class="main-nav__item main-nav__item--active" type="button" data-view="dashboard" aria-current="page">
           <span aria-hidden="true">▦</span> Dashboard
         </button>
+        <button id="theme-toggle" class="main-nav__item" type="button" aria-pressed="false" title="Cambiar tema">Modo oscuro</button>
         <button class="main-nav__item" type="button" data-view="saved">
           <span aria-hidden="true">▣</span> Parlays guardados <span id="saved-parlay-count" class="nav-count">0</span>
         </button>
-        <button class="main-nav__item" type="button" data-nav-label="Alertas">
+        <button class="main-nav__item" type="button" data-view="alerts">
           <span aria-hidden="true">♧</span> Alertas
+          <span id="alert-count" class="nav-count">0</span>
         </button>
-        <button class="main-nav__item" type="button" data-nav-label="Mi cuenta">
+        <button class="main-nav__item" type="button" data-view="account">
           <span aria-hidden="true">◎</span> Mi cuenta <span aria-hidden="true">⌄</span>
         </button>
+        <div class="notification-menu">
+          <button id="notification-toggle" class="main-nav__item notification-menu__toggle" type="button" aria-expanded="false" aria-label="Notificaciones no leídas">Avisos <span id="notification-count" class="nav-count">0</span></button>
+          <div id="notification-popover" class="notification-popover" hidden>
+            <div><strong>Notificaciones</strong><button id="mark-notifications-read" type="button">Marcar leídas</button></div>
+            <div id="notification-list" class="notification-list"></div>
+          </div>
+        </div>
       </nav>
     </header>
 
@@ -193,6 +202,22 @@
       <div id="saved-parlays-list" class="saved-parlays-list"></div>
     </main>
 
+    <main class="utility-view" data-view-panel="alerts" hidden>
+      <section class="utility-heading"><div><p class="eyebrow">Seguimiento API-Football</p><h2>Alertas</h2><p>Cambios detectados al actualizar partidos, marcadores y cobertura.</p></div><div class="panel-actions"><button id="mark-all-alerts-read" class="button button--secondary" type="button">Marcar leídas</button><button id="clear-alerts" class="button button--danger" type="button">Limpiar</button></div></section>
+      <section class="alert-settings panel"><label><input id="alert-live" type="checkbox" checked /> Inicio y estado del partido</label><label><input id="alert-score" type="checkbox" checked /> Cambios de marcador</label><label><input id="alert-data" type="checkbox" checked /> Cobertura y datos</label></section>
+      <div id="alerts-list" class="alerts-list"></div>
+    </main>
+
+    <main class="utility-view" data-view-panel="account" hidden>
+      <section class="utility-heading"><div><p class="eyebrow">Preferencias locales</p><h2>Mi cuenta</h2><p>Configuración guardada únicamente en este navegador.</p></div><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></section>
+      <form id="account-form" class="account-grid">
+        <section class="panel"><h3>Perfil</h3><label>Nombre visible<input id="account-name" type="text" maxlength="50" placeholder="Tu nombre" /></label><label>Zona horaria<input type="text" value="Hora del Pacífico (America/Tijuana)" disabled /></label></section>
+        <section class="panel"><h3>Preferencias</h3><label><input id="account-dark-mode" type="checkbox" /> Usar modo oscuro</label><label><input id="account-auto-refresh" type="checkbox" /> Actualizar cada 5 minutos</label><label>Límite responsable diario<select id="account-daily-limit"><option value="none">Sin configurar</option><option value="1">1 análisis</option><option value="3">3 análisis</option><option value="5">5 análisis</option></select></label></section>
+        <section class="panel account-responsible"><h3>Juego responsable</h3><p>La cuenta no realiza apuestas ni garantiza resultados. El límite sirve como recordatorio local y no sustituye controles del operador.</p></section>
+        <button class="button button--primary" type="submit">Guardar preferencias</button>
+      </form>
+    </main>
+
     <footer class="app-footer">
       <p>Este análisis es únicamente informativo. No garantiza resultados ni beneficios. Las apuestas implican riesgo y deben hacerse con responsabilidad.</p>
     </footer>
@@ -233,6 +258,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260627-mobile-refresh"></script>
+    <script type="module" src="app.js?v=20260627-alerts-account"></script>
   </body>
 </html>

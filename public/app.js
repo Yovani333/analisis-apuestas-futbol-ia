@@ -5,12 +5,25 @@ import {
   saveParlayDraft, saveSavedParlays, settleLegResult
 } from "./parlay-store.js?v=20260620-efficient-analysis";
 
+const ALERTS_KEY = "football-ai.alerts.v1";
+const PREFERENCES_KEY = "football-ai.preferences.v1";
+const ANALYSIS_USAGE_KEY = "football-ai.analysis-usage.v1";
+const readLocalJson = (key, fallback) => {
+  try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
+};
+const writeLocalJson = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* La app funciona aunque el almacenamiento esté bloqueado. */ }
+};
+
 const state = {
   fixtures: [],
   selectedFixtureId: null,
   analysisByFixture: new Map(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
+  alerts: readLocalJson(ALERTS_KEY, []),
+  preferences: readLocalJson(PREFERENCES_KEY, { theme: "light", autoRefresh: false, dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
+  currentView: "dashboard",
   hasSearched: false,
   isSearching: false,
   isAnalyzing: false,
@@ -65,6 +78,18 @@ const elements = {
   historyMetrics: document.querySelector("#history-metrics"),
   updateParlayResults: document.querySelector("#update-parlay-results")
 };
+
+Object.assign(elements, {
+  themeToggle: document.querySelector("#theme-toggle"), alertCount: document.querySelector("#alert-count"),
+  notificationToggle: document.querySelector("#notification-toggle"), notificationCount: document.querySelector("#notification-count"),
+  notificationPopover: document.querySelector("#notification-popover"), notificationList: document.querySelector("#notification-list"),
+  markNotificationsRead: document.querySelector("#mark-notifications-read"), alertsList: document.querySelector("#alerts-list"),
+  markAllAlertsRead: document.querySelector("#mark-all-alerts-read"), clearAlerts: document.querySelector("#clear-alerts"),
+  alertLive: document.querySelector("#alert-live"), alertScore: document.querySelector("#alert-score"), alertData: document.querySelector("#alert-data"),
+  accountForm: document.querySelector("#account-form"), accountName: document.querySelector("#account-name"),
+  accountDarkMode: document.querySelector("#account-dark-mode"), accountAutoRefresh: document.querySelector("#account-auto-refresh"),
+  accountDailyLimit: document.querySelector("#account-daily-limit")
+});
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, (character) => ({
@@ -157,10 +182,90 @@ function formatDate(isoDate) {
   return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${isoDate}T00:00:00Z`));
 }
 
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  elements.themeToggle.setAttribute("aria-pressed", String(dark));
+  elements.themeToggle.textContent = dark ? "Modo claro" : "Modo oscuro";
+  elements.accountDarkMode.checked = dark;
+  state.preferences.theme = dark ? "dark" : "light";
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
+}
+
+function addAlert(type, title, message, fixture = null) {
+  const alert = {
+    id: globalThis.crypto?.randomUUID?.() || `alert-${Date.now()}-${Math.random()}`,
+    type, title, message, fixtureId: fixture?.id || null,
+    match: fixture ? `${fixture.home} vs ${fixture.away}` : "", createdAt: new Date().toISOString(),
+    read: false, missedWhileAway: document.visibilityState !== "visible" || state.currentView !== "alerts"
+  };
+  state.alerts.unshift(alert);
+  state.alerts = state.alerts.slice(0, 100);
+  writeLocalJson(ALERTS_KEY, state.alerts);
+  renderAlerts();
+}
+
+function renderAlerts() {
+  const unread = state.alerts.filter((item) => !item.read);
+  elements.alertCount.textContent = unread.length;
+  elements.notificationCount.textContent = unread.length;
+  elements.notificationToggle.classList.toggle("notification-menu__toggle--active", unread.length > 0);
+  const alertHtml = (item, compact = false) => `<article class="alert-item alert-item--${escapeHtml(item.type)}${item.read ? " alert-item--read" : ""}">
+    <div><strong>${escapeHtml(item.title)}</strong>${item.missedWhileAway ? '<span class="missed-badge">Mientras estabas fuera</span>' : ""}</div>
+    <p>${escapeHtml(item.message)}</p>${item.match ? `<small>${escapeHtml(item.match)} · Hora del Pacífico</small>` : ""}
+    ${compact ? "" : `<time datetime="${escapeHtml(item.createdAt)}">${escapeHtml(formatUpdatedAt(item.createdAt))}</time>`}
+  </article>`;
+  elements.alertsList.innerHTML = state.alerts.length ? state.alerts.map((item) => alertHtml(item)).join("")
+    : '<div class="saved-empty"><h3>Sin alertas</h3><p>Los cambios detectados al actualizar datos aparecerán aquí.</p></div>';
+  elements.notificationList.innerHTML = unread.length ? unread.slice(0, 8).map((item) => alertHtml(item, true)).join("")
+    : '<p class="notification-empty">No tienes notificaciones nuevas.</p>';
+}
+
+function markAlertsRead() {
+  state.alerts.forEach((item) => { item.read = true; });
+  writeLocalJson(ALERTS_KEY, state.alerts);
+  renderAlerts();
+}
+
+function fixtureProgressBanner(fixture) {
+  if (!fixture) return "";
+  const hasScore = fixture.score?.home !== null && fixture.score?.away !== null;
+  const score = hasScore ? `${fixture.score.home} - ${fixture.score.away}` : "VS";
+  const clock = fixture.status === "live" && fixture.elapsed !== null ? `${fixture.elapsed}'` : fixture.statusLabel;
+  return `<div class="fixture-progress fixture-progress--${escapeHtml(fixture.status)}"><span>${teamCrest(fixture.home, fixture.homeLogo)}</span><strong>${escapeHtml(fixture.home)} <b>${escapeHtml(score)}</b> ${escapeHtml(fixture.away)}</strong><span>${teamCrest(fixture.away, fixture.awayLogo)}</span><em>${escapeHtml(clock)} · Hora del Pacífico</em></div>`;
+}
+
+function showDataDialog() {
+  if (!elements.dataDialog.open) {
+    history.pushState({ ...(history.state || {}), dataDialogOpen: true }, "");
+    elements.dataDialog.showModal();
+  }
+}
+
+function closeDataDialog() {
+  if (history.state?.dataDialogOpen) history.back();
+  else if (elements.dataDialog.open) elements.dataDialog.close();
+}
+
 function pacificToday() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Tijuana", year: "numeric", month: "2-digit", day: "2-digit"
   }).format(new Date());
+}
+
+function analysisUsageToday() {
+  const stored = readLocalJson(ANALYSIS_USAGE_KEY, { date: pacificToday(), count: 0 });
+  return stored.date === pacificToday() ? stored : { date: pacificToday(), count: 0 };
+}
+
+function responsibleLimitReached() {
+  const limit = Number(state.preferences.dailyLimit);
+  return Number.isFinite(limit) && limit > 0 && analysisUsageToday().count >= limit;
+}
+
+function recordAnalysisUsage() {
+  const usage = analysisUsageToday();
+  writeLocalJson(ANALYSIS_USAGE_KEY, { ...usage, count: usage.count + 1 });
 }
 
 function teamInitials(name = "") {
@@ -552,8 +657,8 @@ function openResearchDetail(moduleKey) {
   if (!research || !config) return;
   elements.dataDialogTitle.textContent = config.label;
   elements.dataDialogSubtitle.textContent = `${fixture.home} vs ${fixture.away} · Investigación normalizada`;
-  elements.dataDialogContent.innerHTML = renderResearchModuleDetail(moduleKey, research);
-  elements.dataDialog.showModal();
+  elements.dataDialogContent.innerHTML = `${fixtureProgressBanner(fixture)}${renderResearchModuleDetail(moduleKey, research)}`;
+  showDataDialog();
 }
 
 function renderSupportingDetail(moduleKey, research) {
@@ -583,8 +688,8 @@ function openSupportingDetail(moduleKey) {
   if (!research || !config) return;
   elements.dataDialogTitle.textContent = config.label;
   elements.dataDialogSubtitle.textContent = `${fixture.home} vs ${fixture.away} · ${config.use}`;
-  elements.dataDialogContent.innerHTML = renderSupportingDetail(moduleKey, research);
-  elements.dataDialog.showModal();
+  elements.dataDialogContent.innerHTML = `${fixtureProgressBanner(fixture)}${renderSupportingDetail(moduleKey, research)}`;
+  showDataDialog();
 }
 
 function displayValue(value, fallback = "—") {
@@ -625,9 +730,19 @@ function renderStatisticsDetail(data, xgOnly = false) {
   }).join("")}</div>`;
 }
 
-function renderH2HDetail(data) {
-  if (!data.length) return emptyDetail("No hay enfrentamientos directos disponibles.");
-  const rows = data.slice(0, 10).map((match) => [
+function renderH2HDetail(data, fixture) {
+  const historical = data.filter((match) => {
+    const value = match.fixture?.date || "";
+    const matchDate = value ? new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Tijuana", year: "numeric", month: "2-digit", day: "2-digit"
+    }).format(new Date(value)) : "";
+    const short = match.fixture?.status?.short;
+    const hasFinalScore = Number.isFinite(match.goals?.home) && Number.isFinite(match.goals?.away);
+    const played = ["FT", "AET", "PEN"].includes(short) || (!short && hasFinalScore);
+    return played && matchDate < fixture.date && String(match.fixture?.id || "") !== String(fixture.id);
+  });
+  if (!historical.length) return emptyDetail("No hay enfrentamientos directos finalizados anteriores a este partido.");
+  const rows = historical.slice(0, 10).map((match) => [
     displayValue(match.fixture?.date ? formatDate(match.fixture.date.slice(0, 10)) : null),
     displayValue(match.teams?.home?.name),
     `<strong>${displayValue(match.goals?.home)} – ${displayValue(match.goals?.away)}</strong>`,
@@ -676,7 +791,7 @@ function categoryDetail(categoryKey, fixture) {
   const data = fixture.confirmedData?.[categoryKey] || [];
   if (categoryKey === "standings") return renderStandingsDetail(data, fixture);
   if (categoryKey === "statistics") return renderStatisticsDetail(data);
-  if (categoryKey === "h2h") return renderH2HDetail(data);
+  if (categoryKey === "h2h") return renderH2HDetail(data, fixture);
   if (categoryKey === "injuries") return renderInjuriesDetail(data);
   if (categoryKey === "lineups") return renderLineupsDetail(data);
   if (categoryKey === "odds") return renderOddsDetail(data);
@@ -698,10 +813,11 @@ function openDataDetail(categoryKey) {
   elements.dataDialogContent.innerHTML = research?.[moduleKey]
     ? renderResearchModuleDetail(moduleKey, research)
     : categoryDetail(categoryKey, fixture);
+  elements.dataDialogContent.insertAdjacentHTML("afterbegin", fixtureProgressBanner(fixture));
   if (fixture.dataSource !== "api-football") {
     elements.dataDialogContent.insertAdjacentHTML("afterbegin", '<div class="detail-note"><strong>Modo demostración</strong><span>No existen datos reales detallados para este escenario sintético.</span></div>');
   }
-  elements.dataDialog.showModal();
+  showDataDialog();
 }
 
 const resultLabels = Object.freeze({ pending: "Pendiente", won: "Ganado", lost: "Perdido", void: "Anulado" });
@@ -837,7 +953,7 @@ function addOddsPickToParlay(selectionKey) {
   });
   persistParlayDraft();
   renderParlayDraft(true);
-  elements.dataDialog.close();
+  closeDataDialog();
   showNotice("Cuota agregada a Mi parlay.");
 }
 
@@ -934,6 +1050,7 @@ async function updateSavedParlayResults() {
 }
 
 function switchView(view) {
+  state.currentView = view;
   document.querySelectorAll("[data-view-panel]").forEach((panel) => { panel.hidden = panel.dataset.viewPanel !== view; });
   document.querySelectorAll(".main-nav [data-view]").forEach((button) => {
     const active = button.dataset.view === view;
@@ -1055,6 +1172,11 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
     return;
   }
 
+  if (responsibleLimitReached()) {
+    showNotice("Alcanzaste el límite responsable diario configurado en Mi cuenta.");
+    return;
+  }
+
   state.isAnalyzing = true;
   elements.analysisStatus.className = "status-badge status-badge--processing";
   elements.analysisStatus.textContent = "Procesando";
@@ -1062,6 +1184,7 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
 
   try {
     const analysis = await footballDataService.generateAnalysis(selectedFixture());
+    recordAnalysisUsage();
     state.analysisByFixture.set(fixtureId, analysis);
     renderAnalysis(analysis);
   } catch (error) {
@@ -1095,13 +1218,22 @@ async function refreshFixtureStatuses() {
     state.fixtures = state.fixtures.map((fixture) => {
       const result = byId.get(String(fixture.id));
       if (!result) return fixture;
+      const nextStatus = result.appStatus || fixture.status;
+      const nextScore = result.goals || fixture.score;
+      if (state.preferences.alertLive && fixture.status !== nextStatus) {
+        addAlert("status", "Estado del partido actualizado", `${fixture.statusLabel} → ${result.statusLabel || nextStatus}.`, fixture);
+      }
+      if (state.preferences.alertScore && nextScore
+        && (fixture.score?.home !== nextScore.home || fixture.score?.away !== nextScore.away)) {
+        addAlert("score", "Cambio de marcador", `${nextScore.home ?? 0} - ${nextScore.away ?? 0} · ${result.elapsed ?? 0}'`, fixture);
+      }
       return {
         ...fixture,
-        status: result.appStatus || fixture.status,
+        status: nextStatus,
         statusLabel: result.statusLabel || fixture.statusLabel,
         statusShort: result.status || fixture.statusShort,
         elapsed: result.elapsed ?? fixture.elapsed,
-        score: result.goals || fixture.score
+        score: nextScore
       };
     });
     renderMatches();
@@ -1124,8 +1256,13 @@ async function refreshResearchData() {
   elements.refreshResearch.textContent = "Actualizando…";
   try {
     const detailedFixture = await footballDataService.getFixtureData(fixture, true);
+    const previousSignature = JSON.stringify((fixture.researchData?.sourceCoverage || []).map((item) => [item.moduleKey, item.status]));
+    const nextSignature = JSON.stringify((detailedFixture.researchData?.sourceCoverage || []).map((item) => [item.moduleKey, item.status]));
     const fixtureIndex = state.fixtures.findIndex((item) => item.id === fixture.id);
     if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
+    if (state.preferences.alertData && previousSignature !== nextSignature) {
+      addAlert("data", "Cobertura actualizada", "Cambió la disponibilidad de uno o más módulos del partido.", detailedFixture);
+    }
     renderFixtureData();
     showNotice("Cobertura y fuentes actualizadas desde API-Football.");
   } catch (error) {
@@ -1140,7 +1277,7 @@ async function refreshResearchData() {
     }
   } finally {
     state.isRefreshingResearch = false;
-    elements.refreshResearch.disabled = !selectedFixture()?.researchData;
+    elements.refreshResearch.disabled = !selectedFixture();
     elements.refreshCoverage.disabled = !selectedFixture();
     elements.refreshResearch.textContent = "Actualizar datos";
     elements.refreshCoverage.textContent = "Actualizar";
@@ -1156,6 +1293,9 @@ async function runAutomaticRefresh() {
 function configureAutomaticRefresh() {
   if (state.autoRefreshTimer) window.clearInterval(state.autoRefreshTimer);
   state.autoRefreshTimer = null;
+  state.preferences.autoRefresh = elements.autoRefresh.checked;
+  elements.accountAutoRefresh.checked = elements.autoRefresh.checked;
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
   if (!elements.autoRefresh.checked) return;
   state.autoRefreshTimer = window.setInterval(runAutomaticRefresh, 5 * 60 * 1000);
   showNotice("Actualización automática activada cada cinco minutos mientras la página esté visible.");
@@ -1235,6 +1375,9 @@ elements.setToday.addEventListener("click", () => {
   elements.dateTo.value = today;
 });
 elements.autoRefresh.addEventListener("change", configureAutomaticRefresh);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && elements.autoRefresh.checked && state.fixtures.length) runAutomaticRefresh();
+});
 elements.dataGrid.addEventListener("click", (event) => {
   const card = event.target.closest("[data-category]");
   if (card) openDataDetail(card.dataset.category);
@@ -1258,13 +1401,20 @@ elements.toggleResearch.addEventListener("click", () => {
 });
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
-elements.dataDialogClose.addEventListener("click", () => elements.dataDialog.close());
+elements.dataDialogClose.addEventListener("click", closeDataDialog);
 elements.dataDialogContent.addEventListener("click", (event) => {
   const button = event.target.closest("[data-add-odds-pick]");
   if (button) addOddsPickToParlay(button.dataset.addOddsPick);
 });
 elements.dataDialog.addEventListener("click", (event) => {
-  if (event.target === elements.dataDialog) elements.dataDialog.close();
+  if (event.target === elements.dataDialog) closeDataDialog();
+});
+elements.dataDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeDataDialog();
+});
+window.addEventListener("popstate", () => {
+  if (elements.dataDialog.open) elements.dataDialog.close();
 });
 elements.analysisContent.addEventListener("click", (event) => {
   const button = event.target.closest("[data-add-market]");
@@ -1324,12 +1474,46 @@ elements.savedParlaysList.addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);
+  if (!event.target.closest(".notification-menu")) {
+    elements.notificationPopover.hidden = true;
+    elements.notificationToggle.setAttribute("aria-expanded", "false");
+  }
 });
 elements.matchesList.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest("[data-fixture-id]");
   if (!button || !card) return;
   selectFixture(card.dataset.fixtureId, button.dataset.action === "analyze");
+});
+
+elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
+elements.notificationToggle.addEventListener("click", () => {
+  const open = elements.notificationToggle.getAttribute("aria-expanded") === "true";
+  elements.notificationToggle.setAttribute("aria-expanded", String(!open));
+  elements.notificationPopover.hidden = open;
+});
+elements.markNotificationsRead.addEventListener("click", markAlertsRead);
+elements.markAllAlertsRead.addEventListener("click", markAlertsRead);
+elements.clearAlerts.addEventListener("click", () => {
+  state.alerts = [];
+  writeLocalJson(ALERTS_KEY, state.alerts);
+  renderAlerts();
+});
+[elements.alertLive, elements.alertScore, elements.alertData].forEach((input) => input.addEventListener("change", () => {
+  state.preferences.alertLive = elements.alertLive.checked;
+  state.preferences.alertScore = elements.alertScore.checked;
+  state.preferences.alertData = elements.alertData.checked;
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
+}));
+elements.accountForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  state.preferences.name = elements.accountName.value.trim();
+  state.preferences.dailyLimit = elements.accountDailyLimit.value;
+  elements.autoRefresh.checked = elements.accountAutoRefresh.checked;
+  applyTheme(elements.accountDarkMode.checked ? "dark" : "light");
+  configureAutomaticRefresh();
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
+  showNotice("Preferencias guardadas en este navegador.");
 });
 
 document.querySelectorAll("[data-nav-label]").forEach((button) => {
@@ -1341,6 +1525,16 @@ document.querySelectorAll("[data-nav-label]").forEach((button) => {
 async function initializeApp() {
   renderLeagueOptions();
   updateLeagueCount();
+  elements.accountName.value = state.preferences.name || "";
+  elements.accountDailyLimit.value = state.preferences.dailyLimit || "none";
+  elements.alertLive.checked = state.preferences.alertLive !== false;
+  elements.alertScore.checked = state.preferences.alertScore !== false;
+  elements.alertData.checked = state.preferences.alertData !== false;
+  elements.autoRefresh.checked = Boolean(state.preferences.autoRefresh);
+  elements.accountAutoRefresh.checked = Boolean(state.preferences.autoRefresh);
+  applyTheme(state.preferences.theme || "light");
+  configureAutomaticRefresh();
+  renderAlerts();
   renderParlayDraft();
   renderSavedParlays();
   const runtime = await footballDataService.getRuntime();

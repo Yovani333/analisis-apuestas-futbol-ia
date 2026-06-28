@@ -47,10 +47,24 @@ export function getStandingsData(dataset) {
 }
 
 export function getH2HData(dataset) {
-  const rows = dataset.confirmed?.h2h || [];
+  const isHistoricalDate = (value) => {
+    if (!value) return false;
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit"
+    }).format(new Date(value));
+    return date < dataset.fixture.date;
+  };
+  const rows = (dataset.confirmed?.h2h || []).filter((row) => {
+    const short = row.fixture?.status?.short;
+    const hasFinalScore = Number.isFinite(row.goals?.home) && Number.isFinite(row.goals?.away);
+    const played = ["FT", "AET", "PEN"].includes(short) || (!short && hasFinalScore);
+    return played && isHistoricalDate(row.fixture?.date)
+      && String(row.fixture?.id || "") !== String(dataset.fixture.id || "");
+  });
   const soccerway = dataset.externalSources?.soccerway;
-  if (!rows.length && soccerway?.data?.h2h?.length) {
-    const matches = soccerway.data.h2h;
+  const externalMatches = (soccerway?.data?.h2h || []).filter((match) => isHistoricalDate(match.date));
+  if (!rows.length && externalMatches.length) {
+    const matches = externalMatches;
     let homeWins = 0; let draws = 0; let awayWins = 0;
     matches.forEach((match) => {
       if (match.homeGoals === match.awayGoals) draws += 1;
