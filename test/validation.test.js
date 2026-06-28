@@ -13,6 +13,11 @@ test("acepta la Copa Mundial 2026", () => {
   assert.equal(result.season, 2026);
 });
 
+test("acepta el filtro de partidos en vivo", () => {
+  const result = parseFixtureQuery({ leagues: "world-cup", dateFrom: "2026-06-28", dateTo: "2026-06-28", status: "live", season: "auto" });
+  assert.equal(result.status, "live");
+});
+
 test("rechaza una liga fuera de la lista", () => {
   assert.throws(() => parseFixtureQuery({ leagues: "premier-league", dateFrom: "2026-06-01", dateTo: "2026-06-30" }), /liga no permitida/i);
 });

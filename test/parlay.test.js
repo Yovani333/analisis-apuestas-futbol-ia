@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, settleLegResult } from "../public/parlay-store.js";
+import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, settleLegResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -21,6 +21,13 @@ test("crea un registro sin alterar el borrador original", () => {
   assert.equal(saved.name, "Prueba");
   assert.equal(saved.legs[0].result, "pending");
   assert.equal(draft[0].result, undefined);
+});
+
+test("congela la cuota original y mantiene una sola cuota actualizada", () => {
+  const pick = createSavedPick({ id: "pick-1", decimalOdds: 1.65, updatedOdds: 1.58, fixtureStatus: "En vivo" }, new Date("2026-06-28T12:00:00Z"));
+  assert.equal(pick.originalOdds, 1.65);
+  assert.equal(pick.updatedOdds, 1.58);
+  assert.equal(pick.fixtureStatus, "En vivo");
 });
 
 test("liquida automáticamente los tres mercados permitidos", () => {

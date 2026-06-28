@@ -2,7 +2,7 @@ import { AppError } from "../errors.js";
 import { getAllowedLeague } from "../config/leagues.js";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const ALLOWED_STATUSES = new Set(["all", "scheduled", "finished"]);
+const ALLOWED_STATUSES = new Set(["all", "scheduled", "live", "finished"]);
 
 export function parseFixtureQuery(query) {
   const leagues = String(query.leagues || "").split(",").filter(Boolean);

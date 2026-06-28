@@ -135,6 +135,7 @@ export async function resolveLeague(slug, includeSeasons = false) {
 
 function providerStatus(status) {
   if (status === "scheduled") return "NS-TBD";
+  if (status === "live") return "1H-HT-2H-ET-BT-P-INT-LIVE";
   if (status === "finished") return "FT-AET-PEN";
   return undefined;
 }
@@ -142,8 +143,11 @@ function providerStatus(status) {
 function statusLabel(short) {
   if (["NS", "TBD"].includes(short)) return "Programado";
   if (["FT", "AET", "PEN"].includes(short)) return "Completo";
-  if (["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(short)) return "En vivo";
-  if (["PST", "CANC", "ABD", "AWD", "WO"].includes(short)) return "No disponible";
+  if (["1H", "HT", "2H", "ET", "BT", "P", "LIVE"].includes(short)) return "En vivo";
+  if (short === "PST") return "Postergado";
+  if (short === "CANC") return "Cancelado";
+  if (["SUSP", "ABD", "INT"].includes(short)) return "Suspendido";
+  if (["AWD", "WO"].includes(short)) return "Finalizado";
   return short || "No disponible";
 }
 

@@ -103,6 +103,16 @@ test("la búsqueda envía completo un rango de varios días sin usar OpenAI", as
   assert.equal(calls[0].params.status, "NS-TBD");
 });
 
+test("la búsqueda en vivo envía estados activos a API-Football", async () => {
+  const calls = [];
+  await searchFixtures({ leagues: ["world-cup"], season: "2026", dateFrom: "2026-06-28", dateTo: "2026-06-28", status: "live" }, {
+    request: async (path, params) => { calls.push({ path, params }); return []; },
+    leagueResolver: async () => ({ ...league, apiId: 1, seasons: [] })
+  });
+  assert.match(calls[0].params.status, /1H/);
+  assert.match(calls[0].params.status, /2H/);
+});
+
 test("solo carga estadísticas del fixture actual cuando ya inició", () => {
   assert.equal(shouldLoadCurrentFixtureData("NS"), false);
   assert.equal(shouldLoadCurrentFixtureData("TBD"), false);

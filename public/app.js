@@ -1,9 +1,9 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
 import { footballDataService } from "./services.js?v=20260627-pick-classification";
 import {
-  calculateHistoryMetrics, calculateParlayResult, createSavedParlay, loadParlayDraft, loadSavedParlays,
-  saveParlayDraft, saveSavedParlays, settleLegResult
-} from "./parlay-store.js?v=20260620-efficient-analysis";
+  calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
+  loadSavedPicks, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
+} from "./parlay-store.js?v=20260628-saved-picks";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -21,6 +21,9 @@ const state = {
   analysisByFixture: new Map(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
+  savedPicks: loadSavedPicks(),
+  savedTab: "individual",
+  expandedParlays: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
   preferences: readLocalJson(PREFERENCES_KEY, { theme: "light", autoRefresh: false, dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
   currentView: "dashboard",
@@ -38,6 +41,8 @@ const elements = {
   leagueCount: document.querySelector("#league-count"),
   dateFrom: document.querySelector("#date-from"),
   dateTo: document.querySelector("#date-to"),
+  competition: document.querySelector("#competition-main"),
+  clearFilters: document.querySelector("#clear-filters"),
   setToday: document.querySelector("#set-today"),
   season: document.querySelector("#season"),
   status: document.querySelector("#match-status"),
@@ -75,6 +80,7 @@ const elements = {
   saveParlay: document.querySelector("#save-parlay"),
   savedParlayCount: document.querySelector("#saved-parlay-count"),
   savedParlaysList: document.querySelector("#saved-parlays-list"),
+  savedPicksList: document.querySelector("#saved-picks-list"),
   historyMetrics: document.querySelector("#history-metrics"),
   updateParlayResults: document.querySelector("#update-parlay-results")
 };
@@ -174,6 +180,21 @@ function selectedLeagueSlugs() {
   return [...elements.form.querySelectorAll('input[name="league"]:checked')].map((input) => input.value);
 }
 
+function competitionLeagues(value = elements.competition.value) {
+  if (value === "world-cup") return ["world-cup"];
+  if (value === "liga-mx") return ["liga-mx"];
+  if (value === "europe") return ["la-liga", "bundesliga", "primeira-liga", "ligue-1"];
+  if (value === "all") return ALLOWED_LEAGUES.map((league) => league.slug);
+  return selectedLeagueSlugs();
+}
+
+function syncCompetitionCheckboxes() {
+  if (elements.competition.value === "custom") return;
+  const selected = new Set(competitionLeagues());
+  elements.form.querySelectorAll('input[name="league"]').forEach((input) => { input.checked = selected.has(input.value); });
+  updateLeagueCount();
+}
+
 function updateLeagueCount() {
   elements.leagueCount.textContent = `${selectedLeagueSlugs().length} de ${ALLOWED_LEAGUES.length}`;
 }
@@ -253,6 +274,39 @@ function pacificToday() {
   }).format(new Date());
 }
 
+function shiftIsoDate(date, days) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function clearSelectedFixtureData() {
+  state.selectedFixtureId = null;
+  elements.selectedSummary.className = "selected-summary selected-summary--empty";
+  elements.selectedSummary.textContent = "Selecciona un partido para revisar la cobertura de datos.";
+  elements.dataGrid.innerHTML = "";
+  elements.dataStatus.className = "status-badge status-badge--unavailable";
+  elements.dataStatus.textContent = "No disponible";
+  renderResearchData(null);
+  showAnalysisEmpty();
+}
+
+function clearFilters() {
+  const today = pacificToday();
+  elements.dateFrom.value = today;
+  elements.dateTo.value = today;
+  elements.competition.value = "world-cup";
+  elements.season.value = "auto";
+  elements.status.value = "all";
+  elements.form.querySelectorAll('input[name="league"]').forEach((input) => { input.checked = false; });
+  syncCompetitionCheckboxes();
+  state.fixtures = [];
+  state.hasSearched = false;
+  elements.searchFeedback.textContent = "";
+  clearSelectedFixtureData();
+  renderMatches();
+}
+
 function analysisUsageToday() {
   const stored = readLocalJson(ANALYSIS_USAGE_KEY, { date: pacificToday(), count: 0 });
   return stored.date === pacificToday() ? stored : { date: pacificToday(), count: 0 };
@@ -310,7 +364,7 @@ function renderMatches() {
         const teamName = (name, logo, favorite) => `<div class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${teamCrest(name, logo)}<div><strong>${escapeHtml(name)}</strong>${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2${fixture.favorite.percent !== null ? ` · ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</div></div>`;
         const quality = fixture.dataQuality;
         return `
-          <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" ${selected ? 'aria-current="true"' : ""}>
+          <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" tabindex="0" ${selected ? 'aria-current="true"' : ""}>
             <div class="match-card__topline">
               <span class="match-card__league">${escapeHtml(fixture.leagueName)}</span>
               ${statusBadge(fixture.statusLabel)}
@@ -547,7 +601,7 @@ function renderResearchModuleDetail(moduleKey, research) {
       `${displayValue(market.expectedValuePct)}%`,
       `<strong>${escapeHtml(market.confidenceLevel || "Baja")}</strong><small>${displayValue(market.finalPickScore, 0)}/100</small>`,
       `<span title="${escapeHtml(market.explanation || "Sin explicación adicional")}">${escapeHtml(market.explanation || (market.requiresReview ? "Requiere revisión" : "Verificado"))}</span>`,
-      `<button class="button button--add" type="button" data-add-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!["green", "orange"].includes(market.highlightColor) || !market.selectionKey ? "disabled" : ""}>Agregar a parlay</button>`
+      `<div class="pick-actions"><button class="button button--add" type="button" data-save-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!market.selectionKey ? "disabled" : ""}>Guardar pick</button><button class="button button--add" type="button" data-add-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!["green", "orange"].includes(market.highlightColor) || !market.selectionKey ? "disabled" : ""}>Agregar a parlay</button></div>`
     ]);
     const legend = `<div class="pick-color-legend" aria-label="Leyenda de colores"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Confiable</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>`;
     const summary = decision.matchProfile ? `<div class="pick-decision-summary"><div><span>Favorito real</span><strong>${escapeHtml(decision.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(decision.favoriteStrength || "none")}</small></div><div><span>Perfil</span><strong>${escapeHtml(decision.matchProfile)}</strong></div><div><span>Mejor pick</span><strong>${escapeHtml(decision.recommendedPick?.selection || "Sin pick")}</strong></div><div><span>Alternativa conservadora</span><strong>${escapeHtml(decision.conservativeAlternative?.selection || "Sin alternativa")}</strong></div></div>` : "";
@@ -830,6 +884,35 @@ function persistSavedParlays() {
   saveSavedParlays(state.savedParlays);
 }
 
+function persistSavedPicks() {
+  saveSavedPicks(state.savedPicks);
+}
+
+function normalizedSavedStatus(value) {
+  const status = String(value || "").toLowerCase();
+  if (["live", "1h", "ht", "2h", "et", "p", "int"].includes(status)) return "En vivo";
+  if (["finished", "ft", "aet", "pen", "completo"].includes(status)) return "Finalizado";
+  if (["scheduled", "ns", "tbd", "programado"].includes(status)) return "Programado";
+  if (["susp", "suspended", "suspendido"].includes(status)) return "Suspendido";
+  if (["pst", "postponed", "postergado"].includes(status)) return "Postergado";
+  if (["canc", "cancelled", "cancelado"].includes(status)) return "Cancelado";
+  return value || "No disponible";
+}
+
+function saveIndividualLeg(leg) {
+  if (!leg?.fixtureId || !leg.market || !leg.selection) {
+    showNotice("Selecciona un partido, mercado y selección antes de guardar el pick.");
+    return;
+  }
+  const duplicate = state.savedPicks.some((pick) => String(pick.fixtureId) === String(leg.fixtureId)
+    && pick.marketCode === leg.marketCode && pick.selectionCode === leg.selectionCode);
+  if (duplicate && !window.confirm("Este pick ya está guardado. ¿Deseas guardar otro registro igual?")) return;
+  state.savedPicks.unshift(createSavedPick({ ...leg, id: `${leg.id || "pick"}:${Date.now()}` }));
+  persistSavedPicks();
+  renderSavedPicks();
+  showNotice("Pick individual guardado en Mis apuestas.");
+}
+
 function renderParlayDraft(open = false) {
   const count = state.parlayDraft.length;
   elements.parlayLegCount.textContent = count;
@@ -910,6 +993,9 @@ function addMarketToParlay(analysis, marketIndex) {
     marketCode: market.codigo_mercado,
     selectionCode: market.codigo_seleccion,
     decimalOdds: market.cuota_decimal,
+    originalOdds: market.cuota_decimal,
+    updatedOdds: null,
+    fixtureStatus: fixture.statusLabel || fixture.status,
     estimatedProbability: market.probabilidad_modelo,
     expectedValue: market.valor_esperado,
     reasoning: market.razonamiento,
@@ -946,6 +1032,7 @@ function addOddsPickToParlay(selectionKey) {
     date: fixture.date, market: market.market, selection: market.selection,
     marketCode: market.marketKey, selectionCode: market.selectionKey,
     decimalOdds: market.decimalOdds, estimatedProbability: market.estimatedProbabilityPct,
+    originalOdds: market.decimalOdds, updatedOdds: null, fixtureStatus: fixture.statusLabel || fixture.status,
     expectedValue: market.expectedValuePct, reasoning: market.explanation || "",
     confidence: market.confidenceLevel || "Media", risk: market.colorMeaning || "Riesgo",
     requiresReview: market.highlightColor !== "green", analysisStatus: fixture.researchData.analysisStatus,
@@ -955,6 +1042,34 @@ function addOddsPickToParlay(selectionKey) {
   renderParlayDraft(true);
   closeDataDialog();
   showNotice("Cuota agregada a Mi parlay.");
+}
+
+function saveOddsPick(selectionKey) {
+  const fixture = selectedFixture();
+  const market = fixture?.researchData?.odds?.markets?.find((item) => item.selectionKey === selectionKey);
+  if (!fixture || !market || !market.market || !market.selection) return;
+  saveIndividualLeg({
+    id: `${fixture.id}:${market.marketKey}:${market.selectionKey}`, fixtureId: fixture.id,
+    league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: market.market, selection: market.selection, marketCode: market.marketKey, selectionCode: market.selectionKey,
+    decimalOdds: market.decimalOdds, originalOdds: market.decimalOdds, updatedOdds: null,
+    fixtureStatus: fixture.statusLabel || fixture.status, confidence: market.confidenceLevel || "No disponible",
+    result: "pending", source: market.source || "api-football"
+  });
+}
+
+function saveAnalysisMarket(analysis, marketIndex) {
+  const fixture = selectedFixture();
+  const market = analysis?.mercados_sugeridos?.[marketIndex];
+  if (!fixture || !market || /^sin mercado$/i.test(market.mercado || "")) return;
+  saveIndividualLeg({
+    id: `${fixture.id}:${market.codigo_mercado}:${market.codigo_seleccion}`, fixtureId: fixture.id,
+    league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: market.mercado, selection: market.seleccion, marketCode: market.codigo_mercado,
+    selectionCode: market.codigo_seleccion, decimalOdds: market.cuota_decimal,
+    originalOdds: market.cuota_decimal, updatedOdds: null, fixtureStatus: fixture.statusLabel || fixture.status,
+    confidence: market.confianza || "No disponible", result: "pending", source: analysis._source || "openai"
+  });
 }
 
 function saveCurrentParlay() {
@@ -973,8 +1088,32 @@ function saveCurrentParlay() {
   showNotice("Parlay guardado. Ya puedes registrar sus resultados.");
 }
 
+function oddsUpdateHtml(item) {
+  if (item.updatedOdds === null || item.updatedOdds === undefined) return '<span class="muted-text">Sin actualización</span>';
+  const original = Number(item.originalOdds ?? item.decimalOdds);
+  const updated = Number(item.updatedOdds);
+  const trend = Number.isFinite(original) && Number.isFinite(updated) ? (updated > original ? "up" : updated < original ? "down" : "same") : "same";
+  return `<strong class="odds-change odds-change--${trend}">${displayValue(updated)}</strong>`;
+}
+
+function renderSavedPicks() {
+  elements.savedParlayCount.textContent = state.savedParlays.length + state.savedPicks.length;
+  if (!state.savedPicks.length) {
+    elements.savedPicksList.innerHTML = '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis IA.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
+    return;
+  }
+  elements.savedPicksList.innerHTML = state.savedPicks.map((pick) => `<article class="saved-pick" data-pick-id="${escapeHtml(pick.id)}">
+    <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}</small></div>
+    <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
+    <div><span>Cuota original</span><strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></div>
+    <div><span>Cuota actualizada</span>${oddsUpdateHtml(pick)}</div>
+    <div><span>Confianza / resultado</span><strong>${escapeHtml(pick.confidence || "No disponible")}</strong><small>${escapeHtml(resultLabels[pick.result] || "Pendiente")}</small></div>
+    <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
+  </article>`).join("");
+}
+
 function renderSavedParlays() {
-  elements.savedParlayCount.textContent = state.savedParlays.length;
+  elements.savedParlayCount.textContent = state.savedParlays.length + state.savedPicks.length;
   const metrics = calculateHistoryMetrics(state.savedParlays);
   elements.historyMetrics.innerHTML = `
     <article><span>Parlays</span><strong>${metrics.total}</strong></article>
@@ -982,7 +1121,7 @@ function renderSavedParlays() {
     <article><span>Ganados / perdidos</span><strong>${metrics.won} / ${metrics.lost}</strong></article>
     <article><span>Acierto</span><strong>${metrics.winRate === null ? "—" : `${metrics.winRate}%`}</strong></article>
     <article><span>Unidades teóricas</span><strong class="${metrics.theoreticalUnits >= 0 ? "value-positive" : "value-negative"}">${metrics.theoreticalUnits}</strong></article>`;
-  elements.updateParlayResults.disabled = state.savedParlays.length === 0;
+  elements.updateParlayResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
   if (!state.savedParlays.length) {
     elements.savedParlaysList.innerHTML = '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis IA y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
@@ -990,29 +1129,29 @@ function renderSavedParlays() {
 
   elements.savedParlaysList.innerHTML = state.savedParlays.map((parlay) => {
     const result = calculateParlayResult(parlay.legs);
+    const expanded = state.expandedParlays.has(parlay.id);
     parlay.result = result;
     return `<article class="saved-parlay saved-parlay--${result}" data-parlay-id="${escapeHtml(parlay.id)}">
       <header class="saved-parlay__header">
         <div><span>Parlay · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(parlay.createdAt)))}</time></div>
-        <strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong>
+        <div class="saved-parlay__summary"><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong><button class="parlay-expand" type="button" data-toggle-parlay aria-expanded="${expanded}">${expanded ? "−" : "+"}</button></div>
       </header>
-      <div class="saved-parlay__legs">${parlay.legs.map((leg, index) => `
+      <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((leg, index) => `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
-          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota ${displayValue(leg.decimalOdds)} · Prob. ${displayValue(leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small></div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota original ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"}</small><small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small></div>
           <label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label>
         </section>`).join("")}</div>
-      <div class="saved-parlay__notes"><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500" placeholder="Qué ocurrió, datos que faltaron o qué revisarías después…">${escapeHtml(parlay.notes || "")}</textarea></div>
-      <footer class="saved-parlay__footer"><span>El resultado general se calcula con los estados de las selecciones.</span><button class="button button--danger" type="button" data-delete-parlay>Eliminar registro</button></footer>
+      <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>
+      <footer class="saved-parlay__footer" ${expanded ? "" : "hidden"}><span>El resultado general se calcula con los estados de las selecciones.</span><button class="button button--danger" type="button" data-delete-parlay>Eliminar registro</button></footer>
     </article>`;
   }).join("");
   persistSavedParlays();
 }
 
 async function updateSavedParlayResults() {
-  const fixtureIds = [...new Set(state.savedParlays.flatMap((parlay) => parlay.legs)
-    .filter((leg) => leg.result === "pending" && leg.selectionCode)
-    .map((leg) => leg.fixtureId))];
+  const allSavedLegs = [...state.savedPicks, ...state.savedParlays.flatMap((parlay) => parlay.legs)];
+  const fixtureIds = [...new Set(allSavedLegs.filter((leg) => leg.fixtureId && leg.selectionCode).map((leg) => leg.fixtureId))];
   if (!fixtureIds.length) {
     showNotice("No hay selecciones compatibles pendientes de actualización automática.");
     return;
@@ -1020,31 +1159,47 @@ async function updateSavedParlayResults() {
   elements.updateParlayResults.disabled = true;
   elements.updateParlayResults.textContent = "Consultando resultados…";
   try {
-    const results = await Promise.all(fixtureIds.map(async (fixtureId) => {
-      try { return await footballDataService.getFixtureResult(fixtureId); } catch { return null; }
+    const updates = await Promise.all(fixtureIds.map(async (fixtureId) => {
+      const fixture = { id: fixtureId };
+      const [result, details] = await Promise.all([
+        footballDataService.getFixtureResult(fixtureId).catch(() => null),
+        footballDataService.getFixtureData(fixture, true).catch(() => null)
+      ]);
+      return { fixtureId: String(fixtureId), result, details };
     }));
-    const byFixture = new Map(results.filter(Boolean).map((result) => [String(result.fixtureId), result]));
+    const byFixture = new Map(updates.map((item) => [item.fixtureId, item]));
     let updated = 0;
+    const updateLeg = (leg) => {
+      const update = byFixture.get(String(leg.fixtureId));
+      if (!update) return;
+      const fixtureResult = update.result;
+      leg.originalOdds ??= leg.decimalOdds ?? null;
+      leg.fixtureStatus = fixtureResult?.statusLabel || update.details?.statusLabel || fixtureResult?.appStatus || leg.fixtureStatus;
+      const currentMarket = [...(update.details?.marketAnalysis || []), ...(update.details?.researchData?.odds?.markets || [])]
+        .find((market) => market.selectionKey === leg.selectionCode && (!leg.marketCode || market.marketKey === leg.marketCode));
+      if (Number.isFinite(Number(currentMarket?.decimalOdds))) leg.updatedOdds = Number(currentMarket.decimalOdds);
+      if (leg.result !== "pending") return;
+      const nextResult = settleLegResult(leg.selectionCode, fixtureResult);
+      if (nextResult !== "pending") {
+        leg.result = nextResult;
+        leg.finalScore = `${fixtureResult.goals.home}-${fixtureResult.goals.away}`;
+        leg.resolvedAt = new Date().toISOString();
+        updated += 1;
+      }
+    };
+    state.savedPicks.forEach(updateLeg);
     state.savedParlays.forEach((parlay) => {
-      parlay.legs.forEach((leg) => {
-        if (leg.result !== "pending") return;
-        const fixtureResult = byFixture.get(String(leg.fixtureId));
-        const nextResult = settleLegResult(leg.selectionCode, fixtureResult);
-        if (nextResult !== "pending") {
-          leg.result = nextResult;
-          leg.finalScore = `${fixtureResult.goals.home}-${fixtureResult.goals.away}`;
-          leg.resolvedAt = new Date().toISOString();
-          updated += 1;
-        }
-      });
+      parlay.legs.forEach(updateLeg);
       parlay.result = calculateParlayResult(parlay.legs);
       parlay.lastCheckedAt = new Date().toISOString();
     });
     persistSavedParlays();
+    persistSavedPicks();
+    renderSavedPicks();
     renderSavedParlays();
     showNotice(updated ? `${updated} selección(es) actualizadas con API-Football.` : "Los partidos pendientes todavía no tienen resultado final.");
   } finally {
-    elements.updateParlayResults.disabled = state.savedParlays.length === 0;
+    elements.updateParlayResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
     elements.updateParlayResults.textContent = "Actualizar resultados";
   }
 }
@@ -1057,7 +1212,7 @@ function switchView(view) {
     button.classList.toggle("main-nav__item--active", active);
     if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
-  if (view === "saved") renderSavedParlays();
+  if (view === "saved") { renderSavedPicks(); renderSavedParlays(); }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1129,7 +1284,7 @@ function renderAnalysis(analysis) {
       </section>
       <section class="analysis-card">
         <h3>Mercados sugeridos</h3>
-        ${analysis.mercados_sugeridos.length ? analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Cuota ${displayValue(market.cuota_decimal)} · Prob. ${displayValue(market.probabilidad_modelo)}% · EV ${displayValue(market.valor_esperado)}%</small><small>${escapeHtml(categoryLabels[market.pickCategory] || "Sin categoría")} · Confianza lógica ${displayValue(market.confidenceScore, 0)}/100${market.requiere_revision ? " · Requiere revisión" : ""}</small>${market.warning ? `<small>${escapeHtml(market.warning)}</small>` : ""}</div><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || market.requiere_revision || !quality?.canSuggest ? "disabled" : ""}>Agregar al parlay</button></div>`).join("") : '<p>No se identificó un mercado con cobertura y valor suficiente.</p>'}
+        ${analysis.mercados_sugeridos.length ? analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Cuota ${displayValue(market.cuota_decimal)} · Prob. ${displayValue(market.probabilidad_modelo)}% · EV ${displayValue(market.valor_esperado)}%</small><small>${escapeHtml(categoryLabels[market.pickCategory] || "Sin categoría")} · Confianza lógica ${displayValue(market.confidenceScore, 0)}/100${market.requiere_revision ? " · Requiere revisión" : ""}</small>${market.warning ? `<small>${escapeHtml(market.warning)}</small>` : ""}</div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-market="${index}" ${analysis._source === "mock" ? "disabled" : ""}>Guardar pick</button><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || market.requiere_revision || !quality?.canSuggest ? "disabled" : ""}>Agregar al parlay</button></div></div>`).join("") : '<p>No se identificó un mercado con cobertura y valor suficiente.</p>'}
         <p class="market-disclaimer">Agregar conserva la sugerencia para seguimiento; no realiza una apuesta.</p>
       </section>
       <section class="analysis-card analysis-card--wide">
@@ -1302,7 +1457,7 @@ function configureAutomaticRefresh() {
 }
 
 function validateFilters() {
-  if (!selectedLeagueSlugs().length) return "Selecciona al menos una liga.";
+  if (!competitionLeagues().length) return "Selecciona al menos una liga.";
   if (!elements.dateFrom.value || !elements.dateTo.value) return "Selecciona las fechas desde y hasta.";
   if (elements.dateFrom.value && elements.dateTo.value && elements.dateFrom.value > elements.dateTo.value) return "La fecha inicial no puede ser posterior a la fecha final.";
   return "";
@@ -1323,7 +1478,7 @@ async function searchFixtures(event) {
 
   try {
     state.fixtures = await footballDataService.searchFixtures({
-      leagues: selectedLeagueSlugs(),
+      leagues: competitionLeagues(),
       season: elements.season.value,
       dateFrom: elements.dateFrom.value,
       dateTo: elements.dateTo.value,
@@ -1353,7 +1508,9 @@ async function searchFixtures(event) {
 
 function handleFilterChange(event) {
   const input = event.target;
+  if (input === elements.competition) syncCompetitionCheckboxes();
   if (input.matches('input[name="league"]')) {
+    elements.competition.value = "custom";
     const leagueInputs = [...elements.form.querySelectorAll('input[name="league"]')];
     if (input.value === "world-cup" && input.checked) {
       leagueInputs.forEach((item) => { if (item !== input) item.checked = false; });
@@ -1369,6 +1526,18 @@ function handleFilterChange(event) {
 
 elements.form.addEventListener("change", handleFilterChange);
 elements.form.addEventListener("submit", searchFixtures);
+elements.clearFilters.addEventListener("click", clearFilters);
+elements.form.querySelector(".quick-filters").addEventListener("click", (event) => {
+  const dateButton = event.target.closest("[data-quick-date]");
+  const statusButton = event.target.closest("[data-quick-status]");
+  if (dateButton) {
+    const today = pacificToday();
+    const mode = dateButton.dataset.quickDate;
+    elements.dateFrom.value = mode === "tomorrow" ? shiftIsoDate(today, 1) : today;
+    elements.dateTo.value = mode === "week" ? shiftIsoDate(today, 6) : elements.dateFrom.value;
+  }
+  if (statusButton) elements.status.value = statusButton.dataset.quickStatus;
+});
 elements.setToday.addEventListener("click", () => {
   const today = pacificToday();
   elements.dateFrom.value = today;
@@ -1403,8 +1572,10 @@ elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.dataDialogClose.addEventListener("click", closeDataDialog);
 elements.dataDialogContent.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-add-odds-pick]");
-  if (button) addOddsPickToParlay(button.dataset.addOddsPick);
+  const addButton = event.target.closest("[data-add-odds-pick]");
+  const saveButton = event.target.closest("[data-save-odds-pick]");
+  if (addButton) addOddsPickToParlay(addButton.dataset.addOddsPick);
+  if (saveButton) saveOddsPick(saveButton.dataset.saveOddsPick);
 });
 elements.dataDialog.addEventListener("click", (event) => {
   if (event.target === elements.dataDialog) closeDataDialog();
@@ -1417,10 +1588,11 @@ window.addEventListener("popstate", () => {
   if (elements.dataDialog.open) elements.dataDialog.close();
 });
 elements.analysisContent.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-add-market]");
-  if (!button) return;
   const analysis = state.analysisByFixture.get(state.selectedFixtureId);
-  addMarketToParlay(analysis, Number(button.dataset.addMarket));
+  const addButton = event.target.closest("[data-add-market]");
+  const saveButton = event.target.closest("[data-save-market]");
+  if (addButton) addMarketToParlay(analysis, Number(addButton.dataset.addMarket));
+  if (saveButton) saveAnalysisMarket(analysis, Number(saveButton.dataset.saveMarket));
 });
 elements.parlayDraftList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-remove-draft]");
@@ -1463,15 +1635,36 @@ elements.savedParlaysList.addEventListener("input", (event) => {
   }
 });
 elements.savedParlaysList.addEventListener("click", (event) => {
+  const toggleButton = event.target.closest("[data-toggle-parlay]");
   const deleteButton = event.target.closest("[data-delete-parlay]");
   const card = event.target.closest("[data-parlay-id]");
+  if (toggleButton && card) {
+    if (state.expandedParlays.has(card.dataset.parlayId)) state.expandedParlays.delete(card.dataset.parlayId);
+    else state.expandedParlays.add(card.dataset.parlayId);
+    renderSavedParlays();
+    return;
+  }
   if (!deleteButton || !card) return;
   if (!window.confirm("¿Eliminar este registro de parlay? Esta acción no se puede deshacer.")) return;
   state.savedParlays = state.savedParlays.filter((item) => item.id !== card.dataset.parlayId);
   persistSavedParlays();
   renderSavedParlays();
 });
+elements.savedPicksList.addEventListener("click", (event) => {
+  const card = event.target.closest("[data-pick-id]");
+  if (!card || !event.target.closest("[data-delete-pick]")) return;
+  state.savedPicks = state.savedPicks.filter((pick) => pick.id !== card.dataset.pickId);
+  persistSavedPicks();
+  renderSavedPicks();
+});
 document.addEventListener("click", (event) => {
+  const savedTab = event.target.closest("[data-saved-tab]");
+  if (savedTab) {
+    state.savedTab = savedTab.dataset.savedTab;
+    document.querySelectorAll("[data-saved-tab]").forEach((button) => button.classList.toggle("saved-tab--active", button === savedTab));
+    elements.savedPicksList.hidden = state.savedTab !== "individual";
+    elements.savedParlaysList.hidden = state.savedTab !== "parlays";
+  }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);
   if (!event.target.closest(".notification-menu")) {
@@ -1479,11 +1672,20 @@ document.addEventListener("click", (event) => {
     elements.notificationToggle.setAttribute("aria-expanded", "false");
   }
 });
-elements.matchesList.addEventListener("click", (event) => {
+elements.matchesList.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest("[data-fixture-id]");
-  if (!button || !card) return;
-  selectFixture(card.dataset.fixtureId, button.dataset.action === "analyze");
+  if (!card) return;
+  await selectFixture(card.dataset.fixtureId, button?.dataset.action === "analyze");
+  document.querySelector("#data-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+elements.matchesList.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const card = event.target.closest("[data-fixture-id]");
+  if (!card || event.target.closest("button")) return;
+  event.preventDefault();
+  await selectFixture(card.dataset.fixtureId, false);
+  document.querySelector("#data-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
@@ -1524,7 +1726,12 @@ document.querySelectorAll("[data-nav-label]").forEach((button) => {
 
 async function initializeApp() {
   renderLeagueOptions();
-  updateLeagueCount();
+  const today = pacificToday();
+  elements.dateFrom.value ||= today;
+  elements.dateTo.value ||= today;
+  elements.competition.value = "world-cup";
+  elements.season.value = "auto";
+  syncCompetitionCheckboxes();
   elements.accountName.value = state.preferences.name || "";
   elements.accountDailyLimit.value = state.preferences.dailyLimit || "none";
   elements.alertLive.checked = state.preferences.alertLive !== false;
@@ -1536,6 +1743,7 @@ async function initializeApp() {
   configureAutomaticRefresh();
   renderAlerts();
   renderParlayDraft();
+  renderSavedPicks();
   renderSavedParlays();
   const runtime = await footballDataService.getRuntime();
   if (runtime.mode === "live") {

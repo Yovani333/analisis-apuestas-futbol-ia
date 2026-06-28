@@ -1,5 +1,6 @@
 export const PARLAY_DRAFT_KEY = "football-ai.parlay-draft.v1";
 export const SAVED_PARLAYS_KEY = "football-ai.saved-parlays.v1";
+export const SAVED_PICKS_KEY = "football-ai.saved-picks.v1";
 export const LEG_RESULTS = Object.freeze(["pending", "won", "lost", "void"]);
 
 function readArray(storage, key) {
@@ -33,6 +34,14 @@ export function loadSavedParlays(storage = globalThis.localStorage) {
 
 export function saveSavedParlays(parlays, storage = globalThis.localStorage) {
   writeArray(storage, SAVED_PARLAYS_KEY, parlays);
+}
+
+export function loadSavedPicks(storage = globalThis.localStorage) {
+  return readArray(storage, SAVED_PICKS_KEY);
+}
+
+export function saveSavedPicks(picks, storage = globalThis.localStorage) {
+  writeArray(storage, SAVED_PICKS_KEY, picks);
 }
 
 export function calculateParlayResult(legs = []) {
@@ -90,6 +99,25 @@ export function createSavedParlay(name, legs, now = new Date()) {
     createdAt: now.toISOString(),
     result: "pending",
     notes: "",
-    legs: legs.map((leg) => ({ ...leg, result: "pending" }))
+    collapsed: true,
+    legs: legs.map((leg) => ({
+      ...leg,
+      originalOdds: leg.originalOdds ?? leg.decimalOdds ?? null,
+      updatedOdds: leg.updatedOdds ?? null,
+      fixtureStatus: leg.fixtureStatus || "No disponible",
+      result: "pending"
+    }))
+  };
+}
+
+export function createSavedPick(leg, now = new Date()) {
+  return {
+    ...leg,
+    id: leg.id || globalThis.crypto?.randomUUID?.() || `pick-${now.getTime()}`,
+    originalOdds: leg.originalOdds ?? leg.decimalOdds ?? null,
+    updatedOdds: leg.updatedOdds ?? null,
+    fixtureStatus: leg.fixtureStatus || "No disponible",
+    result: leg.result || "pending",
+    savedAt: now.toISOString()
   };
 }
