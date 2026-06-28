@@ -21,8 +21,7 @@ export const env = Object.freeze({
   whoScoredSearchModel: process.env.WHOSCORED_SEARCH_MODEL || "",
   fbrefAccessMode: process.env.FBREF_ACCESS_MODE || "disabled",
   fbrefSearchModel: process.env.FBREF_SEARCH_MODEL || "",
-  weatherAccessMode: process.env.WEATHER_ACCESS_MODE || "disabled",
-  weatherSearchModel: process.env.WEATHER_SEARCH_MODEL || "",
+  weatherAccessMode: process.env.WEATHER_ACCESS_MODE || "open_meteo",
   soccerwayAccessMode: process.env.SOCCERWAY_ACCESS_MODE || "disabled",
   soccerwaySearchModel: process.env.SOCCERWAY_SEARCH_MODEL || ""
 });

@@ -43,9 +43,7 @@ export async function collectExternalSourceData(matchData, {
     safeSource("fotmob", () => adapters.fotmob(matchData, {
       ...common, accessMode: config.fotmobAccessMode, model: config.fotmobSearchModel || economicalModel
     })),
-    safeSource("weather", () => adapters.weather(matchData, {
-      ...common, accessMode: config.weatherAccessMode, model: config.weatherSearchModel || economicalModel
-    })),
+    safeSource("weather", () => adapters.weather(matchData, { accessMode: config.weatherAccessMode, forceRefresh })),
     safeSource("soccerway", () => adapters.soccerway(matchData, {
       ...common, accessMode: config.soccerwayAccessMode, model: config.soccerwaySearchModel || economicalModel
     }))

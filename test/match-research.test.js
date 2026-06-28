@@ -275,7 +275,7 @@ test("el clima verificable permanece parcial mientras falte el estado de cancha"
   assert.equal(normalized.weatherPitch.source, "weather");
   assert.equal(normalized.weatherPitch.temperature, 22);
   assert.match(normalized.weatherPitch.pitchNotes, /Sin reporte/);
-  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "weatherPitch").activeSources, ["Clima"]);
+  assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "weatherPitch").activeSources, ["Open-Meteo"]);
 });
 
 test("Soccerway complementa clasificación y H2H sin volverlos confirmados", () => {

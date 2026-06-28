@@ -11,7 +11,7 @@ export const SOURCE_DEFINITIONS = Object.freeze({
   apiFootball: {
     label: "API-Football",
     role: "Fuente estructurada base",
-    defaultStatus: SOURCE_STATUS.AVAILABLE,
+    defaultStatus: SOURCE_STATUS.NOT_AVAILABLE,
     notes: ["Integración activa desde el backend."]
   },
   apiFootballInternalModel: {
@@ -57,10 +57,10 @@ export const SOURCE_DEFINITIONS = Object.freeze({
     notes: ["Adaptador condicionado mediante web_search de OpenAI, desactivado por defecto."]
   },
   weather: {
-    label: "Clima",
-    role: "Contexto meteorológico y de cancha",
-    defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["Adaptador opcional de pronóstico horario mediante web_search de OpenAI, desactivado por defecto."]
+    label: "Open-Meteo",
+    role: "Proveedor principal gratuito de clima y estimación de cancha",
+    defaultStatus: SOURCE_STATUS.AVAILABLE,
+    notes: ["Pronóstico, clima actual e histórico sin API key."]
   }
 });
 

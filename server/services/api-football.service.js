@@ -226,6 +226,8 @@ export function normalizeFixture(item, league) {
     neutralVenue,
     stadium: item.fixture.venue?.name || "No disponible",
     city: item.fixture.venue?.city || "",
+    latitude: item.fixture.venue?.latitude ?? item.fixture.venue?.lat ?? null,
+    longitude: item.fixture.venue?.longitude ?? item.fixture.venue?.lng ?? item.fixture.venue?.lon ?? null,
     country: league.countryLabel,
     score: { home: item.goals?.home ?? null, away: item.goals?.away ?? null },
     dataAvailability: {
@@ -349,7 +351,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     preMatch,
     marketAnalysis,
     dataQuality,
-    unavailable: ["weather", "news", "referee_details", "travel", "sidelined_not_verified"],
+    unavailable: ["news", "referee_details", "travel", "sidelined_not_verified"],
     qualityAlerts: ["Los datos vacíos se conservan como no disponibles; no se completan por inferencia."]
   };
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);

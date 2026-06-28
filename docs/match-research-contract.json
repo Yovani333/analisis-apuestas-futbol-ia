@@ -25,7 +25,7 @@
     "fotmob": { "status": "not_configured", "label": "FotMob", "role": "Bajas, alineaciones probables y métricas", "updatedAt": "", "notes": [] },
     "whoScored": { "status": "not_configured", "label": "WhoScored", "role": "Bajas y alineaciones probables", "updatedAt": "", "notes": [] },
     "fbref": { "status": "not_configured", "label": "FBref", "role": "xG/xGA y estadísticas avanzadas", "updatedAt": "", "notes": [] },
-    "weather": { "status": "not_configured", "label": "Clima", "role": "Contexto meteorológico y de cancha", "updatedAt": "", "notes": [] }
+    "weather": { "status": "available | partial | not_available | failed", "label": "Open-Meteo", "role": "Proveedor principal gratuito de clima y cancha estimada", "updatedAt": "", "notes": [] }
   },
   "sourceCoverage": [],
   "standings": { "status": "not_available", "home": null, "away": null, "source": "api-football", "updatedAt": "", "message": "" },

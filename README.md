@@ -78,7 +78,7 @@ También existe una ruta específica para consultar la investigación sin genera
 
 La sección **Análisis de fuentes** muestra el nivel de confianza de 0 a 100, el estado general, los datos críticos faltantes y los nueve módulos evaluados. Cada tarjeta identifica estado, fuente, última actualización, puntos aportados y explicación del faltante. **Ver detalle** abre los datos normalizados y **Actualizar datos** renueva la investigación desde API-Football sin ejecutar OpenAI ni consumir sus créditos.
 
-La interfaz incluye una matriz de fuentes por módulo. API-Football es la única fuente activa por defecto; SofaScore, FotMob, WhoScored, FBref y clima aparecen como `not_configured`. Oddspedia aparece como `blocked` porque su sitio rechazó el acceso automatizado directo con HTTP 403. El proyecto no intenta evadir esa restricción ni hace scraping.
+La interfaz incluye una matriz de fuentes por módulo. API-Football es la fuente deportiva principal y Open-Meteo es la fuente meteorológica principal gratuita. SofaScore, FotMob, WhoScored y FBref permanecen como respaldos opcionales. Oddspedia aparece como `blocked` porque su sitio rechazó el acceso automatizado directo con HTTP 403. El proyecto no intenta evadir esa restricción ni hace scraping.
 
 SofaScore es el primer adaptador externo formal. Está conectado al orquestador de fuentes, pero opera en modo `disabled`: devuelve un resultado normalizado `not_configured` y no realiza solicitudes de red. Un modo distinto se bloquea mientras no exista un conector aprobado. Esto permite probar la arquitectura sin asumir que un endpoint no oficial está autorizado.
 
@@ -90,7 +90,7 @@ WhoScored es el cuarto adaptador y funciona como respaldo condicionado. Solo con
 
 FBref es el quinto adaptador y funciona como respaldo exclusivo para xG/xGA. Solo consulta `fbref.com` cuando FotMob no aportó métricas prepartido utilizables, acepta promedios de temporada con URL verificable para cada equipo y conserva el módulo como `partial`. No usa estadísticas producidas por el mismo encuentro ni aumenta la confianza como si fueran datos confirmados del partido.
 
-Clima es el sexto adaptador. No añade una API meteorológica: usa opcionalmente `openai_web_search` restringido a Weather.com, AccuWeather y Meteored para partidos programados dentro de los próximos 14 días. Exige ubicación, hora y URL verificables, normaliza temperatura, lluvia, viento y humedad, y mantiene el módulo como `partial` porque el estado del césped no se deduce del pronóstico.
+Clima usa Open-Meteo sin API key. Consulta pronóstico horario para partidos programados, condiciones actuales para partidos en vivo y el archivo histórico para partidos finalizados. Usa coordenadas del venue cuando existen y, como respaldo, geocodifica la ciudad del estadio. La cancha se muestra únicamente como estimación meteorológica y nunca como inspección oficial.
 
 Soccerway es el séptimo adaptador y actúa únicamente como respaldo de clasificación y H2H. Solo consulta `soccerway.com` cuando API-Football no entregó esos módulos, exige coincidencia de equipos y competición, descarta encuentros con fecha igual o posterior al partido estudiado y mantiene todos los datos como `partial` y sujetos a revisión.
 
@@ -179,8 +179,7 @@ WHOSCORED_ACCESS_MODE=disabled
 WHOSCORED_SEARCH_MODEL=gpt-5.4-mini
 FBREF_ACCESS_MODE=disabled
 FBREF_SEARCH_MODEL=gpt-5.4-mini
-WEATHER_ACCESS_MODE=disabled
-WEATHER_SEARCH_MODEL=gpt-5.4-mini
+WEATHER_ACCESS_MODE=open_meteo
 SOCCERWAY_ACCESS_MODE=disabled
 SOCCERWAY_SEARCH_MODEL=gpt-5.4-mini
 ```
@@ -193,7 +192,7 @@ WhoScored se activa con `WHOSCORED_ACCESS_MODE=openai_web_search`. Al actuar com
 
 FBref se activa con `FBREF_ACCESS_MODE=openai_web_search`. Solo consume una búsqueda cuando FotMob no devolvió xG/xGA prepartido y el partido aún no ha comenzado. Su cobertura depende de la competición y puede devolver `not_available` sin afectar los demás módulos.
 
-Clima se activa con `WEATHER_ACCESS_MODE=openai_web_search`. Solo consulta encuentros programados con ciudad o estadio y dentro de una ventana de 14 días. Un pronóstico diario, una hora distinta o una ubicación dudosa se descartan.
+Clima se activa con `WEATHER_ACCESS_MODE=open_meteo` y no requiere clave. Si faltan ciudad, estadio y coordenadas, el módulo devuelve `Clima no disponible: falta ubicación del estadio.` sin inventar valores.
 
 Soccerway se activa con `SOCCERWAY_ACCESS_MODE=openai_web_search`. No consume una búsqueda cuando API-Football ya proporcionó clasificación y H2H. Sus resultados nunca sustituyen datos confirmados del proveedor principal.
 
@@ -229,7 +228,7 @@ POST /api/fixtures/:fixtureId/analysis
 
 `sidelined` responde como no verificado hasta confirmar que el plan contratado ofrece cobertura adecuada. No se inventa ni se sustituye esa información.
 
-API-Football está integrado para fixtures, estadísticas del fixture, clasificación, H2H, lesiones, alineaciones, cuotas, eventos, rendimiento de jugadores y estadísticas agregadas de equipos. Los tres últimos se normalizan como datos complementarios y no alteran los pesos principales. Clima y xG/xGA pueden complementarse mediante adaptadores opcionales; el estado de cancha permanece `not_available` mientras no exista un reporte verificable. No hay APIs meteorológicas ni scrapers adicionales configurados.
+API-Football está integrado para fixtures, venue, estadísticas del fixture, clasificación, H2H, lesiones, alineaciones, cuotas, eventos, rendimiento de jugadores y estadísticas agregadas de equipos. Open-Meteo complementa el clima sin API key. xG/xGA continúa usando el modelo interno documentado; la cancha meteorológica es estimada y no sustituye un reporte oficial.
 
 ## Flujo de datos
 

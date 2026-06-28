@@ -244,63 +244,57 @@ test("FBref descarta métricas sin URL verificable para los equipos", async () =
   assert.equal(result.data, null);
 });
 
-test("Clima desactivado no llama a OpenAI", async () => {
+test("Open-Meteo desactivado no realiza solicitudes", async () => {
   let calls = 0;
-  const client = { responses: { parse: async () => { calls += 1; } } };
-  const result = await getWeatherContextData({ fixture: { id: 40, status: "scheduled" } }, { accessMode: "disabled", client });
+  const fetchImpl = async () => { calls += 1; };
+  const result = await getWeatherContextData({ fixture: { id: 40, status: "scheduled" } }, { accessMode: "disabled", fetchImpl });
   assert.equal(result.status, SOURCE_STATUS.NOT_CONFIGURED);
   assert.equal(calls, 0);
 });
 
-test("Clima no consulta partidos fuera de la ventana de 14 días", async () => {
+test("Open-Meteo explica cuando falta ubicación del estadio", async () => {
   let calls = 0;
-  const client = { responses: { parse: async () => { calls += 1; } } };
-  const result = await getWeatherContextData({
-    fixture: { id: 41, status: "scheduled", utcDateTime: "2026-08-01T20:00:00Z", city: "Ciudad" }
-  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, now: new Date("2026-06-22T12:00:00Z") });
+  const result = await getWeatherContextData({ fixture: { id: 41, status: "scheduled", utcDateTime: "2026-08-01T20:00:00Z" } }, { fetchImpl: async () => { calls += 1; } });
   assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.match(result.notes[0], /falta ubicación del estadio/i);
   assert.equal(calls, 0);
 });
 
-test("Clima normaliza un pronóstico horario con ubicación y fuente verificables", async () => {
-  let request;
-  const sourceUrl = "https://weather.com/weather/hourbyhour/l/Test";
-  const client = { responses: { parse: async (input) => {
-    request = input;
-    return {
-      output_parsed: {
-        location_confirmed: true, forecast_time_confirmed: true, matched_location: "Los Angeles, CA",
-        forecast_time: "2026-06-25T20:00:00Z", temperature_c: 22, rain_probability_pct: 10,
-        wind_speed_kmh: 14, humidity_pct: 55, condition: "Parcialmente nublado",
-        source_url: sourceUrl, observed_at: "2026-06-22T12:00:00Z", notes: []
-      },
-      output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: sourceUrl }] } }]
-    };
-  } } };
+test("Open-Meteo normaliza un pronóstico horario programado", async () => {
+  let requestedUrl = "";
+  const fetchImpl = async (url) => {
+    requestedUrl = url;
+    return { ok: true, json: async () => ({ hourly: { time: ["2026-06-25T20:00"], temperature_2m: [22], relative_humidity_2m: [55], precipitation_probability: [10], precipitation: [0], weather_code: [2], wind_speed_10m: [14] } }) };
+  };
   const result = await getWeatherContextData({
-    fixture: { id: 42, status: "scheduled", utcDateTime: "2026-06-25T20:00:00Z", stadium: "Estadio", city: "Los Angeles", country: "USA" }
-  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, now: new Date("2026-06-22T12:00:00Z") });
+    fixture: { id: 42, status: "scheduled", utcDateTime: "2026-06-25T20:00:00Z", stadium: "Estadio", city: "Los Angeles", country: "USA", latitude: 34.05, longitude: -118.24 }
+  }, { fetchImpl, now: new Date("2026-06-22T12:00:00Z"), forceRefresh: true });
   assert.equal(result.status, SOURCE_STATUS.PARTIAL);
   assert.equal(result.data.temperature, 22);
-  assert.equal(result.data.pitchNotes, "Sin reporte reciente de estado de cancha.");
-  assert.deepEqual(request.tools[0].filters.allowed_domains, ["weather.com", "accuweather.com", "meteored.com", "meteored.mx"]);
+  assert.equal(result.data.rainProbability, 10);
+  assert.equal(result.data.condition, "Parcialmente nublado");
+  assert.match(result.data.pitchNotes, /estimada seca/i);
+  assert.match(requestedUrl, /api\.open-meteo\.com\/v1\/forecast/);
 });
 
-test("Clima descarta un pronóstico cuya hora no corresponde al partido", async () => {
-  const sourceUrl = "https://weather.com/weather/hourbyhour/l/Test2";
-  const client = { responses: { parse: async () => ({
-    output_parsed: {
-      location_confirmed: true, forecast_time_confirmed: true, matched_location: "Los Angeles, CA",
-      forecast_time: "2026-06-26T08:00:00Z", temperature_c: 22, rain_probability_pct: 10,
-      wind_speed_kmh: 14, humidity_pct: 55, condition: "Despejado", source_url: sourceUrl, observed_at: null, notes: []
-    },
-    output: [{ type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: sourceUrl }] } }]
-  }) } };
+test("Open-Meteo usa clima actual para un partido en vivo", async () => {
+  const fetchImpl = async () => ({ ok: true, json: async () => ({ current: { time: "2026-06-25T20:00", temperature_2m: 24, relative_humidity_2m: 60, precipitation: 0.4, weather_code: 61, wind_speed_10m: 11 } }) });
   const result = await getWeatherContextData({
-    fixture: { id: 43, status: "scheduled", utcDateTime: "2026-06-25T20:00:00Z", city: "Los Angeles" }
-  }, { accessMode: "openai_web_search", apiKey: "test", model: "test-model", client, now: new Date("2026-06-22T12:00:00Z") });
-  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
-  assert.equal(result.data, null);
+    fixture: { id: 43, status: "live", utcDateTime: "2026-06-25T20:00:00Z", city: "Los Angeles", latitude: 34.05, longitude: -118.24 }
+  }, { fetchImpl, forceRefresh: true });
+  assert.equal(result.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.data.temperature, 24);
+  assert.equal(result.data.retrieval, "open_meteo_current");
+  assert.match(result.data.pitchNotes, /húmeda/i);
+});
+
+test("Open-Meteo usa archivo histórico sin inventar probabilidad de lluvia", async () => {
+  const fetchImpl = async () => ({ ok: true, json: async () => ({ hourly: { time: ["2025-06-25T20:00"], temperature_2m: [20], relative_humidity_2m: [70], precipitation: [1.2], weather_code: [61], wind_speed_10m: [9] } }) });
+  const result = await getWeatherContextData({
+    fixture: { id: 44, status: "finished", utcDateTime: "2025-06-25T20:00:00Z", city: "Los Angeles", latitude: 34.05, longitude: -118.24 }
+  }, { fetchImpl, now: new Date("2026-06-28T12:00:00Z"), forceRefresh: true });
+  assert.equal(result.data.retrieval, "open_meteo_historical");
+  assert.equal(result.data.rainProbability, null);
 });
 
 test("Soccerway desactivado no llama a OpenAI", async () => {

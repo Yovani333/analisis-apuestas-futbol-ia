@@ -431,7 +431,7 @@ export function getWeatherPitchData(dataset) {
   if (weather?.data) {
     return {
       ...moduleBase(DATA_STATUS.PARTIAL, weather.updatedAt || dataset.fetchedAt, "weather",
-        "Clima horario verificado; el estado de la cancha continúa sin reporte y requiere revisión."),
+        "Clima obtenido de Open-Meteo; la cancha es una estimación meteorológica, no una inspección oficial."),
       temperature: weather.data.temperature,
       rainProbability: weather.data.rainProbability,
       windSpeed: weather.data.windSpeed,
@@ -445,9 +445,9 @@ export function getWeatherPitchData(dataset) {
   }
   return {
     ...moduleBase(DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, "",
-      "No hay una fuente meteorológica o de cancha configurada."),
+      weather?.notes?.[0] || "Clima no disponible: falta ubicación del estadio."),
     temperature: null, rainProbability: null, windSpeed: null, humidity: null,
-    condition: "", pitchNotes: "Sin reporte reciente de estado de cancha."
+    condition: "", pitchNotes: weather?.notes?.[0] || "Clima no disponible: falta ubicación del estadio."
   };
 }
 

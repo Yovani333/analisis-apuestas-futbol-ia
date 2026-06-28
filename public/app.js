@@ -505,7 +505,7 @@ function researchSourceLabel(moduleKey, module) {
   if (module?.source === "fotmob") return "FotMob · búsqueda web";
   if (module?.source === "whoScored") return "WhoScored · búsqueda web";
   if (module?.source === "fbref") return "FBref · búsqueda web";
-  if (module?.source === "weather") return "Clima · búsqueda web";
+  if (module?.source === "weather") return "Open-Meteo";
   if (module?.source === "soccerway") return "Soccerway · búsqueda web";
   if (module?.source === "api-football-internal-model") return "API-Football + modelo interno";
   if (module?.source) return module.source;
@@ -594,18 +594,17 @@ function renderResearchModuleDetail(moduleKey, research) {
     const rows = (module.markets || []).map((market) => [
       `<span class="pick-highlight pick-highlight--${escapeHtml(market.highlightColor || "orange")}">${escapeHtml(market.colorMeaning || "Riesgo")}</span>`,
       displayValue(market.market),
-      `<strong>${displayValue(market.selection)}</strong><small class="pick-role">${escapeHtml(roleFor(market))}</small>`,
+      `<div class="selection-add"><div><strong>${displayValue(market.selection)}</strong><small class="pick-role">${escapeHtml(roleFor(market))}</small></div><button class="selection-add__button" type="button" data-add-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!["green", "orange"].includes(market.highlightColor) || !market.selectionKey ? "disabled" : ""} aria-label="Agregar ${escapeHtml(market.selection || "selección")} al parlay" title="Agregar al parlay">+</button></div>`,
       displayValue(market.decimalOdds),
       `${displayValue(market.impliedProbabilityPct)}%`,
       `${displayValue(market.estimatedProbabilityPct)}%`,
       `${displayValue(market.expectedValuePct)}%`,
       `<strong>${escapeHtml(market.confidenceLevel || "Baja")}</strong><small>${displayValue(market.finalPickScore, 0)}/100</small>`,
-      `<span title="${escapeHtml(market.explanation || "Sin explicación adicional")}">${escapeHtml(market.explanation || (market.requiresReview ? "Requiere revisión" : "Verificado"))}</span>`,
-      `<div class="pick-actions"><button class="button button--add" type="button" data-save-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!market.selectionKey ? "disabled" : ""}>Guardar pick</button><button class="button button--add" type="button" data-add-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!["green", "orange"].includes(market.highlightColor) || !market.selectionKey ? "disabled" : ""}>Agregar a parlay</button></div>`
+      `<span title="${escapeHtml(market.explanation || "Sin explicación adicional")}">${escapeHtml(market.explanation || (market.requiresReview ? "Requiere revisión" : "Verificado"))}</span>`
     ]);
     const legend = `<div class="pick-color-legend" aria-label="Leyenda de colores"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Confiable</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>`;
     const summary = decision.matchProfile ? `<div class="pick-decision-summary"><div><span>Favorito real</span><strong>${escapeHtml(decision.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(decision.favoriteStrength || "none")}</small></div><div><span>Perfil</span><strong>${escapeHtml(decision.matchProfile)}</strong></div><div><span>Mejor pick</span><strong>${escapeHtml(decision.recommendedPick?.selection || "Sin pick")}</strong></div><div><span>Alternativa conservadora</span><strong>${escapeHtml(decision.conservativeAlternative?.selection || "Sin alternativa")}</strong></div></div>` : "";
-    content = rows.length ? `${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación", "Acción"], rows)}` : emptyDetail("No hay cuotas principales verificables.");
+    content = rows.length ? `${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación"], rows)}` : emptyDetail("No hay cuotas principales verificables.");
   } else if (moduleKey === "contextCalendar") {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
   } else if (moduleKey === "statsForm") {
@@ -699,7 +698,7 @@ function renderResearchModuleDetail(moduleKey, research) {
       : "";
     content = `${metadata}${teams}${diagnostics}${rawStats}${fixtures}`;
   } else if (moduleKey === "weatherPitch") {
-    content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación verificada", module.matchedLocation], ["Cancha", module.pitchNotes]])}`;
+    content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación verificada", module.matchedLocation], ["Cancha estimada", module.pitchNotes]])}`;
   }
   return `${researchMeta(moduleKey, module)}${content || emptyDetail("No hay detalle adicional disponible.")}`;
 }
@@ -958,6 +957,7 @@ function setParlayMinimized(minimized) {
 function addMarketToParlay(analysis, marketIndex) {
   const fixture = selectedFixture();
   const market = analysis?.mercados_sugeridos?.[marketIndex];
+  const calculation = analysis?._context?.marketAnalysis?.find((item) => item.selectionKey === market?.codigo_seleccion);
   if (!fixture || !market) return;
   if (analysis._source === "mock" || /^sin mercado$/i.test(market.mercado || "")) {
     showNotice("Las selecciones sintéticas o sin mercado verificable no pueden agregarse al historial.");
@@ -995,6 +995,8 @@ function addMarketToParlay(analysis, marketIndex) {
     decimalOdds: market.cuota_decimal,
     originalOdds: market.cuota_decimal,
     updatedOdds: null,
+    impliedProbability: calculation?.impliedProbabilityPct ?? null,
+    modelProbability: market.probabilidad_modelo ?? calculation?.estimatedProbabilityPct ?? null,
     fixtureStatus: fixture.statusLabel || fixture.status,
     estimatedProbability: market.probabilidad_modelo,
     expectedValue: market.valor_esperado,
@@ -1032,7 +1034,8 @@ function addOddsPickToParlay(selectionKey) {
     date: fixture.date, market: market.market, selection: market.selection,
     marketCode: market.marketKey, selectionCode: market.selectionKey,
     decimalOdds: market.decimalOdds, estimatedProbability: market.estimatedProbabilityPct,
-    originalOdds: market.decimalOdds, updatedOdds: null, fixtureStatus: fixture.statusLabel || fixture.status,
+    originalOdds: market.decimalOdds, updatedOdds: null, impliedProbability: market.impliedProbabilityPct,
+    modelProbability: market.estimatedProbabilityPct, fixtureStatus: fixture.statusLabel || fixture.status,
     expectedValue: market.expectedValuePct, reasoning: market.explanation || "",
     confidence: market.confidenceLevel || "Media", risk: market.colorMeaning || "Riesgo",
     requiresReview: market.highlightColor !== "green", analysisStatus: fixture.researchData.analysisStatus,
@@ -1040,7 +1043,6 @@ function addOddsPickToParlay(selectionKey) {
   });
   persistParlayDraft();
   renderParlayDraft(true);
-  closeDataDialog();
   showNotice("Cuota agregada a Mi parlay.");
 }
 
@@ -1053,6 +1055,8 @@ function saveOddsPick(selectionKey) {
     league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
     market: market.market, selection: market.selection, marketCode: market.marketKey, selectionCode: market.selectionKey,
     decimalOdds: market.decimalOdds, originalOdds: market.decimalOdds, updatedOdds: null,
+    impliedProbability: market.impliedProbabilityPct, modelProbability: market.estimatedProbabilityPct,
+    expectedValue: market.expectedValuePct,
     fixtureStatus: fixture.statusLabel || fixture.status, confidence: market.confidenceLevel || "No disponible",
     result: "pending", source: market.source || "api-football"
   });
@@ -1061,13 +1065,16 @@ function saveOddsPick(selectionKey) {
 function saveAnalysisMarket(analysis, marketIndex) {
   const fixture = selectedFixture();
   const market = analysis?.mercados_sugeridos?.[marketIndex];
+  const calculation = analysis?._context?.marketAnalysis?.find((item) => item.selectionKey === market?.codigo_seleccion);
   if (!fixture || !market || /^sin mercado$/i.test(market.mercado || "")) return;
   saveIndividualLeg({
     id: `${fixture.id}:${market.codigo_mercado}:${market.codigo_seleccion}`, fixtureId: fixture.id,
     league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
     market: market.mercado, selection: market.seleccion, marketCode: market.codigo_mercado,
     selectionCode: market.codigo_seleccion, decimalOdds: market.cuota_decimal,
-    originalOdds: market.cuota_decimal, updatedOdds: null, fixtureStatus: fixture.statusLabel || fixture.status,
+    originalOdds: market.cuota_decimal, updatedOdds: null, impliedProbability: calculation?.impliedProbabilityPct ?? null,
+    modelProbability: market.probabilidad_modelo ?? calculation?.estimatedProbabilityPct ?? null,
+    expectedValue: market.valor_esperado ?? calculation?.expectedValuePct ?? null, fixtureStatus: fixture.statusLabel || fixture.status,
     confidence: market.confianza || "No disponible", result: "pending", source: analysis._source || "openai"
   });
 }
@@ -1105,8 +1112,7 @@ function renderSavedPicks() {
   elements.savedPicksList.innerHTML = state.savedPicks.map((pick) => `<article class="saved-pick" data-pick-id="${escapeHtml(pick.id)}">
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
-    <div><span>Cuota original</span><strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></div>
-    <div><span>Cuota actualizada</span>${oddsUpdateHtml(pick)}</div>
+    <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
     <div><span>Confianza / resultado</span><strong>${escapeHtml(pick.confidence || "No disponible")}</strong><small>${escapeHtml(resultLabels[pick.result] || "Pendiente")}</small></div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`).join("");
@@ -1139,7 +1145,7 @@ function renderSavedParlays() {
       <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((leg, index) => `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
-          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota original ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"}</small><small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small></div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small></div>
           <label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label>
         </section>`).join("")}</div>
       <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>
@@ -1177,7 +1183,11 @@ async function updateSavedParlayResults() {
       leg.fixtureStatus = fixtureResult?.statusLabel || update.details?.statusLabel || fixtureResult?.appStatus || leg.fixtureStatus;
       const currentMarket = [...(update.details?.marketAnalysis || []), ...(update.details?.researchData?.odds?.markets || [])]
         .find((market) => market.selectionKey === leg.selectionCode && (!leg.marketCode || market.marketKey === leg.marketCode));
-      if (Number.isFinite(Number(currentMarket?.decimalOdds))) leg.updatedOdds = Number(currentMarket.decimalOdds);
+      const hasNumber = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+      if (hasNumber(currentMarket?.decimalOdds)) leg.updatedOdds = Number(currentMarket.decimalOdds);
+      if (hasNumber(currentMarket?.impliedProbabilityPct)) leg.impliedProbability = Number(currentMarket.impliedProbabilityPct);
+      if (hasNumber(currentMarket?.estimatedProbabilityPct)) leg.modelProbability = Number(currentMarket.estimatedProbabilityPct);
+      if (hasNumber(currentMarket?.expectedValuePct)) leg.expectedValue = Number(currentMarket.expectedValuePct);
       if (leg.result !== "pending") return;
       const nextResult = settleLegResult(leg.selectionCode, fixtureResult);
       if (nextResult !== "pending") {

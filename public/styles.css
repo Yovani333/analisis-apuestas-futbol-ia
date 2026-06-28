@@ -1078,14 +1078,21 @@ body {
 .advanced-filters[open] { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 10px; }
 .advanced-filters[open] summary { grid-column: 1 / -1; }
 .quick-filters, .filter-actions, .pick-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.selection-add { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 170px; }
+.selection-add > div { min-width: 0; }
+.selection-add__button { display: grid; width: 30px; height: 30px; place-items: center; flex: 0 0 auto; color: white; font-size: 1.15rem; font-weight: 900; background: var(--primary); border: 0; border-radius: 50%; cursor: pointer; }
+.selection-add__button:hover, .selection-add__button:focus-visible { background: var(--primary-dark); outline: 2px solid var(--primary-soft); }
+.selection-add__button:disabled { cursor: not-allowed; opacity: .4; }
 .match-card { cursor: pointer; }
 .match-card:focus-within { border-color: var(--primary); }
 .saved-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .saved-tab--active { color: white !important; background: var(--primary) !important; border-color: var(--primary) !important; }
-.saved-pick { display: grid; grid-template-columns: minmax(210px, 1.3fr) minmax(180px, 1fr) repeat(3, minmax(110px, .55fr)) auto; gap: 10px; align-items: center; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; }
+.saved-pick { display: grid; grid-template-columns: minmax(210px, 1.2fr) minmax(170px, .9fr) minmax(350px, 1.7fr) minmax(120px, .55fr) auto; gap: 10px; align-items: center; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; }
 .saved-pick > div { display: grid; gap: 2px; min-width: 0; }
 .saved-pick span, .saved-pick small { color: var(--muted); font-size: .64rem; }
 .saved-pick strong { font-size: .76rem; overflow-wrap: anywhere; }
+.saved-market-metrics { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px !important; }
+.saved-market-metrics > span { display: grid; gap: 2px; padding: 6px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
 .saved-parlay__summary { display: flex; align-items: center; gap: 8px; }
 .parlay-expand { width: 34px; height: 34px; color: var(--text); font-size: 1.15rem; font-weight: 900; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
 .odds-change--up { color: var(--success); }
@@ -1102,6 +1109,7 @@ body {
   .simple-filters > .quick-filters, .simple-filters > .advanced-filters, .simple-filters > .helper-text, .simple-filters > .form-error { grid-column: 1 / -1; }
   .saved-pick { grid-template-columns: 1fr 1fr; }
   .saved-pick > div:first-child, .saved-pick > div:nth-child(2) { grid-column: 1 / -1; }
+  .saved-market-metrics { grid-column: 1 / -1; }
 }
 
 @media (max-width: 520px) {
@@ -1111,6 +1119,7 @@ body {
   .advanced-filters[open] { grid-template-columns: 1fr; }
   .saved-pick { grid-template-columns: 1fr 1fr; padding: 10px; }
   .saved-pick > button { grid-column: 1 / -1; width: 100%; }
+  .saved-market-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pick-actions { width: 100%; }
   .pick-actions .button { flex: 1 1 130px; }
 }
