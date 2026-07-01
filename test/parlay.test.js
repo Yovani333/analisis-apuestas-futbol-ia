@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, settleLegResult } from "../public/parlay-store.js";
+import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, normalizePickLeg, settleLegResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -28,6 +28,31 @@ test("congela la cuota original y mantiene una sola cuota actualizada", () => {
   assert.equal(pick.originalOdds, 1.65);
   assert.equal(pick.updatedOdds, 1.58);
   assert.equal(pick.fixtureStatus, "En vivo");
+});
+
+test("normaliza picks de cualquier módulo con un contrato común", () => {
+  const now = new Date("2026-06-30T18:00:00Z");
+  const leg = normalizePickLeg({
+    fixtureId: 25, market: "Ambos anotan", selection: "Sí", decimalOdds: 1.9,
+    modelProbability: 58, expectedValue: 10.2, sourceModule: "data_picks",
+    supportingData: ["xG combinado 3.1"], contradictingData: ["muestra limitada"]
+  }, now);
+  assert.equal(leg.originalOdds, 1.9);
+  assert.equal(leg.sourceModule, "data_picks");
+  assert.deepEqual(leg.supportingData, ["xG combinado 3.1"]);
+  assert.deepEqual(leg.contradictingData, ["muestra limitada"]);
+  assert.equal(leg.addedAt, now.toISOString());
+});
+
+test("pick individual y parlay conservan fuente y evidencias", () => {
+  const now = new Date("2026-06-30T18:00:00Z");
+  const input = { fixtureId: 25, market: "Total", selection: "Over 2.5", sourceModule: "poisson", supportingData: ["lambda 3.2"] };
+  const pick = createSavedPick(input, now);
+  const parlay = createSavedParlay("Prueba", [input, { ...input, selection: "BTTS", sourceModule: "team_goal_probability" }], now);
+  assert.equal(pick.sourceModule, "poisson");
+  assert.deepEqual(pick.supportingData, ["lambda 3.2"]);
+  assert.equal(parlay.legs[1].sourceModule, "team_goal_probability");
+  assert.equal(parlay.legs.every((leg) => Boolean(leg.addedAt)), true);
 });
 
 test("liquida automáticamente los tres mercados permitidos", () => {

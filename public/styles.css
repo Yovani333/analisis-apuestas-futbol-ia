@@ -1027,7 +1027,7 @@ body {
 .data-pick__metrics span { display: grid; gap: 2px; padding: 6px; color: var(--muted); font-size: .62rem; background: var(--surface-subtle); border-radius: 5px; }
 .data-pick__metrics b { color: var(--text); }
 .data-pick p { margin: 0; line-height: 1.45; }
-.data-pick .button { justify-self: end; }
+.data-pick .pick-actions { justify-content: flex-end; }
 .analysis-panel .eyebrow { color: #7048c8; }
 .empty-state__icon { color: #7048c8; background: #f0ebff; border-radius: 8px; }
 .analysis-hero { color: white; background: #34245e; border: 0; border-radius: 7px; }
@@ -1136,7 +1136,7 @@ body {
   .data-picks-grid { grid-template-columns: 1fr; }
   .data-picks-summary { align-items: flex-start; flex-direction: column; }
   .data-pick__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .data-pick .button { width: 100%; justify-self: stretch; }
+  .data-pick .pick-actions, .data-pick .button { width: 100%; }
   .simple-filters { grid-template-columns: 1fr !important; }
   .simple-filters > * { grid-column: 1 !important; }
   .quick-filters .button { flex: 1 1 auto; min-height: 42px; }

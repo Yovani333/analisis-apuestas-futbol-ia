@@ -44,6 +44,23 @@ export function saveSavedPicks(picks, storage = globalThis.localStorage) {
   writeArray(storage, SAVED_PICKS_KEY, picks);
 }
 
+export function normalizePickLeg(leg, now = new Date()) {
+  return {
+    ...leg,
+    originalOdds: leg.originalOdds ?? leg.decimalOdds ?? null,
+    updatedOdds: leg.updatedOdds ?? null,
+    impliedProbability: leg.impliedProbability ?? null,
+    modelProbability: leg.modelProbability ?? leg.estimatedProbability ?? null,
+    expectedValue: leg.expectedValue ?? null,
+    confidence: leg.confidence || "No disponible",
+    risk: leg.risk || leg.level || "No disponible",
+    sourceModule: leg.sourceModule || "odds",
+    supportingData: Array.isArray(leg.supportingData) ? [...leg.supportingData] : [],
+    contradictingData: Array.isArray(leg.contradictingData) ? [...leg.contradictingData] : [],
+    addedAt: leg.addedAt || now.toISOString()
+  };
+}
+
 export function calculateParlayResult(legs = []) {
   if (!legs.length) return "pending";
   if (legs.some((leg) => leg.result === "lost")) return "lost";
@@ -101,9 +118,7 @@ export function createSavedParlay(name, legs, now = new Date()) {
     notes: "",
     collapsed: true,
     legs: legs.map((leg) => ({
-      ...leg,
-      originalOdds: leg.originalOdds ?? leg.decimalOdds ?? null,
-      updatedOdds: leg.updatedOdds ?? null,
+      ...normalizePickLeg(leg, now),
       fixtureStatus: leg.fixtureStatus || "No disponible",
       result: "pending"
     }))
@@ -112,7 +127,7 @@ export function createSavedParlay(name, legs, now = new Date()) {
 
 export function createSavedPick(leg, now = new Date()) {
   return {
-    ...leg,
+    ...normalizePickLeg(leg, now),
     id: leg.id || globalThis.crypto?.randomUUID?.() || `pick-${now.getTime()}`,
     originalOdds: leg.originalOdds ?? leg.decimalOdds ?? null,
     updatedOdds: leg.updatedOdds ?? null,

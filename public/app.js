@@ -2,8 +2,8 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260630-data-picks";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
-  loadSavedPicks, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
-} from "./parlay-store.js?v=20260628-saved-picks";
+  loadSavedPicks, normalizePickLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
+} from "./parlay-store.js?v=20260630-common-picks";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -927,6 +927,30 @@ function saveIndividualLeg(leg) {
   showNotice("Pick individual guardado en Mis apuestas.");
 }
 
+function appendPickToParlay(leg, successMessage = "Pick agregado a Mi parlay.") {
+  if (!leg?.fixtureId || !leg.market || !leg.selection) {
+    showNotice("Selecciona un partido, mercado y selección antes de agregar el pick.");
+    return false;
+  }
+  const normalized = normalizePickLeg(leg);
+  const duplicate = state.parlayDraft.some((item) => String(item.fixtureId) === String(normalized.fixtureId)
+    && item.marketCode === normalized.marketCode && item.selectionCode === normalized.selectionCode);
+  if (duplicate) {
+    showNotice("Este pick ya fue agregado.");
+    renderParlayDraft(true);
+    return false;
+  }
+  if (state.parlayDraft.length >= 12) {
+    showNotice("El cupón admite hasta 12 selecciones.");
+    return false;
+  }
+  state.parlayDraft.push(normalized);
+  persistParlayDraft();
+  renderParlayDraft(true);
+  showNotice(successMessage);
+  return true;
+}
+
 function renderParlayDraft(open = false) {
   const count = state.parlayDraft.length;
   elements.parlayLegCount.textContent = count;
@@ -985,19 +1009,8 @@ function addMarketToParlay(analysis, marketIndex) {
     return;
   }
 
-  const id = `${fixture.id}:${market.mercado}:${market.seleccion}`;
-  if (state.parlayDraft.some((leg) => leg.id === id)) {
-    showNotice("Esta selección ya está incluida en el parlay.");
-    renderParlayDraft(true);
-    return;
-  }
-  if (state.parlayDraft.length >= 12) {
-    showNotice("El cupón admite hasta 12 selecciones para mantenerlo fácil de revisar.");
-    return;
-  }
-
-  state.parlayDraft.push({
-    id,
+  appendPickToParlay({
+    id: `${fixture.id}:${market.mercado}:${market.seleccion}`,
     fixtureId: fixture.id,
     league: fixture.leagueName,
     home: fixture.home,
@@ -1021,11 +1034,9 @@ function addMarketToParlay(analysis, marketIndex) {
     requiresReview: Boolean(market.requiere_revision),
     analysisStatus: analysis.estado_analisis,
     sourceModule: market.sourceModule || (analysis.analysisMode === "rule_engine" ? "odds_rule_engine" : "odds"),
-    source: analysis._source || "openai"
-  });
-  persistParlayDraft();
-  renderParlayDraft(true);
-  showNotice("Selección agregada a Mi parlay.");
+    source: analysis._source || "openai",
+    supportingData: market.datos_que_apoyan || [], contradictingData: market.datos_que_contradicen || []
+  }, "Selección agregada a Mi parlay.");
 }
 
 function addOddsPickToParlay(selectionKey) {
@@ -1035,18 +1046,8 @@ function addOddsPickToParlay(selectionKey) {
     showNotice("Esta cuota no cumple los controles mínimos para agregarla al parlay.");
     return;
   }
-  const id = `${fixture.id}:${market.marketKey}:${market.selectionKey}`;
-  if (state.parlayDraft.some((leg) => leg.id === id)) {
-    showNotice("Esta selección ya está incluida en el parlay.");
-    renderParlayDraft(true);
-    return;
-  }
-  if (state.parlayDraft.length >= 12) {
-    showNotice("El cupón admite hasta 12 selecciones.");
-    return;
-  }
-  state.parlayDraft.push({
-    id, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away,
+  appendPickToParlay({
+    id: `${fixture.id}:${market.marketKey}:${market.selectionKey}`, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away,
     date: fixture.date, market: market.market, selection: market.selection,
     marketCode: market.marketKey, selectionCode: market.selectionKey,
     decimalOdds: market.decimalOdds, estimatedProbability: market.estimatedProbabilityPct,
@@ -1055,11 +1056,9 @@ function addOddsPickToParlay(selectionKey) {
     expectedValue: market.expectedValuePct, reasoning: market.explanation || "",
     confidence: market.confidenceLevel || "Media", risk: market.colorMeaning || "Riesgo",
     requiresReview: market.highlightColor !== "green", analysisStatus: fixture.researchData.analysisStatus,
-    source: market.source || "api-football"
-  });
-  persistParlayDraft();
-  renderParlayDraft(true);
-  showNotice("Cuota agregada a Mi parlay.");
+    sourceModule: "odds", source: market.source || "api-football",
+    supportingData: market.supportingData || [], contradictingData: market.contradictingData || []
+  }, "Cuota agregada a Mi parlay.");
 }
 
 function saveOddsPick(selectionKey) {
@@ -1074,7 +1073,8 @@ function saveOddsPick(selectionKey) {
     impliedProbability: market.impliedProbabilityPct, modelProbability: market.estimatedProbabilityPct,
     expectedValue: market.expectedValuePct,
     fixtureStatus: fixture.statusLabel || fixture.status, confidence: market.confidenceLevel || "No disponible",
-    result: "pending", source: market.source || "api-football"
+    result: "pending", sourceModule: "odds", source: market.source || "api-football",
+    supportingData: market.supportingData || [], contradictingData: market.contradictingData || []
   });
 }
 
@@ -1131,7 +1131,7 @@ function renderSavedPicks() {
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Confianza / resultado</span><strong>${escapeHtml(pick.confidence || "No disponible")}</strong><small>${escapeHtml(resultLabels[pick.result] || "Pendiente")}</small></div>
+    <div><span>Confianza / resultado</span><strong>${escapeHtml(pick.confidence || "No disponible")}</strong><small>${escapeHtml(resultLabels[pick.result] || "Pendiente")} · Origen: ${escapeHtml(pick.sourceModule || "odds")}</small></div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`).join("");
 }
@@ -1349,7 +1349,10 @@ function renderDataPicks(result) {
         <div class="data-pick__metrics"><span>Modelo <b>${displayValue(pick.modelProbabilityPct)}%</b></span><span>Cuota <b>${displayValue(pick.decimalOdds)}</b></span><span>EV <b>${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</b></span><span>Confianza <b>${escapeHtml(pick.confidenceScore)}%</b></span></div>
         <p>${escapeHtml(pick.explanation)}</p>
         <small>Fuentes: ${escapeHtml(pick.sourcesUsed?.join(" · ") || "modelo interno")}</small>
-        <button class="button button--secondary button--compact" type="button" data-add-data-pick="${escapeHtml(pick.selectionKey)}" ${["red"].includes(pick.highlightColor) ? "disabled" : ""}>Agregar pick</button>
+        <div class="pick-actions">
+          <button class="button button--secondary button--compact" type="button" data-save-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.highlightColor === "red" ? "disabled" : ""}>Guardar individual</button>
+          <button class="button button--primary button--compact" type="button" data-add-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.highlightColor === "red" ? "disabled" : ""}>Agregar al parlay</button>
+        </div>
       </article>`).join("")}</div>`;
 }
 
@@ -1378,22 +1381,35 @@ function addDataPickToParlay(selectionKey) {
   const fixture = selectedFixture();
   const pick = state.dataPicksByFixture.get(fixture?.id)?.picks?.find((item) => item.selectionKey === selectionKey);
   if (!fixture || !pick || pick.highlightColor === "red") return showNotice("Este pick no tiene respaldo suficiente para agregarlo.");
-  const id = `${fixture.id}:${pick.marketKey}:${pick.selectionKey}`;
-  if (state.parlayDraft.some((leg) => leg.id === id)) { renderParlayDraft(true); return showNotice("Esta selección ya está incluida en el parlay."); }
-  if (state.parlayDraft.length >= 12) return showNotice("El cupón admite hasta 12 selecciones.");
-  state.parlayDraft.push({
-    id, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
+  appendPickToParlay({
+    id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}`, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
     market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey,
     decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null,
     impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
     estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
     fixtureStatus: fixture.statusLabel || fixture.status, confidence: `${pick.confidenceScore}%`, risk: pick.level,
     reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
-    analysisStatus: pick.status, sourceModule: "data_picks", source: "API-Football + modelo interno"
+    analysisStatus: pick.status, sourceModule: "data_picks", source: "API-Football + modelo interno",
+    supportingData: pick.supportingData, contradictingData: pick.contradictingData
+  }, "Pick agregado a Mi parlay. Se guardará únicamente cuando nombres y guardes el parlay.");
+}
+
+function saveDataPick(selectionKey) {
+  const fixture = selectedFixture();
+  const pick = state.dataPicksByFixture.get(fixture?.id)?.picks?.find((item) => item.selectionKey === selectionKey);
+  if (!fixture || !pick || pick.highlightColor === "red") return showNotice("Este pick no tiene respaldo suficiente para guardarlo.");
+  saveIndividualLeg({
+    id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}`, fixtureId: fixture.id,
+    league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey,
+    decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null,
+    impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
+    estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
+    fixtureStatus: fixture.statusLabel || fixture.status, confidence: `${pick.confidenceScore}%`, risk: pick.level,
+    reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
+    result: "pending", sourceModule: "data_picks", source: "API-Football + modelo interno",
+    supportingData: pick.supportingData, contradictingData: pick.contradictingData
   });
-  persistParlayDraft();
-  renderParlayDraft(true);
-  showNotice("Pick agregado a Mi parlay. Se guardará únicamente cuando nombres y guardes el parlay.");
 }
 
 async function selectFixture(fixtureId, analysisMode = null) {
@@ -1673,8 +1689,10 @@ elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixtu
 elements.explainSelectedAnalysis.addEventListener("click", explainSelectedFixture);
 elements.showDataPicks.addEventListener("click", loadDataPicks);
 elements.dataPicksContent.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-add-data-pick]");
-  if (button) addDataPickToParlay(button.dataset.addDataPick);
+  const addButton = event.target.closest("[data-add-data-pick]");
+  const saveButton = event.target.closest("[data-save-data-pick]");
+  if (addButton) addDataPickToParlay(addButton.dataset.addDataPick);
+  if (saveButton) saveDataPick(saveButton.dataset.saveDataPick);
 });
 elements.dataDialogClose.addEventListener("click", closeDataDialog);
 elements.dataDialogContent.addEventListener("click", (event) => {
