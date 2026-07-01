@@ -7,6 +7,7 @@ import { parseFixtureId, parseFixtureQuery } from "../middleware/validate.js";
 import { getFixtureDataset, getFixtureResult, resolveLeague, searchFixtures } from "../services/api-football.service.js";
 import { generateAnalysis } from "../services/openai.service.js";
 import { generateRuleBasedAnalysis } from "../services/rule-analysis.service.js";
+import { generateDataPicks } from "../services/data-picks.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 
 export const apiRouter = Router();
@@ -93,6 +94,12 @@ apiRouter.post("/fixtures/:fixtureId/analysis/data", requireLiveMode, asyncRoute
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const dataset = await getFixtureDataset(fixtureId);
   res.json({ source: "rule-engine", generatedAt: new Date().toISOString(), analysis: generateRuleBasedAnalysis(dataset) });
+}));
+
+apiRouter.post("/fixtures/:fixtureId/picks/data", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const dataset = await getFixtureDataset(fixtureId);
+  res.json(generateDataPicks(dataset));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/analysis", requireLiveMode, analysisLimiter, asyncRoute(async (req, res) => {

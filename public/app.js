@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260630-rule-engine";
+import { footballDataService } from "./services.js?v=20260630-data-picks";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   loadSavedPicks, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
@@ -19,6 +19,7 @@ const state = {
   fixtures: [],
   selectedFixtureId: null,
   analysisByFixture: new Map(),
+  dataPicksByFixture: new Map(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
@@ -30,6 +31,7 @@ const state = {
   hasSearched: false,
   isSearching: false,
   isAnalyzing: false,
+  isLoadingDataPicks: false,
   isRefreshingResearch: false,
   isRefreshingStatuses: false,
   autoRefreshTimer: null
@@ -71,6 +73,9 @@ const elements = {
   analysisContent: document.querySelector("#analysis-content"),
   generateSelectedAnalysis: document.querySelector("#generate-selected-analysis"),
   explainSelectedAnalysis: document.querySelector("#explain-selected-analysis"),
+  showDataPicks: document.querySelector("#show-data-picks"),
+  dataPicksStatus: document.querySelector("#data-picks-status"),
+  dataPicksContent: document.querySelector("#data-picks-content"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -436,6 +441,14 @@ function renderFixtureData() {
     </div>
     ${probabilityLine}`;
   updateAnalysisActionState();
+  elements.showDataPicks.disabled = state.isLoadingDataPicks;
+  const savedDataPicks = state.dataPicksByFixture.get(fixture.id);
+  if (savedDataPicks) renderDataPicks(savedDataPicks);
+  else {
+    elements.dataPicksStatus.className = "status-badge status-badge--unavailable";
+    elements.dataPicksStatus.textContent = "No disponible";
+    elements.dataPicksContent.innerHTML = '<div class="research-empty">Pulsa “Ver Picks” para evaluar este partido con los datos disponibles.</div>';
+  }
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
@@ -1319,6 +1332,70 @@ function showAnalysisEmpty() {
   elements.analysisContent.innerHTML = '<div class="empty-state"><span class="empty-state__icon" aria-hidden="true">✦</span><h3>Partido seleccionado</h3><p>Analiza primero con el Motor de Reglas. OpenAI queda como explicación opcional.</p></div>';
 }
 
+function renderDataPicks(result) {
+  const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
+  elements.dataPicksStatus.className = `status-badge status-badge--${statusClass(status)}`;
+  elements.dataPicksStatus.textContent = status;
+  if (!result.picks?.length) {
+    elements.dataPicksContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warnings?.[0] || "No hay respaldo estadístico suficiente para evaluar mercados.")}</div>`;
+    return;
+  }
+  elements.dataPicksContent.innerHTML = `
+    <div class="data-picks-summary"><strong>${result.picks.length} selecciones evaluadas</strong><span>Calidad de datos ${displayValue(result.dataQualityScore)}/100 · ${escapeHtml(result.source)}</span></div>
+    ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
+    <div class="data-picks-grid">${result.picks.map((pick) => `
+      <article class="data-pick data-pick--${escapeHtml(pick.highlightColor)}">
+        <div class="data-pick__heading"><div><small>${escapeHtml(pick.market)}</small><strong>${escapeHtml(pick.selection)}</strong></div><span>${escapeHtml(pick.level)}</span></div>
+        <div class="data-pick__metrics"><span>Modelo <b>${displayValue(pick.modelProbabilityPct)}%</b></span><span>Cuota <b>${displayValue(pick.decimalOdds)}</b></span><span>EV <b>${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</b></span><span>Confianza <b>${escapeHtml(pick.confidenceScore)}%</b></span></div>
+        <p>${escapeHtml(pick.explanation)}</p>
+        <small>Fuentes: ${escapeHtml(pick.sourcesUsed?.join(" · ") || "modelo interno")}</small>
+        <button class="button button--secondary button--compact" type="button" data-add-data-pick="${escapeHtml(pick.selectionKey)}" ${["red"].includes(pick.highlightColor) ? "disabled" : ""}>Agregar pick</button>
+      </article>`).join("")}</div>`;
+}
+
+async function loadDataPicks() {
+  const fixture = selectedFixture();
+  if (!fixture || state.isLoadingDataPicks) return;
+  state.isLoadingDataPicks = true;
+  elements.showDataPicks.disabled = true;
+  elements.showDataPicks.textContent = "Evaluando…";
+  elements.dataPicksStatus.className = "status-badge status-badge--processing";
+  elements.dataPicksStatus.textContent = "Procesando";
+  try {
+    const result = await footballDataService.getDataPicks(fixture);
+    state.dataPicksByFixture.set(fixture.id, result);
+    renderDataPicks(result);
+  } catch (error) {
+    renderDataPicks({ status: "not_available", picks: [], warnings: [error.message] });
+  } finally {
+    state.isLoadingDataPicks = false;
+    elements.showDataPicks.disabled = !selectedFixture();
+    elements.showDataPicks.textContent = "Ver Picks";
+  }
+}
+
+function addDataPickToParlay(selectionKey) {
+  const fixture = selectedFixture();
+  const pick = state.dataPicksByFixture.get(fixture?.id)?.picks?.find((item) => item.selectionKey === selectionKey);
+  if (!fixture || !pick || pick.highlightColor === "red") return showNotice("Este pick no tiene respaldo suficiente para agregarlo.");
+  const id = `${fixture.id}:${pick.marketKey}:${pick.selectionKey}`;
+  if (state.parlayDraft.some((leg) => leg.id === id)) { renderParlayDraft(true); return showNotice("Esta selección ya está incluida en el parlay."); }
+  if (state.parlayDraft.length >= 12) return showNotice("El cupón admite hasta 12 selecciones.");
+  state.parlayDraft.push({
+    id, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey,
+    decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null,
+    impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
+    estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
+    fixtureStatus: fixture.statusLabel || fixture.status, confidence: `${pick.confidenceScore}%`, risk: pick.level,
+    reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
+    analysisStatus: pick.status, sourceModule: "data_picks", source: "API-Football + modelo interno"
+  });
+  persistParlayDraft();
+  renderParlayDraft(true);
+  showNotice("Pick agregado a Mi parlay. Se guardará únicamente cuando nombres y guardes el parlay.");
+}
+
 async function selectFixture(fixtureId, analysisMode = null) {
   if (state.isAnalyzing) return;
   state.selectedFixtureId = fixtureId;
@@ -1594,6 +1671,11 @@ elements.toggleResearch.addEventListener("click", () => {
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.explainSelectedAnalysis.addEventListener("click", explainSelectedFixture);
+elements.showDataPicks.addEventListener("click", loadDataPicks);
+elements.dataPicksContent.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-add-data-pick]");
+  if (button) addDataPickToParlay(button.dataset.addDataPick);
+});
 elements.dataDialogClose.addEventListener("click", closeDataDialog);
 elements.dataDialogContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-odds-pick]");

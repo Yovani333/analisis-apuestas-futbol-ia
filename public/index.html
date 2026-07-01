@@ -176,6 +176,17 @@
           </div>
         </section>
 
+        <section id="data-picks-panel" class="panel data-picks-panel" aria-labelledby="data-picks-title">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Motor estadístico</p><h2 id="data-picks-title">Picks basados en datos</h2></div>
+            <div class="panel-actions">
+              <button id="show-data-picks" class="button button--primary button--compact" type="button" disabled>Ver Picks</button>
+              <span id="data-picks-status" class="status-badge status-badge--unavailable">No disponible</span>
+            </div>
+          </div>
+          <div id="data-picks-content" aria-live="polite"><div class="research-empty">Selecciona un partido para evaluar mercados con los datos disponibles.</div></div>
+        </section>
+
         <section id="analysis-panel" class="panel analysis-panel" aria-labelledby="analysis-title">
           <div class="panel-heading">
             <div>
@@ -275,6 +286,6 @@
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
 
-    <script type="module" src="app.js?v=20260630-rule-engine"></script>
+    <script type="module" src="app.js?v=20260630-data-picks"></script>
   </body>
 </html>

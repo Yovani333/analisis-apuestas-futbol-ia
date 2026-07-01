@@ -126,6 +126,12 @@ export const footballDataService = {
     return { ...payload.analysis, _source: "rule-engine" };
   },
 
+  async getDataPicks(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", picks: [], warnings: ["Los picks de datos requieren información real de API-Football."] };
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/picks/data`, { method: "POST" });
+  },
+
   async getResearchData(fixtureId, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return null;
