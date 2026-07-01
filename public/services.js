@@ -132,6 +132,12 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/picks/data`, { method: "POST" });
   },
 
+  async getPoissonModel(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", suggestedMarkets: [], warning: "El Modelo Poisson requiere datos reales normalizados." };
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/poisson`, { method: "POST" });
+  },
+
   async getResearchData(fixtureId, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return null;

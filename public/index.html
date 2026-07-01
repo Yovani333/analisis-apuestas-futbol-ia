@@ -187,6 +187,17 @@
           <div id="data-picks-content" aria-live="polite"><div class="research-empty">Selecciona un partido para evaluar mercados con los datos disponibles.</div></div>
         </section>
 
+        <section id="poisson-panel" class="panel poisson-panel" aria-labelledby="poisson-title">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Estadísticas avanzadas</p><h2 id="poisson-title">Modelo Poisson</h2></div>
+            <div class="panel-actions">
+              <button id="show-poisson" class="button button--secondary button--compact" type="button" disabled>Ver datos</button>
+              <span id="poisson-status" class="status-badge status-badge--unavailable">No disponible</span>
+            </div>
+          </div>
+          <div id="poisson-content" aria-live="polite"><div class="research-empty">Selecciona un partido para calcular probabilidades con Poisson.</div></div>
+        </section>
+
         <section id="analysis-panel" class="panel analysis-panel" aria-labelledby="analysis-title">
           <div class="panel-heading">
             <div>
@@ -286,6 +297,6 @@
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
 
-    <script type="module" src="app.js?v=20260630-data-picks"></script>
+    <script type="module" src="app.js?v=20260701-poisson"></script>
   </body>
 </html>

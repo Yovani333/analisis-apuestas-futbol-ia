@@ -1034,6 +1034,21 @@ body {
 .data-pick__metrics b { color: var(--text); }
 .data-pick p { margin: 0; line-height: 1.45; }
 .data-pick .pick-actions { justify-content: flex-end; }
+.poisson-panel { grid-column: 1 / -1; border-top: 4px solid #3978c5; }
+.poisson-panel .eyebrow { color: #3978c5; }
+.poisson-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 10px; }
+.poisson-summary article { display: grid; gap: 3px; padding: 9px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 7px; }
+.poisson-summary span, .poisson-market small { color: var(--muted); font-size: .66rem; }
+.poisson-summary strong { font-size: .9rem; }
+.poisson-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, .7fr); gap: 12px; }
+.poisson-layout h3, .poisson-markets h3 { margin: 0 0 7px; font-size: .78rem; }
+.poisson-probabilities { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.poisson-probabilities div, .likely-scores div { display: flex; justify-content: space-between; gap: 8px; padding: 7px; font-size: .68rem; background: var(--surface-subtle); border-radius: 5px; }
+.likely-scores { display: grid; gap: 4px; }
+.poisson-markets { margin-top: 12px; }
+.poisson-market { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px; border-top: 1px solid var(--border); border-left: 4px solid #d49a20; }
+.poisson-market--green { border-left-color: #16805a; } .poisson-market--blue { border-left-color: #3978c5; }
+.poisson-market > div:first-child { display: grid; gap: 2px; min-width: 0; }
 .analysis-panel .eyebrow { color: #7048c8; }
 .empty-state__icon { color: #7048c8; background: #f0ebff; border-radius: 8px; }
 .analysis-hero { color: white; background: #34245e; border: 0; border-radius: 7px; }
@@ -1143,6 +1158,11 @@ body {
   .data-picks-summary { align-items: flex-start; flex-direction: column; }
   .data-pick__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .data-pick .pick-actions, .data-pick .button { width: 100%; }
+  .poisson-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .poisson-layout { grid-template-columns: 1fr; }
+  .poisson-probabilities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .poisson-market { align-items: stretch; flex-direction: column; }
+  .poisson-market .pick-actions, .poisson-market .button { width: 100%; }
   .simple-filters { grid-template-columns: 1fr !important; }
   .simple-filters > * { grid-column: 1 !important; }
   .quick-filters .button { flex: 1 1 auto; min-height: 42px; }

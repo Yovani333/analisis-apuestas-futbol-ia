@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260630-data-picks";
+import { footballDataService } from "./services.js?v=20260701-poisson";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
@@ -21,6 +21,7 @@ const state = {
   selectedFixtureId: null,
   analysisByFixture: new Map(),
   dataPicksByFixture: new Map(),
+  poissonByFixture: new Map(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
@@ -33,6 +34,7 @@ const state = {
   isSearching: false,
   isAnalyzing: false,
   isLoadingDataPicks: false,
+  isLoadingPoisson: false,
   isRefreshingResearch: false,
   isRefreshingStatuses: false,
   autoRefreshTimer: null
@@ -77,6 +79,9 @@ const elements = {
   showDataPicks: document.querySelector("#show-data-picks"),
   dataPicksStatus: document.querySelector("#data-picks-status"),
   dataPicksContent: document.querySelector("#data-picks-content"),
+  showPoisson: document.querySelector("#show-poisson"),
+  poissonStatus: document.querySelector("#poisson-status"),
+  poissonContent: document.querySelector("#poisson-content"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -449,6 +454,14 @@ function renderFixtureData() {
     elements.dataPicksStatus.className = "status-badge status-badge--unavailable";
     elements.dataPicksStatus.textContent = "No disponible";
     elements.dataPicksContent.innerHTML = '<div class="research-empty">Pulsa “Ver Picks” para evaluar este partido con los datos disponibles.</div>';
+  }
+  elements.showPoisson.disabled = state.isLoadingPoisson;
+  const savedPoisson = state.poissonByFixture.get(fixture.id);
+  if (savedPoisson) renderPoisson(savedPoisson);
+  else {
+    elements.poissonStatus.className = "status-badge status-badge--unavailable";
+    elements.poissonStatus.textContent = "No disponible";
+    elements.poissonContent.innerHTML = '<div class="research-empty">Pulsa “Ver datos” para calcular el modelo Poisson.</div>';
   }
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
   renderCoverageTable(fixture);
@@ -1424,6 +1437,85 @@ function saveDataPick(selectionKey) {
   });
 }
 
+function renderPoisson(result) {
+  const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
+  elements.poissonStatus.className = `status-badge status-badge--${statusClass(status)}`;
+  elements.poissonStatus.textContent = status;
+  if (result.status === "not_available") {
+    elements.poissonContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warning || "Modelo Poisson no disponible.")}</div>`;
+    return;
+  }
+  const fixture = selectedFixture();
+  const probabilityRows = [
+    ["Local gana", result.probabilities.homeWin], ["Empate", result.probabilities.draw], ["Visitante gana", result.probabilities.awayWin],
+    ["Doble oportunidad 1X", result.probabilities.doubleChance1X], ["Doble oportunidad X2", result.probabilities.doubleChanceX2],
+    ["Over 0.5", result.probabilities.over05], ["Over 1.5", result.probabilities.over15], ["Over 2.5", result.probabilities.over25],
+    ["Under 2.5", result.probabilities.under25], ["Under 3.5", result.probabilities.under35],
+    ["BTTS Sí", result.probabilities.bttsYes], ["BTTS No", result.probabilities.bttsNo]
+  ];
+  elements.poissonContent.innerHTML = `
+    <div class="poisson-summary"><article><span>λ ${escapeHtml(fixture?.home || "Local")}</span><strong>${displayValue(result.lambdaHome)}</strong></article><article><span>λ ${escapeHtml(fixture?.away || "Visitante")}</span><strong>${displayValue(result.lambdaAway)}</strong></article><article><span>Calidad</span><strong>${displayValue(result.dataQualityScore)}/100</strong></article><article><span>Modelo</span><strong>${escapeHtml(result.modelVersion)}</strong></article></div>
+    ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
+    <div class="poisson-layout">
+      <section><h3>Probabilidades</h3><div class="poisson-probabilities">${probabilityRows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${displayValue(value)}%</strong></div>`).join("")}</div></section>
+      <section><h3>Marcadores más probables</h3><div class="likely-scores">${result.likelyScores.map((row) => `<div><strong>${escapeHtml(row.score)}</strong><span>${escapeHtml(row.probabilityPct)}%</span></div>`).join("")}</div></section>
+    </div>
+    <section class="poisson-markets"><h3>Mercados derivados</h3>${result.suggestedMarkets.length ? result.suggestedMarkets.map((pick) => `<article class="poisson-market poisson-market--${escapeHtml(pick.highlightColor)}"><div><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)} · Modelo ${escapeHtml(pick.probabilityPct)}% · Cuota ${displayValue(pick.decimalOdds)} · EV ${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</small><small>Confianza ${escapeHtml(pick.confidenceScore)}/100 · ${escapeHtml(pick.level)}</small></div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-poisson="${escapeHtml(pick.selectionKey)}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-poisson="${escapeHtml(pick.selectionKey)}">Agregar al parlay</button></div></article>`).join("") : '<p class="muted-text">No hay mercados con respaldo mínimo suficiente.</p>'}</section>
+    <p class="market-disclaimer">Poisson es una referencia matemática parcial y no decide por sí solo el pick final.</p>`;
+}
+
+async function loadPoisson() {
+  const fixture = selectedFixture();
+  if (!fixture || state.isLoadingPoisson) return;
+  state.isLoadingPoisson = true;
+  elements.showPoisson.disabled = true;
+  elements.showPoisson.textContent = "Calculando…";
+  elements.poissonStatus.className = "status-badge status-badge--processing";
+  elements.poissonStatus.textContent = "Procesando";
+  try {
+    const result = await footballDataService.getPoissonModel(fixture);
+    state.poissonByFixture.set(fixture.id, result);
+    renderPoisson(result);
+  } catch (error) {
+    renderPoisson({ status: "not_available", warning: error.message, suggestedMarkets: [] });
+  } finally {
+    state.isLoadingPoisson = false;
+    elements.showPoisson.disabled = !selectedFixture();
+    elements.showPoisson.textContent = "Ver datos";
+  }
+}
+
+function poissonLeg(selectionKey) {
+  const fixture = selectedFixture();
+  const result = state.poissonByFixture.get(fixture?.id);
+  const pick = result?.suggestedMarkets?.find((item) => item.selectionKey === selectionKey);
+  if (!fixture || !pick) return null;
+  return {
+    id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}:poisson`, fixtureId: fixture.id,
+    league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey,
+    decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null,
+    impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
+    estimatedProbability: pick.modelProbabilityPct, expectedValue: pick.expectedValuePct,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null,
+    lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore,
+    risk: pick.level, reasoning: `Modelo Poisson: λ ${result.lambdaHome} y ${result.lambdaAway}.`,
+    requiresReview: result.status !== "available" || pick.highlightColor === "orange", analysisStatus: result.status,
+    sourceModule: "poisson", source: result.source, supportingData: pick.supportingData,
+    contradictingData: [...(pick.contradictingData || []), ...(result.warnings || [])]
+  };
+}
+
+function addPoissonPick(selectionKey) {
+  const leg = poissonLeg(selectionKey);
+  if (leg) appendPickToParlay(leg, "Pick Poisson agregado a Mi parlay. Se guardará únicamente al guardar el parlay.");
+}
+
+function savePoissonPick(selectionKey) {
+  const leg = poissonLeg(selectionKey);
+  if (leg) saveIndividualLeg({ ...leg, result: "pending" });
+}
+
 async function selectFixture(fixtureId, analysisMode = null) {
   if (state.isAnalyzing) return;
   state.selectedFixtureId = fixtureId;
@@ -1705,6 +1797,13 @@ elements.dataPicksContent.addEventListener("click", (event) => {
   const saveButton = event.target.closest("[data-save-data-pick]");
   if (addButton) addDataPickToParlay(addButton.dataset.addDataPick);
   if (saveButton) saveDataPick(saveButton.dataset.saveDataPick);
+});
+elements.showPoisson.addEventListener("click", loadPoisson);
+elements.poissonContent.addEventListener("click", (event) => {
+  const addButton = event.target.closest("[data-add-poisson]");
+  const saveButton = event.target.closest("[data-save-poisson]");
+  if (addButton) addPoissonPick(addButton.dataset.addPoisson);
+  if (saveButton) savePoissonPick(saveButton.dataset.savePoisson);
 });
 elements.dataDialogClose.addEventListener("click", closeDataDialog);
 elements.dataDialogContent.addEventListener("click", (event) => {
