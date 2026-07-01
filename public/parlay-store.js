@@ -1,3 +1,5 @@
+import { applyAnalysisTiming } from "./analysis-timing.js";
+
 export const PARLAY_DRAFT_KEY = "football-ai.parlay-draft.v1";
 export const SAVED_PARLAYS_KEY = "football-ai.saved-parlays.v1";
 export const SAVED_PICKS_KEY = "football-ai.saved-picks.v1";
@@ -45,7 +47,7 @@ export function saveSavedPicks(picks, storage = globalThis.localStorage) {
 }
 
 export function normalizePickLeg(leg, now = new Date()) {
-  return {
+  return applyAnalysisTiming({
     ...leg,
     originalOdds: leg.originalOdds ?? leg.decimalOdds ?? null,
     updatedOdds: leg.updatedOdds ?? null,
@@ -58,7 +60,7 @@ export function normalizePickLeg(leg, now = new Date()) {
     supportingData: Array.isArray(leg.supportingData) ? [...leg.supportingData] : [],
     contradictingData: Array.isArray(leg.contradictingData) ? [...leg.contradictingData] : [],
     addedAt: leg.addedAt || now.toISOString()
-  };
+  }, now);
 }
 
 export function calculateParlayResult(legs = []) {

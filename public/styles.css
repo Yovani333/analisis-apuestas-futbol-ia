@@ -1014,6 +1014,12 @@ body {
 .data-picks-summary { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--muted); font-size: .75rem; }
 .data-picks-summary strong { color: var(--text); }
 .data-picks-warnings { display: grid; gap: 4px; padding: 9px 11px; margin-bottom: 10px; color: #744204; font-size: .7rem; background: var(--warning-soft); border: 1px solid #f2dda3; border-radius: 7px; }
+.analysis-timing { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; padding: 9px 11px; margin-bottom: 10px; color: #17466f; font-size: .7rem; background: var(--primary-soft); border: 1px solid #cfe0fc; border-radius: 7px; }
+.analysis-timing small { grid-column: 1 / -1; color: var(--muted); }
+.analysis-timing--early_value, .analysis-timing--too_early { color: #744204; background: var(--warning-soft); border-color: #f2dda3; }
+.analysis-timing--ideal, .analysis-timing--final_confirmation, .analysis-timing--last_review { color: #174b37; background: var(--success-soft); border-color: #c9eadb; }
+.timing-label { color: var(--primary) !important; font-weight: 800; }
+.timing-warning { color: var(--warning) !important; }
 .data-picks-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .data-pick { display: grid; gap: 8px; min-width: 0; padding: 11px; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid #64748b; border-radius: 7px; }
 .data-pick--green { border-left-color: #16805a; } .data-pick--orange { border-left-color: #d49a20; }

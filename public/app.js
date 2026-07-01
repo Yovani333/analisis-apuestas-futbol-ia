@@ -1,5 +1,6 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
 import { footballDataService } from "./services.js?v=20260630-data-picks";
+import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   loadSavedPicks, normalizePickLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
@@ -964,7 +965,9 @@ function renderParlayDraft(open = false) {
     return;
   }
 
-  elements.parlayDraftList.innerHTML = state.parlayDraft.map((leg, index) => `
+  elements.parlayDraftList.innerHTML = state.parlayDraft.map((storedLeg, index) => {
+    const leg = applyAnalysisTiming(storedLeg);
+    return `
     <article class="parlay-draft-leg">
       <div class="parlay-draft-leg__number">${index + 1}</div>
       <div>
@@ -973,11 +976,13 @@ function renderParlayDraft(open = false) {
         <small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}</small>
         <small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small>
         <small>Cuota ${displayValue(leg.decimalOdds)} · EV ${displayValue(leg.expectedValue)}%</small>
+        <small class="timing-label">${escapeHtml(leg.analysisTiming.label)}${leg.analysisTiming.minutesToKickoff === null ? "" : ` · ${escapeHtml(leg.analysisTiming.minutesToKickoff)} min al inicio`}</small>
+        ${leg.analysisTiming.warning ? `<em>${escapeHtml(leg.analysisTiming.warning)}</em>` : ""}
         ${leg.requiresReview ? '<em>Requiere revisión antes de considerar una apuesta</em>' : ""}
       </div>
       <button type="button" data-remove-draft="${escapeHtml(leg.id)}" aria-label="Quitar selección">×</button>
     </article>
-  `).join("");
+  `; }).join("");
 
   if (open) {
     elements.parlaySlip.hidden = false;
@@ -1025,7 +1030,7 @@ function addMarketToParlay(analysis, marketIndex) {
     updatedOdds: null,
     impliedProbability: calculation?.impliedProbabilityPct ?? null,
     modelProbability: market.probabilidad_modelo ?? calculation?.estimatedProbabilityPct ?? null,
-    fixtureStatus: fixture.statusLabel || fixture.status,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: fixture.fetchedAt || null,
     estimatedProbability: market.probabilidad_modelo,
     expectedValue: market.valor_esperado,
     reasoning: market.razonamiento,
@@ -1052,7 +1057,7 @@ function addOddsPickToParlay(selectionKey) {
     marketCode: market.marketKey, selectionCode: market.selectionKey,
     decimalOdds: market.decimalOdds, estimatedProbability: market.estimatedProbabilityPct,
     originalOdds: market.decimalOdds, updatedOdds: null, impliedProbability: market.impliedProbabilityPct,
-    modelProbability: market.estimatedProbabilityPct, fixtureStatus: fixture.statusLabel || fixture.status,
+    modelProbability: market.estimatedProbabilityPct, fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: market.updatedAt || fixture.fetchedAt || null,
     expectedValue: market.expectedValuePct, reasoning: market.explanation || "",
     confidence: market.confidenceLevel || "Media", risk: market.colorMeaning || "Riesgo",
     requiresReview: market.highlightColor !== "green", analysisStatus: fixture.researchData.analysisStatus,
@@ -1072,7 +1077,7 @@ function saveOddsPick(selectionKey) {
     decimalOdds: market.decimalOdds, originalOdds: market.decimalOdds, updatedOdds: null,
     impliedProbability: market.impliedProbabilityPct, modelProbability: market.estimatedProbabilityPct,
     expectedValue: market.expectedValuePct,
-    fixtureStatus: fixture.statusLabel || fixture.status, confidence: market.confidenceLevel || "No disponible",
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: market.updatedAt || fixture.fetchedAt || null, confidence: market.confidenceLevel || "No disponible",
     result: "pending", sourceModule: "odds", source: market.source || "api-football",
     supportingData: market.supportingData || [], contradictingData: market.contradictingData || []
   });
@@ -1090,7 +1095,7 @@ function saveAnalysisMarket(analysis, marketIndex) {
     selectionCode: market.codigo_seleccion, decimalOdds: market.cuota_decimal,
     originalOdds: market.cuota_decimal, updatedOdds: null, impliedProbability: calculation?.impliedProbabilityPct ?? null,
     modelProbability: market.probabilidad_modelo ?? calculation?.estimatedProbabilityPct ?? null,
-    expectedValue: market.valor_esperado ?? calculation?.expectedValuePct ?? null, fixtureStatus: fixture.statusLabel || fixture.status,
+    expectedValue: market.valor_esperado ?? calculation?.expectedValuePct ?? null, fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: fixture.fetchedAt || null,
     confidence: market.confianza || "No disponible", result: "pending",
     sourceModule: market.sourceModule || (analysis.analysisMode === "rule_engine" ? "odds_rule_engine" : "odds"),
     source: analysis._source || "openai"
@@ -1127,13 +1132,13 @@ function renderSavedPicks() {
     elements.savedPicksList.innerHTML = '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis IA.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
   }
-  elements.savedPicksList.innerHTML = state.savedPicks.map((pick) => `<article class="saved-pick" data-pick-id="${escapeHtml(pick.id)}">
+  elements.savedPicksList.innerHTML = state.savedPicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); return `<article class="saved-pick" data-pick-id="${escapeHtml(pick.id)}">
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Confianza / resultado</span><strong>${escapeHtml(pick.confidence || "No disponible")}</strong><small>${escapeHtml(resultLabels[pick.result] || "Pendiente")} · Origen: ${escapeHtml(pick.sourceModule || "odds")}</small></div>
+    <div><span>Confianza / resultado</span><strong>${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`}</strong><small>${escapeHtml(resultLabels[pick.result] || "Pendiente")} · Origen: ${escapeHtml(pick.sourceModule || "odds")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
-  </article>`).join("");
+  </article>`; }).join("");
 }
 
 function renderSavedParlays() {
@@ -1160,12 +1165,12 @@ function renderSavedParlays() {
         <div><span>Parlay · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(parlay.createdAt)))}</time></div>
         <div class="saved-parlay__summary"><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong><button class="parlay-expand" type="button" data-toggle-parlay aria-expanded="${expanded}">${expanded ? "−" : "+"}</button></div>
       </header>
-      <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((leg, index) => `
+      <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); return `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
-          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small></div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
           <label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label>
-        </section>`).join("")}</div>
+        </section>`; }).join("")}</div>
       <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>
       <footer class="saved-parlay__footer" ${expanded ? "" : "hidden"}><span>El resultado general se calcula con los estados de las selecciones.</span><button class="button button--danger" type="button" data-delete-parlay>Eliminar registro</button></footer>
     </article>`;
@@ -1206,6 +1211,8 @@ async function updateSavedParlayResults() {
       if (hasNumber(currentMarket?.impliedProbabilityPct)) leg.impliedProbability = Number(currentMarket.impliedProbabilityPct);
       if (hasNumber(currentMarket?.estimatedProbabilityPct)) leg.modelProbability = Number(currentMarket.estimatedProbabilityPct);
       if (hasNumber(currentMarket?.expectedValuePct)) leg.expectedValue = Number(currentMarket.expectedValuePct);
+      leg.lastUpdatedAt = new Date().toISOString();
+      Object.assign(leg, applyAnalysisTiming(leg));
       if (leg.result !== "pending") return;
       const nextResult = settleLegResult(leg.selectionCode, fixtureResult);
       if (nextResult !== "pending") {
@@ -1340,8 +1347,11 @@ function renderDataPicks(result) {
     elements.dataPicksContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warnings?.[0] || "No hay respaldo estadístico suficiente para evaluar mercados.")}</div>`;
     return;
   }
+  const fixture = selectedFixture();
+  const timing = resolveAnalysisTiming({ kickoffAt: fixture?.utcDateTime, lastUpdatedAt: result.generatedAt });
   elements.dataPicksContent.innerHTML = `
     <div class="data-picks-summary"><strong>${result.picks.length} selecciones evaluadas</strong><span>Calidad de datos ${displayValue(result.dataQualityScore)}/100 · ${escapeHtml(result.source)}</span></div>
+    <div class="analysis-timing analysis-timing--${escapeHtml(timing.window)}"><strong>${escapeHtml(timing.label)}</strong><span>${timing.minutesToKickoff === null ? "Hora del partido no disponible" : `${escapeHtml(timing.minutesToKickoff)} minutos para el inicio`}${timing.isConfirmed ? " · Confirmado por frescura" : ""}</span>${timing.warning ? `<small>${escapeHtml(timing.warning)}</small>` : ""}</div>
     ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
     <div class="data-picks-grid">${result.picks.map((pick) => `
       <article class="data-pick data-pick--${escapeHtml(pick.highlightColor)}">
@@ -1379,7 +1389,8 @@ async function loadDataPicks() {
 
 function addDataPickToParlay(selectionKey) {
   const fixture = selectedFixture();
-  const pick = state.dataPicksByFixture.get(fixture?.id)?.picks?.find((item) => item.selectionKey === selectionKey);
+  const result = state.dataPicksByFixture.get(fixture?.id);
+  const pick = result?.picks?.find((item) => item.selectionKey === selectionKey);
   if (!fixture || !pick || pick.highlightColor === "red") return showNotice("Este pick no tiene respaldo suficiente para agregarlo.");
   appendPickToParlay({
     id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}`, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
@@ -1387,7 +1398,7 @@ function addDataPickToParlay(selectionKey) {
     decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null,
     impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
     estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
-    fixtureStatus: fixture.statusLabel || fixture.status, confidence: `${pick.confidenceScore}%`, risk: pick.level,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.level,
     reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
     analysisStatus: pick.status, sourceModule: "data_picks", source: "API-Football + modelo interno",
     supportingData: pick.supportingData, contradictingData: pick.contradictingData
@@ -1396,7 +1407,8 @@ function addDataPickToParlay(selectionKey) {
 
 function saveDataPick(selectionKey) {
   const fixture = selectedFixture();
-  const pick = state.dataPicksByFixture.get(fixture?.id)?.picks?.find((item) => item.selectionKey === selectionKey);
+  const result = state.dataPicksByFixture.get(fixture?.id);
+  const pick = result?.picks?.find((item) => item.selectionKey === selectionKey);
   if (!fixture || !pick || pick.highlightColor === "red") return showNotice("Este pick no tiene respaldo suficiente para guardarlo.");
   saveIndividualLeg({
     id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}`, fixtureId: fixture.id,
@@ -1405,7 +1417,7 @@ function saveDataPick(selectionKey) {
     decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null,
     impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
     estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
-    fixtureStatus: fixture.statusLabel || fixture.status, confidence: `${pick.confidenceScore}%`, risk: pick.level,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.level,
     reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
     result: "pending", sourceModule: "data_picks", source: "API-Football + modelo interno",
     supportingData: pick.supportingData, contradictingData: pick.contradictingData
