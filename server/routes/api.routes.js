@@ -9,6 +9,7 @@ import { generateAnalysis } from "../services/openai.service.js";
 import { generateRuleBasedAnalysis } from "../services/rule-analysis.service.js";
 import { generateDataPicks } from "../services/data-picks.service.js";
 import { calculatePoissonModel } from "../services/poisson-model.service.js";
+import { calculateTeamGoalProbability } from "../services/team-goal-probability.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 
 export const apiRouter = Router();
@@ -95,6 +96,7 @@ apiRouter.post("/fixtures/:fixtureId/analysis/data", requireLiveMode, asyncRoute
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const dataset = await getFixtureDataset(fixtureId);
   dataset.poissonModel = calculatePoissonModel(dataset);
+  dataset.teamGoalProbability = calculateTeamGoalProbability(dataset);
   res.json({ source: "rule-engine", generatedAt: new Date().toISOString(), analysis: generateRuleBasedAnalysis(dataset) });
 }));
 
@@ -108,6 +110,11 @@ apiRouter.post("/fixtures/:fixtureId/models/poisson", requireLiveMode, asyncRout
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const dataset = await getFixtureDataset(fixtureId);
   res.json(calculatePoissonModel(dataset));
+}));
+
+apiRouter.post("/fixtures/:fixtureId/models/team-goals", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  res.json(calculateTeamGoalProbability(await getFixtureDataset(fixtureId)));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/analysis", requireLiveMode, analysisLimiter, asyncRoute(async (req, res) => {

@@ -1049,6 +1049,20 @@ body {
 .poisson-market { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px; border-top: 1px solid var(--border); border-left: 4px solid #d49a20; }
 .poisson-market--green { border-left-color: #16805a; } .poisson-market--blue { border-left-color: #3978c5; }
 .poisson-market > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.team-goals-panel { grid-column: 1 / -1; border-top: 4px solid #16805a; }
+.team-goals-panel .eyebrow { color: #16805a; }
+.team-goal-summary { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; margin-bottom: 10px; font-size: .72rem; background: var(--success-soft); border: 1px solid #c9eadb; border-radius: 7px; }
+.team-goal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.team-goal-card { padding: 11px; border: 1px solid var(--border); border-radius: 7px; }
+.team-goal-card__heading { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.team-goal-card__heading h3 { margin: 2px 0 0; font-size: .86rem; }
+.team-goal-card__heading small, .team-goal-evidence span { color: var(--muted); font-size: .65rem; }
+.team-goal-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.team-goal-kpis span { display: grid; gap: 2px; padding: 6px; color: var(--muted); font-size: .62rem; background: var(--surface-subtle); border-radius: 5px; }
+.team-goal-kpis strong { color: var(--text); font-size: .76rem; }
+.team-goal-evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
+.team-goal-evidence > div { display: grid; align-content: start; gap: 3px; padding: 7px; background: var(--surface-subtle); border-radius: 5px; }
+.team-goal-evidence strong { font-size: .68rem; }
 .analysis-panel .eyebrow { color: #7048c8; }
 .empty-state__icon { color: #7048c8; background: #f0ebff; border-radius: 8px; }
 .analysis-hero { color: white; background: #34245e; border: 0; border-radius: 7px; }
@@ -1163,6 +1177,9 @@ body {
   .poisson-probabilities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .poisson-market { align-items: stretch; flex-direction: column; }
   .poisson-market .pick-actions, .poisson-market .button { width: 100%; }
+  .team-goal-grid { grid-template-columns: 1fr; }
+  .team-goal-summary { align-items: flex-start; flex-direction: column; }
+  .team-goal-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .simple-filters { grid-template-columns: 1fr !important; }
   .simple-filters > * { grid-column: 1 !important; }
   .quick-filters .button { flex: 1 1 auto; min-height: 42px; }

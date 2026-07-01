@@ -198,6 +198,14 @@
           <div id="poisson-content" aria-live="polite"><div class="research-empty">Selecciona un partido para calcular probabilidades con Poisson.</div></div>
         </section>
 
+        <section id="team-goals-panel" class="panel team-goals-panel" aria-labelledby="team-goals-title">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Ataque vs defensa</p><h2 id="team-goals-title">Probabilidad de Gol por Equipo</h2></div>
+            <div class="panel-actions"><button id="show-team-goals" class="button button--secondary button--compact" type="button" disabled>Ver datos</button><span id="team-goals-status" class="status-badge status-badge--unavailable">No disponible</span></div>
+          </div>
+          <div id="team-goals-content" aria-live="polite"><div class="research-empty">Selecciona un partido para evaluar la posibilidad de gol de cada equipo.</div></div>
+        </section>
+
         <section id="analysis-panel" class="panel analysis-panel" aria-labelledby="analysis-title">
           <div class="panel-heading">
             <div>
@@ -297,6 +305,6 @@
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
 
-    <script type="module" src="app.js?v=20260701-poisson"></script>
+    <script type="module" src="app.js?v=20260701-team-goals"></script>
   </body>
 </html>

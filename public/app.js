@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260701-poisson";
+import { footballDataService } from "./services.js?v=20260701-team-goals";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
@@ -22,6 +22,7 @@ const state = {
   analysisByFixture: new Map(),
   dataPicksByFixture: new Map(),
   poissonByFixture: new Map(),
+  teamGoalsByFixture: new Map(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
@@ -35,6 +36,7 @@ const state = {
   isAnalyzing: false,
   isLoadingDataPicks: false,
   isLoadingPoisson: false,
+  isLoadingTeamGoals: false,
   isRefreshingResearch: false,
   isRefreshingStatuses: false,
   autoRefreshTimer: null
@@ -82,6 +84,9 @@ const elements = {
   showPoisson: document.querySelector("#show-poisson"),
   poissonStatus: document.querySelector("#poisson-status"),
   poissonContent: document.querySelector("#poisson-content"),
+  showTeamGoals: document.querySelector("#show-team-goals"),
+  teamGoalsStatus: document.querySelector("#team-goals-status"),
+  teamGoalsContent: document.querySelector("#team-goals-content"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -462,6 +467,14 @@ function renderFixtureData() {
     elements.poissonStatus.className = "status-badge status-badge--unavailable";
     elements.poissonStatus.textContent = "No disponible";
     elements.poissonContent.innerHTML = '<div class="research-empty">Pulsa “Ver datos” para calcular el modelo Poisson.</div>';
+  }
+  elements.showTeamGoals.disabled = state.isLoadingTeamGoals;
+  const savedTeamGoals = state.teamGoalsByFixture.get(fixture.id);
+  if (savedTeamGoals) renderTeamGoals(savedTeamGoals);
+  else {
+    elements.teamGoalsStatus.className = "status-badge status-badge--unavailable";
+    elements.teamGoalsStatus.textContent = "No disponible";
+    elements.teamGoalsContent.innerHTML = '<div class="research-empty">Pulsa “Ver datos” para evaluar ataque y defensa.</div>';
   }
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
   renderCoverageTable(fixture);
@@ -1516,6 +1529,37 @@ function savePoissonPick(selectionKey) {
   if (leg) saveIndividualLeg({ ...leg, result: "pending" });
 }
 
+function renderTeamGoals(result) {
+  const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
+  elements.teamGoalsStatus.className = `status-badge status-badge--${statusClass(status)}`;
+  elements.teamGoalsStatus.textContent = status;
+  if (result.status === "not_available") {
+    elements.teamGoalsContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warning || "Datos ofensivos insuficientes.")}</div>`;
+    return;
+  }
+  const teamCard = (team) => `<article class="team-goal-card"><div class="team-goal-card__heading"><div><small>${escapeHtml(team.side === "home" ? "Equipo 1 / local" : "Equipo 2 / visitante")}</small><h3>${escapeHtml(team.team)}</h3></div>${statusBadge(team.status === "available" ? "Disponible" : "Parcial")}</div><div class="team-goal-kpis"><span>Marca 0.5+<strong>${escapeHtml(team.over05Pct)}%</strong></span><span>No marca<strong>${escapeHtml(team.noGoalPct)}%</strong></span><span>Marca 1.5+<strong>${escapeHtml(team.over15Pct)}%</strong></span><span>Confianza<strong>${escapeHtml(team.confidenceScore)}/100</strong></span></div><div class="team-goal-evidence"><div><strong>Apoya</strong>${team.supportingData.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div><div><strong>Contradice</strong>${team.contradictingData.length ? team.contradictingData.map((item) => `<span>${escapeHtml(item)}</span>`).join("") : "<span>Sin contradicción fuerte detectada.</span>"}</div></div></article>`;
+  elements.teamGoalsContent.innerHTML = `<div class="team-goal-summary"><strong>BTTS: ${escapeHtml(result.btts.support)}</strong><span>Sí ${escapeHtml(result.btts.yesProbabilityPct)}% · No ${escapeHtml(result.btts.noProbabilityPct)}% · Confianza ${escapeHtml(result.confidenceScore)}/100</span></div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="team-goal-grid">${teamCard(result.teams.home)}${teamCard(result.teams.away)}</div><section class="poisson-markets"><h3>Mercados derivados</h3>${result.picks.length ? result.picks.map((pick) => `<article class="poisson-market poisson-market--${escapeHtml(pick.highlightColor)}"><div><strong>${escapeHtml(pick.selection)}</strong><small>Modelo ${escapeHtml(pick.modelProbabilityPct)}% · Cuota ${displayValue(pick.decimalOdds)} · EV ${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</small><small>Confianza ${escapeHtml(pick.confidenceScore)}/100 · ${escapeHtml(pick.level)}</small></div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-team-goal="${escapeHtml(pick.selectionKey)}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-team-goal="${escapeHtml(pick.selectionKey)}">Agregar al parlay</button></div></article>`).join("") : '<p class="muted-text">No hay mercado con respaldo mínimo.</p>'}</section><p class="market-disclaimer">La probabilidad combina varias señales. Posesión aislada no implica peligro real ni alta confianza.</p>`;
+}
+
+async function loadTeamGoals() {
+  const fixture = selectedFixture();
+  if (!fixture || state.isLoadingTeamGoals) return;
+  state.isLoadingTeamGoals = true; elements.showTeamGoals.disabled = true; elements.showTeamGoals.textContent = "Calculando…";
+  elements.teamGoalsStatus.className = "status-badge status-badge--processing"; elements.teamGoalsStatus.textContent = "Procesando";
+  try { const result = await footballDataService.getTeamGoalProbability(fixture); state.teamGoalsByFixture.set(fixture.id, result); renderTeamGoals(result); }
+  catch (error) { renderTeamGoals({ status: "not_available", warning: error.message, picks: [] }); }
+  finally { state.isLoadingTeamGoals = false; elements.showTeamGoals.disabled = !selectedFixture(); elements.showTeamGoals.textContent = "Ver datos"; }
+}
+
+function teamGoalLeg(selectionKey) {
+  const fixture = selectedFixture(); const result = state.teamGoalsByFixture.get(fixture?.id);
+  const pick = result?.picks?.find((item) => item.selectionKey === selectionKey); if (!fixture || !pick) return null;
+  return { id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}:team-goals`, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date, market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey, decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null, impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct, estimatedProbability: pick.modelProbabilityPct, expectedValue: pick.expectedValuePct, fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.level, reasoning: pick.supportingData.join("; "), requiresReview: result.status !== "available" || pick.highlightColor === "orange", analysisStatus: result.status, sourceModule: "team_goal_probability", source: result.source, supportingData: pick.supportingData, contradictingData: pick.contradictingData };
+}
+
+function addTeamGoalPick(selectionKey) { const leg = teamGoalLeg(selectionKey); if (leg) appendPickToParlay(leg, "Pick de gol por equipo agregado a Mi parlay."); }
+function saveTeamGoalPick(selectionKey) { const leg = teamGoalLeg(selectionKey); if (leg) saveIndividualLeg({ ...leg, result: "pending" }); }
+
 async function selectFixture(fixtureId, analysisMode = null) {
   if (state.isAnalyzing) return;
   state.selectedFixtureId = fixtureId;
@@ -1804,6 +1848,12 @@ elements.poissonContent.addEventListener("click", (event) => {
   const saveButton = event.target.closest("[data-save-poisson]");
   if (addButton) addPoissonPick(addButton.dataset.addPoisson);
   if (saveButton) savePoissonPick(saveButton.dataset.savePoisson);
+});
+elements.showTeamGoals.addEventListener("click", loadTeamGoals);
+elements.teamGoalsContent.addEventListener("click", (event) => {
+  const addButton = event.target.closest("[data-add-team-goal]"); const saveButton = event.target.closest("[data-save-team-goal]");
+  if (addButton) addTeamGoalPick(addButton.dataset.addTeamGoal);
+  if (saveButton) saveTeamGoalPick(saveButton.dataset.saveTeamGoal);
 });
 elements.dataDialogClose.addEventListener("click", closeDataDialog);
 elements.dataDialogContent.addEventListener("click", (event) => {

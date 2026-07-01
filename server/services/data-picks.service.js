@@ -1,4 +1,5 @@
 import { calculatePoissonModel } from "./poisson-model.service.js";
+import { calculateTeamGoalProbability } from "./team-goal-probability.service.js";
 
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, Number(value) || 0));
 const round = (value, digits = 1) => Number(Number(value).toFixed(digits));
@@ -108,18 +109,22 @@ export function generateDataPicks(dataset = {}) {
     picks.push(makePick(dataset, { marketKey: "double_chance", selectionKey: "X2", market: "Doble oportunidad", selection: `${fixture.away || "Visitante"} o empate (X2)`, sources: [probabilities.source] }, probabilities.away + probabilities.draw, evidence));
   }
   const poisson = calculatePoissonModel(dataset);
+  const teamGoals = calculateTeamGoalProbability(dataset);
   const poissonBySelection = new Map((poisson.suggestedMarkets || []).map((pick) => [pick.selectionKey, pick]));
+  const teamGoalBySelection = new Map((teamGoals.picks || []).map((pick) => [pick.selectionKey, pick]));
   const combined = picks.map((pick) => {
     const signal = poissonBySelection.get(pick.selectionKey);
-    if (!signal) return pick;
-    const difference = Math.abs(pick.modelProbabilityPct - signal.modelProbabilityPct);
-    const contradiction = difference >= 15 ? [`Poisson difiere ${round(difference)} puntos porcentuales`] : [];
+    const teamSignal = teamGoalBySelection.get(pick.selectionKey);
+    if (!signal && !teamSignal) return pick;
+    const comparisons = [signal, teamSignal].filter(Boolean);
+    const differences = comparisons.map((item) => Math.abs(pick.modelProbabilityPct - item.modelProbabilityPct));
+    const contradiction = differences.some((difference) => difference >= 15) ? [`Modelos internos difieren hasta ${round(Math.max(...differences))} puntos porcentuales`] : [];
     return {
       ...pick,
       confidenceScore: contradiction.length ? Math.max(0, pick.confidenceScore - 8) : Math.min(100, pick.confidenceScore + 3),
-      supportingData: [...pick.supportingData, `Poisson ${signal.modelProbabilityPct}%`],
+      supportingData: [...pick.supportingData, ...(signal ? [`Poisson ${signal.modelProbabilityPct}%`] : []), ...(teamSignal ? [`Gol por equipo ${teamSignal.modelProbabilityPct}%`] : [])],
       contradictingData: [...pick.contradictingData, ...contradiction],
-      sourcesUsed: [...new Set([...pick.sourcesUsed, "Modelo Poisson interno"])]
+      sourcesUsed: [...new Set([...pick.sourcesUsed, ...(signal ? ["Modelo Poisson interno"] : []), ...(teamSignal ? ["Probabilidad de Gol por Equipo"] : [])])]
     };
   });
   const ranked = combined.sort((a, b) => b.confidenceScore - a.confidenceScore || (b.expectedValuePct ?? -999) - (a.expectedValuePct ?? -999));
@@ -128,6 +133,7 @@ export function generateDataPicks(dataset = {}) {
     source: "API-Football + modelo interno", sourceModule: "data_picks", dataQualityScore: quality,
     fixtureId: String(fixture.id || ""), picks: ranked, warnings,
     poisson: { status: poisson.status, lambdaHome: poisson.lambdaHome ?? null, lambdaAway: poisson.lambdaAway ?? null, warning: poisson.warning || "" },
+    teamGoalProbability: { status: teamGoals.status, confidenceScore: teamGoals.confidenceScore ?? 0, bttsSupport: teamGoals.btts?.support || "neutral", warning: teamGoals.warning || "" },
     generatedAt: new Date().toISOString()
   };
 }

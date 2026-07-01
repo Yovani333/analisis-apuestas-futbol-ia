@@ -56,10 +56,11 @@ function quantitativeSummary(dataset) {
   const xg = research.xgXga || {};
   const odds = research.odds || {};
   const poisson = dataset.poissonModel || {};
+  const teamGoals = dataset.teamGoalProbability || {};
   return {
     forma_reciente: `${research.homeTeam?.name || dataset.fixture.home}: ${value(form.homeWinRate)}% victorias; ${research.awayTeam?.name || dataset.fixture.away}: ${value(form.awayWinRate)}%.`,
     rendimiento_local_visitante: dataset.fixture.neutralVenue ? "Sede neutral confirmada; no se aplica ventaja automática de localía." : "La localía se conserva como contexto, no como garantía.",
-    fortaleza_ofensiva: `Goles recientes acumulados: ${value(form.homeGoalsFor)} y ${value(form.awayGoalsFor)}.`,
+    fortaleza_ofensiva: `Goles recientes acumulados: ${value(form.homeGoalsFor)} y ${value(form.awayGoalsFor)}.${["available", "partial"].includes(teamGoals.status) ? ` Probabilidad de marcar 0.5+: ${value(teamGoals.teams?.home?.over05Pct)}% y ${value(teamGoals.teams?.away?.over05Pct)}%; señal BTTS ${value(teamGoals.btts?.support)}.` : " Probabilidad de gol por equipo no disponible."}`,
     fortaleza_defensiva: `Goles recibidos recientes: ${value(form.homeGoalsAgainst)} y ${value(form.awayGoalsAgainst)}; porterías a cero: ${value(form.homeCleanSheets)} y ${value(form.awayCleanSheets)}.`,
     xg_xga: xg.status === "available" || xg.status === "partial"
       ? `${xg.type === "historical_estimated" ? "xG/xGA histórico estimado" : "xG/xGA estimado del fixture"}: ${value(xg.homeXG)}/${value(xg.homeXGA)} y ${value(xg.awayXG)}/${value(xg.awayXGA)}. Confianza ${value(xg.confidenceLabel)}.`
