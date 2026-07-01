@@ -57,6 +57,7 @@ function quantitativeSummary(dataset) {
   const odds = research.odds || {};
   const poisson = dataset.poissonModel || {};
   const teamGoals = dataset.teamGoalProbability || {};
+  const corners = dataset.cornersModel || {};
   return {
     forma_reciente: `${research.homeTeam?.name || dataset.fixture.home}: ${value(form.homeWinRate)}% victorias; ${research.awayTeam?.name || dataset.fixture.away}: ${value(form.awayWinRate)}%.`,
     rendimiento_local_visitante: dataset.fixture.neutralVenue ? "Sede neutral confirmada; no se aplica ventaja automática de localía." : "La localía se conserva como contexto, no como garantía.",
@@ -69,7 +70,7 @@ function quantitativeSummary(dataset) {
     alineaciones_rotacion: research.lineups?.confirmed ? "Alineaciones confirmadas." : "Alineaciones no confirmadas; reduce la confianza.",
     motivacion_competitiva: "No se asigna motivación si no existe un dato estructurado verificable.",
     fatiga_calendario: `Descanso: ${value(research.contextCalendar?.homeRestDays)} y ${value(research.contextCalendar?.awayRestDays)} días.`,
-    matchup_tactico: `Perfil calculado: ${value(dataset.pickRecommendation?.matchProfile)}.`,
+    matchup_tactico: `Perfil calculado: ${value(dataset.pickRecommendation?.matchProfile)}.${["available", "partial"].includes(corners.status) ? ` Corners esperados ${value(corners.totalExpectedCorners)}; ${value(corners.preMatchSignal)}${corners.live?.alert ? ` ${corners.live.alert}` : ""}` : " Corners no disponible, sin bloquear el análisis general."}`,
     cuotas_valor_esperado: `${odds.markets?.length || 0} mercados normalizados; el EV se calcula en código con cuota y probabilidad modelo.${["available", "partial"].includes(poisson.status) ? ` Poisson interno: λ ${value(poisson.lambdaHome)}-${value(poisson.lambdaAway)}, usado solo como señal secundaria.` : " Poisson no disponible como señal secundaria."}`
   };
 }

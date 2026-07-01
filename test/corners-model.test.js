@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { calculateCornersModel } from "../server/services/corners-model.service.js";
+
+const rows = (count, overrides = {}) => Array.from({ length: count }, (_, index) => ({ fixtureId: String(index), competition: "World Cup Qualifiers", competitionType: "Cup", cornerStats: { cornersFor: 6, cornersAgainst: 4, possession: 60, totalShots: 14, blockedShots: 4 }, ...overrides }));
+function dataset(count = 5) { return { fixture: { id: 1, home: "A", away: "B", status: "scheduled", favorite: { probabilities: { home: 60, away: 20 } } }, historicalEstimatedXg: { homeTeam: { fixturesUsed: rows(count) }, awayTeam: { fixturesUsed: rows(count, { cornerStats: { cornersFor: 3, cornersAgainst: 6, possession: 42, totalShots: 8, blockedShots: 2 } }) } }, researchData: { odds: { markets: [] }, xgXga: {} } }; }
+
+test("calcula corners esperados con partidos oficiales", () => { const result = calculateCornersModel(dataset()); assert.equal(result.status, "available"); assert.equal(result.teams.home.useful, 5); assert.equal(result.offensiveMonopoly, true); assert.ok(result.totalExpectedCorners > 0); });
+test("excluye amistosos", () => { const input = dataset(); input.historicalEstimatedXg.homeTeam.fixturesUsed.push(...rows(2, { competition: "International Friendly" })); const result = calculateCornersModel(input); assert.equal(result.teams.home.excludedFriendlies, 2); assert.equal(result.teams.home.useful, 5); });
+test("muestra parcial con menos de cinco partidos", () => { const result = calculateCornersModel(dataset(3)); assert.equal(result.status, "partial"); assert.ok(result.confidenceScore < 70); });
+test("no inventa cuando faltan corners", () => { const result = calculateCornersModel({ fixture: {}, historicalEstimatedXg: { homeTeam: { fixturesUsed: [] }, awayTeam: { fixturesUsed: [] } } }); assert.equal(result.status, "not_available"); });
+test("detecta alerta live de presión del favorito", () => { const input = dataset(); input.fixture = { ...input.fixture, status: "live", elapsed: 65, score: { home: 0, away: 0 } }; input.researchData.xgXga.rawStats = { home: { cornerKicks: 6, ballPossession: 65, totalShots: 14, blockedShots: 5 }, away: { cornerKicks: 2, ballPossession: 35, totalShots: 4 } }; assert.match(calculateCornersModel(input).live.alert, /favorito presionando/i); });

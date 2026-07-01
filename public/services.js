@@ -144,6 +144,12 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/team-goals`, { method: "POST" });
   },
 
+  async getCornersModel(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", picks: [], warning: "Corners requiere estadísticas históricas oficiales." };
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/corners`, { method: "POST" });
+  },
+
   async getResearchData(fixtureId, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return null;

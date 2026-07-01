@@ -229,6 +229,7 @@ button { touch-action: manipulation; }
 .button--primary:hover { background: var(--primary-dark); }
 .button--secondary { color: var(--text); background: white; border-color: var(--border); }
 .button--secondary:hover { color: var(--primary-dark); border-color: #9fbcf5; }
+.button--ready { color: white !important; background: var(--success) !important; border-color: var(--success) !important; }
 .button--add { min-height: 32px; padding: 6px 9px; color: var(--primary-dark); background: var(--primary-soft); border-color: #c9dcff; font-size: .68rem; }
 .button--add:hover { background: #dbeafe; }
 .button--danger { color: var(--danger); background: white; border-color: #f2b8bd; }
@@ -1063,6 +1064,14 @@ body {
 .team-goal-evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
 .team-goal-evidence > div { display: grid; align-content: start; gap: 3px; padding: 7px; background: var(--surface-subtle); border-radius: 5px; }
 .team-goal-evidence strong { font-size: .68rem; }
+.corners-panel { grid-column: 1 / -1; border-top: 4px solid #d49a20; }
+.corners-panel .eyebrow { color: #9a6610; }
+.corner-summary { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; margin-bottom: 10px; font-size: .72rem; background: var(--warning-soft); border: 1px solid #f2dda3; border-radius: 7px; }
+.corner-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.corner-team { display: grid; gap: 7px; padding: 11px; border: 1px solid var(--border); border-radius: 7px; }
+.corner-team h3 { margin: 2px 0 0; font-size: .82rem; text-transform: uppercase; }
+.corner-team > small, .corner-team div > small { color: var(--muted); font-size: .64rem; }
+.live-corner-alert { padding: 10px; margin-bottom: 10px; color: #174b37; font-size: .74rem; font-weight: 800; background: var(--success-soft); border: 1px solid #c9eadb; border-radius: 7px; }
 .analysis-panel .eyebrow { color: #7048c8; }
 .empty-state__icon { color: #7048c8; background: #f0ebff; border-radius: 8px; }
 .analysis-hero { color: white; background: #34245e; border: 0; border-radius: 7px; }
@@ -1180,6 +1189,8 @@ body {
   .team-goal-grid { grid-template-columns: 1fr; }
   .team-goal-summary { align-items: flex-start; flex-direction: column; }
   .team-goal-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .corner-grid { grid-template-columns: 1fr; }
+  .corner-summary { align-items: flex-start; flex-direction: column; }
   .simple-filters { grid-template-columns: 1fr !important; }
   .simple-filters > * { grid-column: 1 !important; }
   .quick-filters .button { flex: 1 1 auto; min-height: 42px; }

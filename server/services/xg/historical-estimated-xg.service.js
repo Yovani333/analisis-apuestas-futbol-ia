@@ -142,9 +142,19 @@ async function buildTeamHistory({
       opponentId: String(opponentId),
       opponent: String(homeId) === String(team.id) ? fixture?.teams?.away?.name || "" : fixture?.teams?.home?.name || "",
       venue: String(homeId) === String(team.id) ? "home" : "away",
+      competition: fixture?.league?.name || "",
+      competitionType: fixture?.league?.type || "",
       estimatedXG,
       estimatedXGA,
       rawStats: teamStats,
+      cornerStats: {
+        cornersFor: teamStats.cornerKicks,
+        cornersAgainst: opponentStats.cornerKicks,
+        possession: teamStats.ballPossession,
+        totalShots: teamStats.totalShots,
+        shotsOnGoal: teamStats.shotsOnGoal,
+        blockedShots: teamStats.blockedShots
+      },
       missingFields: confidence.missingFields,
       eventsAvailable: !eventsResult.failed
     }, skipped: null };

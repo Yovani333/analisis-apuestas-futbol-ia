@@ -16,6 +16,7 @@ import {
   recordApiFootballResponse
 } from "./api-football-observability.service.js";
 import { evaluatePickRecommendations } from "./pick-recommendation.service.js";
+import { calculateCornersModel } from "./corners-model.service.js";
 
 const leagueCache = new Map();
 const requestCache = new Map();
@@ -357,6 +358,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
   const currentFixtureXgAvailable = ["available", "partial"].includes(dataset.estimatedXg?.status);
   const historicalXgMode = fixture.status === "scheduled" || !currentFixtureXgAvailable;
+  const retainOfficialHistoryForCorners = fixture.leagueSlug === "world-cup";
   console.info("[xg-mode]", {
     fixtureId: fixture.id,
     fixtureStatus: fixture.status,
@@ -365,7 +367,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
     homePreviousFixturesFound: homeRecentRows.length,
     awayPreviousFixturesFound: awayRecentRows.length
   });
-  dataset.historicalEstimatedXg = historicalXgMode
+  dataset.historicalEstimatedXg = historicalXgMode || retainOfficialHistoryForCorners
     ? await getHistoricalEstimatedXgXga({
       fixtureId: fixture.id,
       fixtureDate: base.fixture.date,
@@ -399,6 +401,15 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   fixture.dataAvailability.xg = activeInternalXg?.status === "available"
     ? "Disponible" : activeInternalXg?.status === "partial" ? "Necesita revisión" : fixture.dataAvailability.xg;
   dataset.researchData = normalizeMatchResearchData(dataset);
+  dataset.cornersModel = calculateCornersModel(dataset);
+  dataset.researchData.corners = dataset.cornersModel;
+  dataset.researchData.sourceCoverage.push({
+    module: "corners", moduleKey: "corners", label: "Corners Mundial / Torneos Cortos",
+    primarySources: ["API-Football fixtures", "API-Football fixture statistics"],
+    secondarySources: [], activeSources: dataset.cornersModel.status === "not_available" ? [] : ["API-Football + modelo interno"],
+    status: dataset.cornersModel.status, updatedAt: dataset.cornersModel.generatedAt,
+    observation: dataset.cornersModel.status === "not_available" ? dataset.cornersModel.warning : `Calculado con ${Math.min(dataset.cornersModel.teams.home.useful, dataset.cornersModel.teams.away.useful)} partidos oficiales por selección; amistosos excluidos.`
+  });
   dataset.pickRecommendation = evaluatePickRecommendations(dataset);
   dataset.researchData.pickDecision = dataset.pickRecommendation;
   dataset.researchData.odds.markets = (dataset.researchData.odds.markets || []).map((market) => {
