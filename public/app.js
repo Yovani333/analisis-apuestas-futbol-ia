@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260627-pick-classification";
+import { footballDataService } from "./services.js?v=20260630-rule-engine";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   loadSavedPicks, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
@@ -70,6 +70,7 @@ const elements = {
   analysisStatus: document.querySelector("#analysis-status"),
   analysisContent: document.querySelector("#analysis-content"),
   generateSelectedAnalysis: document.querySelector("#generate-selected-analysis"),
+  explainSelectedAnalysis: document.querySelector("#explain-selected-analysis"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -382,7 +383,7 @@ function renderMatches() {
             </div>
             <div class="match-card__actions">
               <button class="button button--secondary" type="button" data-action="view">Ver datos</button>
-              <button class="button button--primary" type="button" data-action="analyze" ${isFinished ? 'disabled title="Partido finalizado"' : ""}>Generar análisis IA</button>
+              <button class="button button--primary" type="button" data-action="data">Analizar datos</button>
             </div>
           </article>`;
       }).join("")}
@@ -483,9 +484,10 @@ function renderCoverageTable(fixture) {
 
 function updateAnalysisActionState() {
   const fixture = selectedFixture();
-  const disabled = !fixture || fixture.status === "finished" || state.isAnalyzing;
-  elements.generateSelectedAnalysis.disabled = disabled;
-  elements.generateSelectedAnalysis.textContent = state.isAnalyzing ? "Procesando…" : "Generar análisis IA";
+  elements.generateSelectedAnalysis.disabled = !fixture || state.isAnalyzing;
+  elements.explainSelectedAnalysis.disabled = !fixture || fixture.status === "finished" || state.isAnalyzing;
+  elements.generateSelectedAnalysis.textContent = state.isAnalyzing ? "Procesando…" : "Analizar con datos";
+  elements.explainSelectedAnalysis.textContent = state.isAnalyzing ? "Procesando…" : "Explicar con IA";
 }
 
 function researchStatusLabel(status) {
@@ -1005,6 +1007,7 @@ function addMarketToParlay(analysis, marketIndex) {
     risk: market.nivel_riesgo,
     requiresReview: Boolean(market.requiere_revision),
     analysisStatus: analysis.estado_analisis,
+    sourceModule: market.sourceModule || (analysis.analysisMode === "rule_engine" ? "odds_rule_engine" : "odds"),
     source: analysis._source || "openai"
   });
   persistParlayDraft();
@@ -1075,7 +1078,9 @@ function saveAnalysisMarket(analysis, marketIndex) {
     originalOdds: market.cuota_decimal, updatedOdds: null, impliedProbability: calculation?.impliedProbabilityPct ?? null,
     modelProbability: market.probabilidad_modelo ?? calculation?.estimatedProbabilityPct ?? null,
     expectedValue: market.valor_esperado ?? calculation?.expectedValuePct ?? null, fixtureStatus: fixture.statusLabel || fixture.status,
-    confidence: market.confianza || "No disponible", result: "pending", source: analysis._source || "openai"
+    confidence: market.confianza || "No disponible", result: "pending",
+    sourceModule: market.sourceModule || (analysis.analysisMode === "rule_engine" ? "odds_rule_engine" : "odds"),
+    source: analysis._source || "openai"
   });
 }
 
@@ -1273,7 +1278,7 @@ function renderAnalysis(analysis) {
 
   elements.analysisContent.innerHTML = `
     <div class="analysis-hero">
-      <div class="analysis-hero__title"><h3>${escapeHtml(analysis.partido.local)} vs ${escapeHtml(analysis.partido.visitante)}</h3>${quality ? `<span class="quality-badge quality-badge--${quality.level.toLowerCase()}">Cobertura ${escapeHtml(quality.level)} · ${quality.score}/100</span>` : ""}</div>
+      <div class="analysis-hero__title"><h3>${escapeHtml(analysis.partido.local)} vs ${escapeHtml(analysis.partido.visitante)}</h3><div class="analysis-mode-badges">${analysis.analysisMode === "rule_engine" ? '<span class="source-chip source-chip--model">Solo datos · Motor de Reglas</span>' : '<span class="source-chip source-chip--external">Explicación IA</span>'}${quality ? `<span class="quality-badge quality-badge--${quality.level.toLowerCase()}">Cobertura ${escapeHtml(quality.level)} · ${quality.score}/100</span>` : ""}</div></div>
       <p>${escapeHtml(analysis.resumen_partido)}</p>
     </div>
     ${pickReviewHtml}
@@ -1311,10 +1316,10 @@ function renderAnalysis(analysis) {
 function showAnalysisEmpty() {
   elements.analysisStatus.className = "status-badge status-badge--unavailable";
   elements.analysisStatus.textContent = "No disponible";
-  elements.analysisContent.innerHTML = '<div class="empty-state"><span class="empty-state__icon" aria-hidden="true">✦</span><h3>Partido seleccionado</h3><p>Pulsa “Generar análisis IA” para ejecutar la simulación.</p></div>';
+  elements.analysisContent.innerHTML = '<div class="empty-state"><span class="empty-state__icon" aria-hidden="true">✦</span><h3>Partido seleccionado</h3><p>Analiza primero con el Motor de Reglas. OpenAI queda como explicación opcional.</p></div>';
 }
 
-async function selectFixture(fixtureId, generateAnalysis = false) {
+async function selectFixture(fixtureId, analysisMode = null) {
   if (state.isAnalyzing) return;
   state.selectedFixtureId = fixtureId;
   renderMatches();
@@ -1331,7 +1336,7 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
     return;
   }
 
-  if (!generateAnalysis) {
+  if (!analysisMode) {
     const saved = state.analysisByFixture.get(fixtureId);
     saved ? renderAnalysis(saved) : showAnalysisEmpty();
     return;
@@ -1348,7 +1353,9 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
   elements.analysisContent.innerHTML = '<div class="empty-state"><div class="loading-spinner" aria-hidden="true"></div><h3>Evaluando cobertura</h3><p>Generando una respuesta JSON simulada sin completar datos ausentes…</p></div>';
 
   try {
-    const analysis = await footballDataService.generateAnalysis(selectedFixture());
+    const analysis = analysisMode === "data"
+      ? await footballDataService.generateDataAnalysis(selectedFixture())
+      : await footballDataService.generateAnalysis(selectedFixture());
     recordAnalysisUsage();
     state.analysisByFixture.set(fixtureId, analysis);
     renderAnalysis(analysis);
@@ -1364,8 +1371,14 @@ async function selectFixture(fixtureId, generateAnalysis = false) {
 
 async function analyzeSelectedFixture() {
   const fixture = selectedFixture();
+  if (!fixture || state.isAnalyzing) return;
+  await selectFixture(fixture.id, "data");
+}
+
+async function explainSelectedFixture() {
+  const fixture = selectedFixture();
   if (!fixture || fixture.status === "finished" || state.isAnalyzing) return;
-  await selectFixture(fixture.id, true);
+  await selectFixture(fixture.id, "ai");
 }
 
 async function refreshFixtureStatuses() {
@@ -1580,6 +1593,7 @@ elements.toggleResearch.addEventListener("click", () => {
 });
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
+elements.explainSelectedAnalysis.addEventListener("click", explainSelectedFixture);
 elements.dataDialogClose.addEventListener("click", closeDataDialog);
 elements.dataDialogContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-odds-pick]");
@@ -1686,7 +1700,7 @@ elements.matchesList.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest("[data-fixture-id]");
   if (!card) return;
-  await selectFixture(card.dataset.fixtureId, button?.dataset.action === "analyze");
+  await selectFixture(card.dataset.fixtureId, button?.dataset.action === "data" ? "data" : null);
   document.querySelector("#data-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 elements.matchesList.addEventListener("keydown", async (event) => {

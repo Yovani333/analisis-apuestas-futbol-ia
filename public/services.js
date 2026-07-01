@@ -119,6 +119,13 @@ export const footballDataService = {
     return { ...payload.analysis, _source: "openai" };
   },
 
+  async generateDataAnalysis(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { ...buildMockAnalysis(fixture), analysisMode: "rule_engine", generatedBy: "mock-rule-engine", _source: "rule-engine-mock" };
+    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/analysis/data`, { method: "POST" });
+    return { ...payload.analysis, _source: "rule-engine" };
+  },
+
   async getResearchData(fixtureId, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return null;

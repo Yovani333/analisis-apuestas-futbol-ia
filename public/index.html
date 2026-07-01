@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260628-weather-odds" />
+    <link rel="stylesheet" href="styles.css?v=20260630-rule-engine" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -183,7 +183,8 @@
               <h2 id="analysis-title"><span aria-hidden="true">✦</span> Análisis IA</h2>
             </div>
             <div class="panel-actions">
-              <button id="generate-selected-analysis" class="button button--primary button--compact" type="button" disabled>Generar análisis IA</button>
+              <button id="generate-selected-analysis" class="button button--primary button--compact" type="button" disabled>Analizar con datos</button>
+              <button id="explain-selected-analysis" class="button button--secondary button--compact" type="button" disabled>Explicar con IA</button>
               <span id="analysis-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
           </div>
@@ -191,7 +192,7 @@
             <div class="empty-state">
               <span class="empty-state__icon" aria-hidden="true">✦</span>
               <h3>Aún no hay análisis</h3>
-              <p>Elige un partido y pulsa “Generar análisis IA”.</p>
+              <p>Elige un partido y pulsa “Analizar con datos”. La explicación con IA es opcional.</p>
             </div>
           </div>
         </section>
@@ -274,6 +275,6 @@
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
 
-    <script type="module" src="app.js?v=20260628-weather-odds"></script>
+    <script type="module" src="app.js?v=20260630-rule-engine"></script>
   </body>
 </html>
