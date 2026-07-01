@@ -3,7 +3,7 @@ import { footballDataService } from "./services.js?v=20260701-corners";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
-  loadSavedPicks, normalizePickLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
+  loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
 } from "./parlay-store.js?v=20260630-common-picks";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
@@ -101,6 +101,7 @@ const elements = {
   savedParlayCount: document.querySelector("#saved-parlay-count"),
   savedParlaysList: document.querySelector("#saved-parlays-list"),
   savedPicksList: document.querySelector("#saved-picks-list"),
+  trashParlaysList: document.querySelector("#trash-parlays-list"),
   historyMetrics: document.querySelector("#history-metrics"),
   updateParlayResults: document.querySelector("#update-parlay-results")
 };
@@ -1182,7 +1183,7 @@ function oddsUpdateHtml(item) {
 }
 
 function renderSavedPicks() {
-  elements.savedParlayCount.textContent = state.savedParlays.length + state.savedPicks.length;
+  elements.savedParlayCount.textContent = state.savedParlays.filter((parlay) => !parlay.trashed).length + state.savedPicks.length;
   if (!state.savedPicks.length) {
     elements.savedPicksList.innerHTML = '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis IA.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
@@ -1197,21 +1198,22 @@ function renderSavedPicks() {
 }
 
 function renderSavedParlays() {
-  elements.savedParlayCount.textContent = state.savedParlays.length + state.savedPicks.length;
-  const metrics = calculateHistoryMetrics(state.savedParlays);
+  const activeParlays = state.savedParlays.filter((parlay) => !parlay.trashed);
+  elements.savedParlayCount.textContent = activeParlays.length + state.savedPicks.length;
+  const metrics = calculateHistoryMetrics(activeParlays);
   elements.historyMetrics.innerHTML = `
     <article><span>Parlays</span><strong>${metrics.total}</strong></article>
     <article><span>Evaluados</span><strong>${metrics.settled}</strong></article>
     <article><span>Ganados / perdidos</span><strong>${metrics.won} / ${metrics.lost}</strong></article>
     <article><span>Acierto</span><strong>${metrics.winRate === null ? "—" : `${metrics.winRate}%`}</strong></article>
     <article><span>Unidades teóricas</span><strong class="${metrics.theoreticalUnits >= 0 ? "value-positive" : "value-negative"}">${metrics.theoreticalUnits}</strong></article>`;
-  elements.updateParlayResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
-  if (!state.savedParlays.length) {
+  elements.updateParlayResults.disabled = activeParlays.length === 0 && state.savedPicks.length === 0;
+  if (!activeParlays.length) {
     elements.savedParlaysList.innerHTML = '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis IA y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
   }
 
-  elements.savedParlaysList.innerHTML = state.savedParlays.map((parlay) => {
+  elements.savedParlaysList.innerHTML = activeParlays.map((parlay) => {
     const result = calculateParlayResult(parlay.legs);
     const expanded = state.expandedParlays.has(parlay.id);
     parlay.result = result;
@@ -1227,14 +1229,33 @@ function renderSavedParlays() {
           <label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label>
         </section>`; }).join("")}</div>
       <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>
-      <footer class="saved-parlay__footer" ${expanded ? "" : "hidden"}><span>El resultado general se calcula con los estados de las selecciones.</span><button class="button button--danger" type="button" data-delete-parlay>Eliminar registro</button></footer>
+      <footer class="saved-parlay__footer" ${expanded ? "" : "hidden"}><span>El resultado general se calcula con los estados de las selecciones.</span><button class="button button--danger" type="button" data-delete-parlay>Mover a Papelera</button></footer>
     </article>`;
   }).join("");
   persistSavedParlays();
+  renderTrashParlays();
+}
+
+function parlayTotalOdds(legs, key) {
+  const values = legs.map((leg) => Number(leg[key] ?? (key === "originalOdds" ? leg.decimalOdds : null)));
+  return values.length && values.every((value) => value > 1) ? Number(values.reduce((product, value) => product * value, 1).toFixed(2)) : null;
+}
+
+function renderTrashParlays() {
+  const trashed = state.savedParlays.filter((parlay) => parlay.trashed);
+  if (!trashed.length) {
+    elements.trashParlaysList.innerHTML = '<div class="saved-empty"><h3>No hay parlays eliminados.</h3><p>Los parlays enviados a Papelera podrán recuperarse desde aquí.</p></div>';
+    return;
+  }
+  elements.trashParlaysList.innerHTML = trashed.map((parlay) => {
+    const originalTotal = parlayTotalOdds(parlay.legs, "originalOdds");
+    const updatedTotal = parlayTotalOdds(parlay.legs, "updatedOdds");
+    return `<article class="trash-parlay" data-trash-parlay-id="${escapeHtml(parlay.id)}"><header><div><span>Papelera · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><small>Creado ${escapeHtml(formatUpdatedAt(parlay.createdAt))} · Eliminado ${escapeHtml(formatUpdatedAt(parlay.deletedAt))}</small></div><div><strong>Cuota ${displayValue(originalTotal)}</strong><small>Actualizada ${displayValue(updatedTotal)}</small></div></header><details><summary>Ver detalles</summary><div class="trash-parlay__legs">${parlay.legs.map((leg) => `<div><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)} · ${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)}</span><small>${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))} · ${escapeHtml(resultLabels[leg.result] || "Pendiente")}</small></div>`).join("")}</div></details><footer><button class="button button--primary button--compact" type="button" data-restore-parlay>Recuperar</button><button class="button button--danger button--compact" type="button" data-delete-parlay-forever>Eliminar definitivamente</button></footer></article>`;
+  }).join("");
 }
 
 async function updateSavedParlayResults() {
-  const allSavedLegs = [...state.savedPicks, ...state.savedParlays.flatMap((parlay) => parlay.legs)];
+  const allSavedLegs = [...state.savedPicks, ...state.savedParlays.filter((parlay) => !parlay.trashed).flatMap((parlay) => parlay.legs)];
   const fixtureIds = [...new Set(allSavedLegs.filter((leg) => leg.fixtureId && leg.selectionCode).map((leg) => leg.fixtureId))];
   if (!fixtureIds.length) {
     showNotice("No hay selecciones compatibles pendientes de actualización automática.");
@@ -1278,7 +1299,7 @@ async function updateSavedParlayResults() {
       }
     };
     state.savedPicks.forEach(updateLeg);
-    state.savedParlays.forEach((parlay) => {
+    state.savedParlays.filter((parlay) => !parlay.trashed).forEach((parlay) => {
       parlay.legs.forEach(updateLeg);
       parlay.result = calculateParlayResult(parlay.legs);
       parlay.lastCheckedAt = new Date().toISOString();
@@ -1289,7 +1310,7 @@ async function updateSavedParlayResults() {
     renderSavedParlays();
     showNotice(updated ? `${updated} selección(es) actualizadas con API-Football.` : "Los partidos pendientes todavía no tienen resultado final.");
   } finally {
-    elements.updateParlayResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
+    elements.updateParlayResults.disabled = state.savedParlays.filter((parlay) => !parlay.trashed).length === 0 && state.savedPicks.length === 0;
     elements.updateParlayResults.textContent = "Actualizar resultados";
   }
 }
@@ -1989,10 +2010,24 @@ elements.savedParlaysList.addEventListener("click", (event) => {
     return;
   }
   if (!deleteButton || !card) return;
-  if (!window.confirm("¿Eliminar este registro de parlay? Esta acción no se puede deshacer.")) return;
-  state.savedParlays = state.savedParlays.filter((item) => item.id !== card.dataset.parlayId);
+  state.savedParlays = state.savedParlays.map((item) => item.id === card.dataset.parlayId ? moveParlayToTrash(item) : item);
+  state.expandedParlays.delete(card.dataset.parlayId);
   persistSavedParlays();
   renderSavedParlays();
+  showNotice("Parlay enviado a Papelera. Puedes recuperarlo desde Mis apuestas.");
+});
+elements.trashParlaysList.addEventListener("click", (event) => {
+  const card = event.target.closest("[data-trash-parlay-id]");
+  if (!card) return;
+  const id = card.dataset.trashParlayId;
+  if (event.target.closest("[data-restore-parlay]")) {
+    state.savedParlays = state.savedParlays.map((parlay) => parlay.id === id ? restoreParlayFromTrash(parlay) : parlay);
+    persistSavedParlays(); renderSavedParlays(); showNotice("Parlay recuperado y devuelto a Parlays guardados."); return;
+  }
+  if (!event.target.closest("[data-delete-parlay-forever]")) return;
+  if (!window.confirm("¿Eliminar definitivamente este parlay? Esta acción no se puede deshacer.")) return;
+  state.savedParlays = state.savedParlays.filter((parlay) => parlay.id !== id);
+  persistSavedParlays(); renderSavedParlays(); showNotice("Parlay eliminado definitivamente.");
 });
 elements.savedPicksList.addEventListener("click", (event) => {
   const card = event.target.closest("[data-pick-id]");
@@ -2008,6 +2043,7 @@ document.addEventListener("click", (event) => {
     document.querySelectorAll("[data-saved-tab]").forEach((button) => button.classList.toggle("saved-tab--active", button === savedTab));
     elements.savedPicksList.hidden = state.savedTab !== "individual";
     elements.savedParlaysList.hidden = state.savedTab !== "parlays";
+    elements.trashParlaysList.hidden = state.savedTab !== "trash";
   }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);

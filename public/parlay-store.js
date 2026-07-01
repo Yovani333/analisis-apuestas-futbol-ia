@@ -138,3 +138,13 @@ export function createSavedPick(leg, now = new Date()) {
     savedAt: now.toISOString()
   };
 }
+
+export function moveParlayToTrash(parlay, now = new Date()) {
+  return { ...parlay, trashed: true, deletedAt: now.toISOString() };
+}
+
+export function restoreParlayFromTrash(parlay) {
+  const restored = { ...parlay, trashed: false };
+  delete restored.deletedAt;
+  return restored;
+}

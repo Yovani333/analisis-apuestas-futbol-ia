@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, normalizePickLeg, settleLegResult } from "../public/parlay-store.js";
+import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, settleLegResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -67,4 +67,20 @@ test("calcula rendimiento teórico con una unidad por parlay", () => {
   assert.equal(metrics.won, 1);
   assert.equal(metrics.lost, 1);
   assert.equal(metrics.theoreticalUnits, 1);
+});
+
+test("mueve un parlay a papelera conservando sus datos e identificador", () => {
+  const original = createSavedParlay("Mundial", [{ id: "leg", selection: "1X" }], new Date("2026-07-01T10:00:00Z"));
+  const trashed = moveParlayToTrash(original, new Date("2026-07-01T12:00:00Z"));
+  assert.equal(trashed.id, original.id);
+  assert.equal(trashed.trashed, true);
+  assert.equal(trashed.deletedAt, "2026-07-01T12:00:00.000Z");
+  assert.deepEqual(trashed.legs, original.legs);
+});
+
+test("recupera un parlay sin duplicarlo ni cambiar su identificador", () => {
+  const restored = restoreParlayFromTrash({ id: "p-1", trashed: true, deletedAt: "2026-07-01T12:00:00Z", legs: [] });
+  assert.equal(restored.id, "p-1");
+  assert.equal(restored.trashed, false);
+  assert.equal("deletedAt" in restored, false);
 });

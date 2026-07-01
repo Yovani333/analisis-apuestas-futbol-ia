@@ -246,10 +246,11 @@
           <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
         </div>
       </section>
-      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button></div>
+      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
       <section id="history-metrics" class="history-metrics" aria-label="Rendimiento histórico"></section>
       <div id="saved-picks-list" class="saved-parlays-list"></div>
       <div id="saved-parlays-list" class="saved-parlays-list" hidden></div>
+      <div id="trash-parlays-list" class="saved-parlays-list" hidden></div>
     </main>
 
     <main class="utility-view" data-view-panel="alerts" hidden>
@@ -310,6 +311,6 @@
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
           <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
 
-    <script type="module" src="app.js?v=20260701-corners"></script>
+    <script type="module" src="app.js?v=20260701-trash"></script>
   </body>
 </html>
