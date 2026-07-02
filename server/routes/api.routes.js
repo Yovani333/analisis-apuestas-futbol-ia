@@ -14,6 +14,7 @@ import { calculateCornersModel } from "../services/corners-model.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 
 export const apiRouter = Router();
+const DEPLOYED_AT = new Date().toISOString();
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 const requireLiveMode = (req, res, next) => {
   if (env.dataMode !== "live") return next(new AppError("Activa DATA_MODE=live para consultar datos reales.", 409, "LIVE_MODE_DISABLED"));
@@ -25,6 +26,10 @@ apiRouter.get("/health", (req, res) => {
   res.json({
     status: "ok",
     mode: env.dataMode,
+    release: {
+      deployedAt: DEPLOYED_AT,
+      commit: String(process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "").slice(0, 7)
+    },
     providers: {
       apiFootball: {
         configured: Boolean(env.apiFootballKey),

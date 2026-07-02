@@ -830,6 +830,15 @@ function detailTable(headers, rows) {
   return `<div class="detail-table-wrap"><table class="detail-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell, index) => `<td data-label="${escapeHtml(headers[index] || "Dato")}">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
+function formatSiteRelease(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "Sin fecha de despliegue";
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone: "America/Tijuana", day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true
+  }).format(date);
+}
+
 function renderStandingsDetail(data, fixture) {
   const groups = data.flatMap((entry) => entry?.league?.standings || []);
   if (!groups.length) return emptyDetail("API-Football no devolvió una clasificación para este partido.");
@@ -2125,6 +2134,10 @@ async function initializeApp() {
   renderSavedPicks();
   renderSavedParlays();
   const runtime = await footballDataService.getRuntime();
+  const releaseElement = document.querySelector("#site-last-update");
+  const releaseDate = runtime.release?.deployedAt || document.lastModified;
+  const releaseCommit = runtime.release?.commit ? ` · versión ${runtime.release.commit}` : "";
+  releaseElement.textContent = `Última actualización del sitio: ${formatSiteRelease(releaseDate)} PT${releaseCommit}`;
   if (runtime.mode === "live") {
     document.querySelector("#runtime-mode").textContent = runtime.liveReady ? "Datos reales" : "Configuración pendiente";
     document.querySelector("#runtime-description").textContent = runtime.liveReady
