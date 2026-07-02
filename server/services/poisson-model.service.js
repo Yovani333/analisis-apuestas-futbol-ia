@@ -1,3 +1,5 @@
+import { resolveModuleQuality } from "./module-quality.service.js";
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round = (value, digits = 2) => Number(value.toFixed(digits));
 const numeric = (value) => value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
@@ -72,7 +74,7 @@ export function calculatePoissonModel(dataset = {}) {
   if (!lambdas) return {
     status: "not_available", source: "modelo-poisson-interno", sourceModule: "poisson",
     fixtureId: String(fixture.id || ""), warning: "Modelo Poisson no disponible: faltan xG/xGA y promedios recientes suficientes.",
-    probabilities: {}, likelyScores: [], suggestedMarkets: [], generatedAt: new Date().toISOString()
+    probabilities: {}, likelyScores: [], suggestedMarkets: [], quality: resolveModuleQuality({ status: "not_available" }), generatedAt: new Date().toISOString()
   };
   const matrix = [];
   let homeWin = 0; let draw = 0; let awayWin = 0; let over05 = 0; let over15 = 0; let over25 = 0; let under25 = 0; let under35 = 0; let bttsYes = 0;
@@ -121,11 +123,12 @@ export function calculatePoissonModel(dataset = {}) {
     .filter(([, , , , probability]) => probability >= 55 && status !== "not_available")
     .map(([marketKey, selectionKey, market, selection, probability]) => marketPick(dataset, { marketKey, selectionKey, market, selection, supportingData: [...baseSupport, `Poisson ${probability}%`] }, probability, quality))
     .sort((a, b) => b.confidenceScore - a.confidenceScore).slice(0, 6);
+  const moduleQuality = resolveModuleQuality({ score: quality, status, notes: warnings });
   return {
     status, source: "API-Football + modelo Poisson interno", sourceModule: "poisson", modelVersion: "poisson-v1",
     fixtureId: String(fixture.id || ""), lambdaHome: lambdas.home, lambdaAway: lambdas.away,
     probabilities, likelyScores: matrix.sort((a, b) => b.probability - a.probability).slice(0, 5).map((row) => ({ score: `${row.homeGoals}-${row.awayGoals}`, probabilityPct: pct(row.probability) })),
-    suggestedMarkets, dataQualityScore: quality, statusLabel: status === "available" ? "Disponible" : status === "partial" ? "Parcial" : "No disponible",
+    suggestedMarkets, dataQualityScore: quality, quality: moduleQuality, statusLabel: status === "available" ? "Disponible" : status === "partial" ? "Parcial" : "No disponible",
     warnings, warning: warnings.join(" "), generatedAt: new Date().toISOString()
   };
 }

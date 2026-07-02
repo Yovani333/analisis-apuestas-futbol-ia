@@ -1,3 +1,5 @@
+import { resolveModuleQuality } from "./module-quality.service.js";
+
 const number = (value) => value === null || value === undefined || value === "" || !Number.isFinite(Number(String(value).replace("%", ""))) ? null : Number(String(value).replace("%", ""));
 const round = (value, digits = 1) => Number(value.toFixed(digits));
 const average = (values) => values.length ? round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
@@ -35,7 +37,7 @@ function liveStats(dataset, side) {
 export function calculateCornersModel(dataset = {}) {
   const fixture = dataset.fixture || {};
   const home = history(dataset, "home"); const away = history(dataset, "away");
-  if (!home.useful || !away.useful) return { status: "not_available", sourceModule: "corners", source: "API-Football fixture statistics", teams: { home, away }, picks: [], warning: "Corners no disponible: faltan partidos oficiales con corners completos.", generatedAt: new Date().toISOString() };
+  if (!home.useful || !away.useful) return { status: "not_available", sourceModule: "corners", source: "API-Football fixture statistics", teams: { home, away }, picks: [], quality: resolveModuleQuality({ status: "not_available" }), warning: "Corners no disponible: faltan partidos oficiales con corners completos.", generatedAt: new Date().toISOString() };
   home.tier = tier(dataset, "home", home); away.tier = tier(dataset, "away", away);
   home.expectedCorners = round((home.cornersForAvg + away.cornersAgainstAvg) / 2);
   away.expectedCorners = round((away.cornersForAvg + home.cornersAgainstAvg) / 2);
@@ -67,5 +69,5 @@ export function calculateCornersModel(dataset = {}) {
   };
   if (favoriteSide) addPick(`${favoriteSide}_most_corners`, "Más corners", `${fixture[favoriteSide]} más corners`, Math.min(78, Math.round(52 + Math.abs(home.expectedCorners - away.expectedCorners) * 7)));
   addPick("over_corners", "Total de corners", `Más de ${Math.floor(totalExpected - .5)} corners`, 58);
-  return { status, source: "API-Football fixture statistics + modelo interno", sourceModule: "corners", modelVersion: "official-history-corners-v1", fixtureId: String(fixture.id || ""), teams: { home, away }, disparity: home.tier === away.tier ? "low" : Math.abs(Number(home.tier.at(-1)) - Number(away.tier.at(-1))) >= 2 ? "high" : "medium", totalExpectedCorners: totalExpected, offensiveMonopoly, preMatchSignal: offensiveMonopoly ? `Posible monopolio ofensivo de ${fixture[favoriteSide]}.` : "Sin monopolio ofensivo confirmado.", live: { active: live, current, alert: liveAlert, competitiveNeed: "Necesidad competitiva no disponible" }, confidenceScore: Math.max(0, confidenceScore), picks, warnings, warning: warnings.join(" "), generatedAt: new Date().toISOString() };
+  return { status, source: "API-Football fixture statistics + modelo interno", sourceModule: "corners", modelVersion: "official-history-corners-v1", fixtureId: String(fixture.id || ""), teams: { home, away }, disparity: home.tier === away.tier ? "low" : Math.abs(Number(home.tier.at(-1)) - Number(away.tier.at(-1))) >= 2 ? "high" : "medium", totalExpectedCorners: totalExpected, offensiveMonopoly, preMatchSignal: offensiveMonopoly ? `Posible monopolio ofensivo de ${fixture[favoriteSide]}.` : "Sin monopolio ofensivo confirmado.", live: { active: live, current, alert: liveAlert, competitiveNeed: "Necesidad competitiva no disponible" }, confidenceScore: Math.max(0, confidenceScore), quality: resolveModuleQuality({ score: confidenceScore, status, notes: warnings }), picks, warnings, warning: warnings.join(" "), generatedAt: new Date().toISOString() };
 }

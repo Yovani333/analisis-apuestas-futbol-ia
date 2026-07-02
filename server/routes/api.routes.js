@@ -101,9 +101,9 @@ const analysisLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standar
 apiRouter.post("/fixtures/:fixtureId/analysis/data", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const dataset = await getFixtureDataset(fixtureId);
-  dataset.poissonModel = calculatePoissonModel(dataset);
-  dataset.teamGoalProbability = calculateTeamGoalProbability(dataset);
-  dataset.cornersModel = calculateCornersModel(dataset);
+  dataset.poissonModel ||= calculatePoissonModel(dataset);
+  dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
+  dataset.cornersModel ||= calculateCornersModel(dataset);
   res.json({ source: "rule-engine", generatedAt: new Date().toISOString(), analysis: generateRuleBasedAnalysis(dataset) });
 }));
 
@@ -116,17 +116,19 @@ apiRouter.post("/fixtures/:fixtureId/picks/data", requireLiveMode, asyncRoute(as
 apiRouter.post("/fixtures/:fixtureId/models/poisson", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const dataset = await getFixtureDataset(fixtureId);
-  res.json(calculatePoissonModel(dataset));
+  res.json(dataset.poissonModel || calculatePoissonModel(dataset));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/models/team-goals", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
-  res.json(calculateTeamGoalProbability(await getFixtureDataset(fixtureId)));
+  const dataset = await getFixtureDataset(fixtureId);
+  res.json(dataset.teamGoalProbability || calculateTeamGoalProbability(dataset));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/models/corners", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
-  res.json(calculateCornersModel(await getFixtureDataset(fixtureId)));
+  const dataset = await getFixtureDataset(fixtureId);
+  res.json(dataset.cornersModel || calculateCornersModel(dataset));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/analysis", requireLiveMode, analysisLimiter, asyncRoute(async (req, res) => {

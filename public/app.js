@@ -636,7 +636,7 @@ function renderSourceCoverage(research) {
     </section>
     <section class="source-matrix" aria-labelledby="source-matrix-title">
       <div class="source-registry__heading"><div><h3 id="source-matrix-title">Matriz por módulo</h3><p>Plan de fuente principal, respaldo y cobertura realmente disponible.</p></div></div>
-      <div class="detail-table-wrap"><table class="detail-table source-table"><thead><tr><th>Módulo</th><th>Fuente principal</th><th>Respaldo</th><th>Fuente activa</th><th>Estado</th><th>Actualización</th><th>Observación</th></tr></thead><tbody>${rows.map((row) => `<tr><td data-label="Módulo"><strong>${escapeHtml(row.label)}</strong></td><td data-label="Fuente principal">${escapeHtml(row.primarySources.join(" / ") || "—")}</td><td data-label="Respaldo">${escapeHtml(row.secondarySources.join(" / ") || "—")}</td><td data-label="Fuente activa">${escapeHtml(row.activeSources.join(" / ") || "Ninguna")}</td><td data-label="Estado">${statusBadge(researchStatusLabel(row.status))}</td><td data-label="Actualización">${escapeHtml(formatUpdatedAt(row.updatedAt))}</td><td data-label="Observación">${escapeHtml(row.observation)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="detail-table-wrap"><table class="detail-table source-table"><thead><tr><th>Módulo</th><th>Fuente principal</th><th>Respaldo</th><th>Fuente activa</th><th>Estado</th><th>Calidad</th><th>Actualización</th><th>Observación</th></tr></thead><tbody>${rows.map((row) => `<tr><td data-label="Módulo"><strong>${escapeHtml(row.label)}</strong></td><td data-label="Fuente principal">${escapeHtml(row.primarySources.join(" / ") || "—")}</td><td data-label="Respaldo">${escapeHtml(row.secondarySources.join(" / ") || "—")}</td><td data-label="Fuente activa">${escapeHtml(row.activeSources.join(" / ") || "Ninguna")}</td><td data-label="Estado">${statusBadge(researchStatusLabel(row.status))}</td><td data-label="Calidad"><strong>${escapeHtml(row.quality?.label || (row.status === "available" ? "Alta" : row.status === "partial" ? "Parcial" : "No disponible"))}</strong></td><td data-label="Actualización">${escapeHtml(formatUpdatedAt(row.updatedAt))}</td><td data-label="Observación">${escapeHtml(row.observation)}</td></tr>`).join("")}</tbody></table></div>
     </section>`;
 }
 
@@ -1434,7 +1434,7 @@ function renderDataPicks(result) {
   const fixture = selectedFixture();
   const timing = resolveAnalysisTiming({ kickoffAt: fixture?.utcDateTime, lastUpdatedAt: result.generatedAt });
   elements.dataPicksContent.innerHTML = `
-    <div class="data-picks-summary"><strong>${result.picks.length} selecciones evaluadas</strong><span>Calidad de datos ${displayValue(result.dataQualityScore)}/100 · ${escapeHtml(result.source)}</span></div>
+    <div class="data-picks-summary"><strong>${result.picks.length} selecciones evaluadas</strong><span>Calidad ${escapeHtml(result.quality?.label || "No disponible")} · ${displayValue(result.dataQualityScore)}/100 · ${escapeHtml(result.source)}</span></div>
     <div class="analysis-timing analysis-timing--${escapeHtml(timing.window)}"><strong>${escapeHtml(timing.label)}</strong><span>${timing.minutesToKickoff === null ? "Hora del partido no disponible" : `${escapeHtml(timing.minutesToKickoff)} minutos para el inicio`}${timing.isConfirmed ? " · Confirmado por frescura" : ""}</span>${timing.warning ? `<small>${escapeHtml(timing.warning)}</small>` : ""}</div>
     ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
     <div class="data-picks-grid">${result.picks.map((pick) => `
@@ -1528,7 +1528,7 @@ function renderPoisson(result) {
     ["BTTS Sí", result.probabilities.bttsYes], ["BTTS No", result.probabilities.bttsNo]
   ];
   elements.poissonContent.innerHTML = `
-    <div class="poisson-summary"><article><span>λ ${escapeHtml(fixture?.home || "Local")}</span><strong>${displayValue(result.lambdaHome)}</strong></article><article><span>λ ${escapeHtml(fixture?.away || "Visitante")}</span><strong>${displayValue(result.lambdaAway)}</strong></article><article><span>Calidad</span><strong>${displayValue(result.dataQualityScore)}/100</strong></article><article><span>Modelo</span><strong>${escapeHtml(result.modelVersion)}</strong></article></div>
+    <div class="poisson-summary"><article><span>λ ${escapeHtml(fixture?.home || "Local")}</span><strong>${displayValue(result.lambdaHome)}</strong></article><article><span>λ ${escapeHtml(fixture?.away || "Visitante")}</span><strong>${displayValue(result.lambdaAway)}</strong></article><article><span>Calidad</span><strong>${escapeHtml(result.quality?.label || "No disponible")} · ${displayValue(result.dataQualityScore)}/100</strong></article><article><span>Modelo</span><strong>${escapeHtml(result.modelVersion)}</strong></article></div>
     ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
     <div class="poisson-layout">
       <section><h3>Probabilidades</h3><div class="poisson-probabilities">${probabilityRows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${displayValue(value)}%</strong></div>`).join("")}</div></section>

@@ -1,6 +1,7 @@
 import { calculatePoissonModel } from "./poisson-model.service.js";
 import { calculateTeamGoalProbability } from "./team-goal-probability.service.js";
 import { calculateCornersModel } from "./corners-model.service.js";
+import { resolveModuleQuality } from "./module-quality.service.js";
 
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, Number(value) || 0));
 const round = (value, digits = 1) => Number(Number(value).toFixed(digits));
@@ -109,8 +110,8 @@ export function generateDataPicks(dataset = {}) {
     picks.push(makePick(dataset, { marketKey: "double_chance", selectionKey: "1X", market: "Doble oportunidad", selection: `${fixture.home || "Local"} o empate (1X)`, sources: [probabilities.source] }, probabilities.home + probabilities.draw, evidence));
     picks.push(makePick(dataset, { marketKey: "double_chance", selectionKey: "X2", market: "Doble oportunidad", selection: `${fixture.away || "Visitante"} o empate (X2)`, sources: [probabilities.source] }, probabilities.away + probabilities.draw, evidence));
   }
-  const poisson = calculatePoissonModel(dataset);
-  const teamGoals = calculateTeamGoalProbability(dataset);
+  const poisson = dataset.poissonModel || calculatePoissonModel(dataset);
+  const teamGoals = dataset.teamGoalProbability || calculateTeamGoalProbability(dataset);
   const corners = dataset.cornersModel || calculateCornersModel(dataset);
   const poissonBySelection = new Map((poisson.suggestedMarkets || []).map((pick) => [pick.selectionKey, pick]));
   const teamGoalBySelection = new Map((teamGoals.picks || []).map((pick) => [pick.selectionKey, pick]));
@@ -130,10 +131,11 @@ export function generateDataPicks(dataset = {}) {
     };
   });
   const ranked = combined.sort((a, b) => b.confidenceScore - a.confidenceScore || (b.expectedValuePct ?? -999) - (a.expectedValuePct ?? -999));
+  const status = ranked.length ? (quality >= 70 ? "available" : "partial") : "not_available";
   return {
-    status: ranked.length ? (quality >= 70 ? "available" : "partial") : "not_available",
+    status,
     source: "API-Football + modelo interno", sourceModule: "data_picks", dataQualityScore: quality,
-    fixtureId: String(fixture.id || ""), picks: ranked, warnings,
+    fixtureId: String(fixture.id || ""), picks: ranked, warnings, quality: resolveModuleQuality({ score: ranked.length ? quality : 0, status, notes: warnings }),
     poisson: { status: poisson.status, lambdaHome: poisson.lambdaHome ?? null, lambdaAway: poisson.lambdaAway ?? null, warning: poisson.warning || "" },
     teamGoalProbability: { status: teamGoals.status, confidenceScore: teamGoals.confidenceScore ?? 0, bttsSupport: teamGoals.btts?.support || "neutral", warning: teamGoals.warning || "" },
     corners: { status: corners.status, totalExpectedCorners: corners.totalExpectedCorners ?? null, liveAlert: corners.live?.alert || "", warning: corners.warning || "" },

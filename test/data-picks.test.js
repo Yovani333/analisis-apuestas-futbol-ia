@@ -20,6 +20,7 @@ test("genera los 13 picks mínimos y conserva picks deportivos sin cuota", () =>
   assert.equal(result.picks.every((pick) => pick.sourceModule === "data_picks"), true);
   assert.equal(result.picks.every((pick) => pick.isSportsPick && pick.expectedValuePct === null), true);
   assert.equal(result.poisson.status, "available");
+  assert.equal(result.quality.label, "Alta");
   assert.ok(result.picks.some((pick) => pick.sourcesUsed.includes("Modelo Poisson interno")));
   assert.ok(result.corners);
   assert.equal(result.liveContext.active, false);

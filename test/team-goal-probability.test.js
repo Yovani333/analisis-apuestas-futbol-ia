@@ -9,6 +9,7 @@ function dataset(overrides = {}) {
 test("calcula gol y no gol por equipo con mercados derivados", () => {
   const result = calculateTeamGoalProbability(dataset());
   assert.equal(result.status, "available");
+  assert.equal(result.quality.label, "Alta");
   assert.ok(result.teams.home.over05Pct > result.teams.home.over15Pct);
   assert.ok(Math.abs(result.teams.home.over05Pct + result.teams.home.noGoalPct - 100) < .2);
   assert.equal(result.picks.every((pick) => pick.sourceModule === "team_goal_probability"), true);
@@ -28,5 +29,6 @@ test("posesión alta sin tiros a puerta contradice confianza live", () => {
 test("no inventa probabilidad cuando faltan todos los insumos", () => {
   const result = calculateTeamGoalProbability({ fixture: { id: 9 }, researchData: { xgXga: {}, statsForm: {} }, dataQuality: { score: 20 } });
   assert.equal(result.status, "not_available");
+  assert.equal(result.quality.label, "No disponible");
   assert.deepEqual(result.picks, []);
 });

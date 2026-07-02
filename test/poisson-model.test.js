@@ -18,6 +18,7 @@ test("calcula distribución Poisson y probabilidades coherentes", () => {
   assert.ok(Math.abs(poissonProbability(1.5, 0) - Math.exp(-1.5)) < 1e-10);
   const result = calculatePoissonModel(dataset());
   assert.equal(result.status, "available");
+  assert.equal(result.quality.label, "Alta");
   assert.ok(result.lambdaHome > result.lambdaAway);
   assert.ok(Math.abs(result.probabilities.homeWin + result.probabilities.draw + result.probabilities.awayWin - 100) < .2);
   assert.equal(result.likelyScores.length, 5);
@@ -33,6 +34,7 @@ test("usa forma como respaldo y reduce calidad cuando falta xG", () => {
   const input = dataset({ xgXga: { homeXG: null, homeXGA: null, awayXG: null, awayXGA: null }, statsForm: { homeGoalsFor: 8, homeGoalsAgainst: 5, awayGoalsFor: 6, awayGoalsAgainst: 7, homePlayed: 5, awayPlayed: 5 } });
   const result = calculatePoissonModel(input);
   assert.equal(result.status, "partial");
+  assert.equal(result.quality.label, "Parcial");
   assert.match(result.warning, /forma goleadora/i);
 });
 

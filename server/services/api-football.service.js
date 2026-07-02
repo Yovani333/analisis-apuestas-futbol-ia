@@ -17,6 +17,9 @@ import {
 } from "./api-football-observability.service.js";
 import { evaluatePickRecommendations } from "./pick-recommendation.service.js";
 import { calculateCornersModel } from "./corners-model.service.js";
+import { calculatePoissonModel } from "./poisson-model.service.js";
+import { calculateTeamGoalProbability } from "./team-goal-probability.service.js";
+import { resolveModuleQuality } from "./module-quality.service.js";
 
 const leagueCache = new Map();
 const requestCache = new Map();
@@ -401,15 +404,31 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   fixture.dataAvailability.xg = activeInternalXg?.status === "available"
     ? "Disponible" : activeInternalXg?.status === "partial" ? "Necesita revisión" : fixture.dataAvailability.xg;
   dataset.researchData = normalizeMatchResearchData(dataset);
+  dataset.poissonModel = calculatePoissonModel(dataset);
+  dataset.teamGoalProbability = calculateTeamGoalProbability({ ...dataset, poissonModel: dataset.poissonModel });
   dataset.cornersModel = calculateCornersModel(dataset);
   dataset.researchData.corners = dataset.cornersModel;
   dataset.researchData.sourceCoverage.push({
     module: "corners", moduleKey: "corners", label: "Corners Mundial / Torneos Cortos",
     primarySources: ["API-Football fixtures", "API-Football fixture statistics"],
     secondarySources: [], activeSources: dataset.cornersModel.status === "not_available" ? [] : ["API-Football + modelo interno"],
-    status: dataset.cornersModel.status, updatedAt: dataset.cornersModel.generatedAt,
-    observation: dataset.cornersModel.status === "not_available" ? dataset.cornersModel.warning : `Calculado con ${Math.min(dataset.cornersModel.teams.home.useful, dataset.cornersModel.teams.away.useful)} partidos oficiales por selección; amistosos excluidos.`
+    status: dataset.cornersModel.status, quality: dataset.cornersModel.quality, updatedAt: dataset.cornersModel.generatedAt,
+    observation: dataset.cornersModel.status === "not_available" ? dataset.cornersModel.warning : `Calidad ${dataset.cornersModel.quality.label} (${dataset.cornersModel.quality.score}/100). Calculado con ${Math.min(dataset.cornersModel.teams.home.useful, dataset.cornersModel.teams.away.useful)} partidos oficiales por selección; amistosos excluidos.`
   });
+  const engineQuality = resolveModuleQuality({ score: dataset.researchData.totalConfidenceScore, status: dataset.dataQuality.canSuggest ? "available" : "partial", notes: dataset.qualityAlerts });
+  const advancedRows = [
+    { module: "dataPicks", label: "Ver Picks / Picks generados por datos", source: "Motor de reglas + datos normalizados", quality: engineQuality },
+    { module: "ruleEngine", label: "Motor de Reglas", source: "Datos normalizados internos", quality: engineQuality },
+    { module: "poisson", label: "Modelo Poisson", source: "Poisson interno", quality: dataset.poissonModel.quality },
+    { module: "teamGoalProbability", label: "Probabilidad de Gol por Equipo", source: "Modelo interno ataque vs defensa", quality: dataset.teamGoalProbability.quality }
+  ];
+  advancedRows.forEach((row) => dataset.researchData.sourceCoverage.push({
+    module: row.module, moduleKey: row.module, label: row.label,
+    primarySources: ["API-Football statistics", "Datos normalizados internos"], secondarySources: [],
+    activeSources: row.quality.status === "not_available" ? [] : [row.source], status: row.quality.status,
+    quality: row.quality, updatedAt: dataset.fetchedAt,
+    observation: `Calidad ${row.quality.label} (${row.quality.score}/100). ${row.quality.notes[0] || "Sin observaciones adicionales."}`
+  }));
   dataset.pickRecommendation = evaluatePickRecommendations(dataset);
   dataset.researchData.pickDecision = dataset.pickRecommendation;
   dataset.researchData.odds.markets = (dataset.researchData.odds.markets || []).map((market) => {

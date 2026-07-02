@@ -1,4 +1,5 @@
 import { calculatePoissonModel } from "./poisson-model.service.js";
+import { resolveModuleQuality } from "./module-quality.service.js";
 
 const round = (value, digits = 1) => Number(value.toFixed(digits));
 const number = (value) => value === null || value === undefined || value === "" || !Number.isFinite(Number(String(value).replace("%", ""))) ? null : Number(String(value).replace("%", ""));
@@ -64,8 +65,8 @@ function pickFromTeam(dataset, team, threshold) {
 }
 
 export function calculateTeamGoalProbability(dataset = {}) {
-  const poisson = calculatePoissonModel(dataset);
-  if (!["available", "partial"].includes(poisson.status)) return { status: "not_available", sourceModule: "team_goal_probability", source: "API-Football + modelo interno", teams: {}, picks: [], warning: "Probabilidad de gol no disponible: faltan datos ofensivos y defensivos suficientes.", generatedAt: new Date().toISOString() };
+  const poisson = dataset.poissonModel || calculatePoissonModel(dataset);
+  if (!["available", "partial"].includes(poisson.status)) return { status: "not_available", sourceModule: "team_goal_probability", source: "API-Football + modelo interno", teams: {}, picks: [], quality: resolveModuleQuality({ status: "not_available" }), warning: "Probabilidad de gol no disponible: faltan datos ofensivos y defensivos suficientes.", generatedAt: new Date().toISOString() };
   const home = sideData(dataset, "home", poisson.lambdaHome);
   const away = sideData(dataset, "away", poisson.lambdaAway);
   const bttsSupport = poisson.probabilities.bttsYes >= 55 ? "supports_btts_yes" : poisson.probabilities.bttsNo >= 55 ? "supports_btts_no" : "neutral";
@@ -76,5 +77,5 @@ export function calculateTeamGoalProbability(dataset = {}) {
   const status = confidenceScore >= 70 && home.status === "available" && away.status === "available" ? "available" : "partial";
   const warnings = [...(poisson.warnings || [])];
   if (home.contradictingData.length || away.contradictingData.length) warnings.push("Existen señales ofensivas contradictorias; no usar una sola métrica como fundamento.");
-  return { status, source: "API-Football + modelo interno", sourceModule: "team_goal_probability", modelVersion: "team-goal-probability-v1", fixtureId: String(dataset.fixture?.id || ""), teams: { home, away }, btts: { support: bttsSupport, yesProbabilityPct: poisson.probabilities.bttsYes, noProbabilityPct: poisson.probabilities.bttsNo }, picks, confidenceScore, warnings, warning: warnings.join(" "), generatedAt: new Date().toISOString() };
+  return { status, source: "API-Football + modelo interno", sourceModule: "team_goal_probability", modelVersion: "team-goal-probability-v1", fixtureId: String(dataset.fixture?.id || ""), teams: { home, away }, btts: { support: bttsSupport, yesProbabilityPct: poisson.probabilities.bttsYes, noProbabilityPct: poisson.probabilities.bttsNo }, picks, confidenceScore, quality: resolveModuleQuality({ score: confidenceScore, status, notes: warnings }), warnings, warning: warnings.join(" "), generatedAt: new Date().toISOString() };
 }
