@@ -223,10 +223,14 @@ function pickSignalClass(pick = {}) {
   const ev = Number(pick.expectedValuePct ?? pick.valor_esperado);
   const confidence = Number(pick.finalPickScore ?? pick.confidenceScore ?? pick.confidencePct ?? 0);
   const contradictions = [...(pick.contradictingData || []), ...(pick.riskFlags || [])];
-  const approvedColor = pick.highlightColor ? ["green", "blue"].includes(pick.highlightColor) : true;
+  const requiresReview = Boolean(pick.requiresReview || pick.requiere_revision);
+  if (pick.highlightColor) {
+    return ["green", "blue"].includes(pick.highlightColor) && !requiresReview
+      ? "pick-signal--pass"
+      : "pick-signal--fail";
+  }
   const passes = odds > 1 && Number.isFinite(ev) && ev > 0 && confidence >= 60
-    && contradictions.length === 0 && approvedColor
-    && !pick.requiresReview && !pick.requiere_revision;
+    && contradictions.length === 0 && !requiresReview;
   return passes ? "pick-signal--pass" : "pick-signal--fail";
 }
 
