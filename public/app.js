@@ -68,7 +68,7 @@ const elements = {
   dataStatus: document.querySelector("#data-overall-status"),
   dataGrid: document.querySelector("#data-grid"),
   openOddsDetail: document.querySelector("#open-odds-detail"),
-  savePreMatchEvidence: document.querySelector("#save-pre-match-evidence"), evidenceStatus: document.querySelector("#evidence-status"),
+  evidenceToolbar: document.querySelector("#evidence-toolbar"), savePreMatchEvidence: document.querySelector("#save-pre-match-evidence"), evidenceStatus: document.querySelector("#evidence-status"),
   refreshCoverage: document.querySelector("#refresh-coverage"),
   researchContent: document.querySelector("#research-content"),
   toggleResearch: document.querySelector("#toggle-research"),
@@ -542,6 +542,7 @@ function renderFixtureData() {
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
   elements.openOddsDetail.disabled = false;
   const evidence = latestEvidenceForFixture(state.evidenceSnapshots, fixture.id);
+  elements.evidenceToolbar.hidden = fixture.status !== "scheduled";
   elements.savePreMatchEvidence.disabled = fixture.status !== "scheduled" || state.isCapturingEvidence;
   elements.evidenceStatus.textContent = evidence
     ? `Evidencia guardada: ${formatUpdatedAt(evidence.capturedAt)} · Lista para auditoría después del resultado final.`
