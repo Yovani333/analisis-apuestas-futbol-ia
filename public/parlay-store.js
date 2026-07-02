@@ -63,6 +63,23 @@ export function normalizePickLeg(leg, now = new Date()) {
   }, now);
 }
 
+function identityPart(value) {
+  return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+}
+
+export function pickIdentity(pick, { includeSource = false } = {}) {
+  const market = pick.marketCode || pick.market;
+  const selection = pick.selectionCode || pick.selection;
+  const parts = [String(pick.fixtureId || ""), identityPart(market), identityPart(selection)];
+  if (includeSource) parts.push(identityPart(pick.sourceModule || "odds"));
+  return parts.join("::");
+}
+
+export function hasDuplicatePick(picks, candidate, options) {
+  const identity = pickIdentity(candidate, options);
+  return picks.some((pick) => pickIdentity(pick, options) === identity);
+}
+
 export function calculateParlayResult(legs = []) {
   if (!legs.length) return "pending";
   if (legs.some((leg) => leg.result === "lost")) return "lost";
@@ -79,10 +96,18 @@ export function settleLegResult(selectionCode, fixtureResult) {
   if (!Number.isFinite(home) || !Number.isFinite(away)) return "pending";
   const total = home + away;
   const outcomes = {
+    home_win: home > away,
+    draw: home === away,
+    away_win: away > home,
     "1X": home >= away,
     X2: away >= home,
+    home_over_0_5: home > 0,
+    home_over_1_5: home > 1,
+    away_over_0_5: away > 0,
+    away_over_1_5: away > 1,
     over_2_5: total > 2.5,
     under_2_5: total < 2.5,
+    under_3_5: total < 3.5,
     btts_yes: home > 0 && away > 0,
     btts_no: home === 0 || away === 0
   };

@@ -21,6 +21,8 @@ test("genera los 13 picks mínimos y conserva picks deportivos sin cuota", () =>
   assert.equal(result.picks.every((pick) => pick.isSportsPick && pick.expectedValuePct === null), true);
   assert.equal(result.poisson.status, "available");
   assert.ok(result.picks.some((pick) => pick.sourcesUsed.includes("Modelo Poisson interno")));
+  assert.ok(result.corners);
+  assert.equal(result.liveContext.active, false);
 });
 
 test("un under contradicho por xG alto no queda verde aunque tenga EV positivo", () => {

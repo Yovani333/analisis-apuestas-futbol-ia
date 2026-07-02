@@ -3,7 +3,7 @@ import { footballDataService } from "./services.js?v=20260701-corners";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
-  loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
+  hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
 } from "./parlay-store.js?v=20260630-common-picks";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
@@ -975,8 +975,7 @@ function saveIndividualLeg(leg) {
     showNotice("Selecciona un partido, mercado y selección antes de guardar el pick.");
     return;
   }
-  const duplicate = state.savedPicks.some((pick) => String(pick.fixtureId) === String(leg.fixtureId)
-    && pick.marketCode === leg.marketCode && pick.selectionCode === leg.selectionCode);
+  const duplicate = hasDuplicatePick(state.savedPicks, leg);
   if (duplicate && !window.confirm("Este pick ya está guardado. ¿Deseas guardar otro registro igual?")) return;
   state.savedPicks.unshift(createSavedPick({ ...leg, id: `${leg.id || "pick"}:${Date.now()}` }));
   persistSavedPicks();
@@ -990,8 +989,7 @@ function appendPickToParlay(leg, successMessage = "Pick agregado a Mi parlay.") 
     return false;
   }
   const normalized = normalizePickLeg(leg);
-  const duplicate = state.parlayDraft.some((item) => String(item.fixtureId) === String(normalized.fixtureId)
-    && item.marketCode === normalized.marketCode && item.selectionCode === normalized.selectionCode);
+  const duplicate = hasDuplicatePick(state.parlayDraft, normalized);
   if (duplicate) {
     showNotice("Este pick ya fue agregado.");
     renderParlayDraft(true);
@@ -1032,6 +1030,7 @@ function renderParlayDraft(open = false) {
         <small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}</small>
         <small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small>
         <small>Cuota ${displayValue(leg.decimalOdds)} · EV ${displayValue(leg.expectedValue)}%</small>
+        <small>Origen: ${escapeHtml(leg.sourceModule || "odds")}</small>
         <small class="timing-label">${escapeHtml(leg.analysisTiming.label)}${leg.analysisTiming.minutesToKickoff === null ? "" : ` · ${escapeHtml(leg.analysisTiming.minutesToKickoff)} min al inicio`}</small>
         ${leg.analysisTiming.warning ? `<em>${escapeHtml(leg.analysisTiming.warning)}</em>` : ""}
         ${leg.requiresReview ? '<em>Requiere revisión antes de considerar una apuesta</em>' : ""}
@@ -1225,7 +1224,7 @@ function renderSavedParlays() {
       <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); return `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
-          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : ""}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)} · Origen ${escapeHtml(leg.sourceModule || "odds")}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
           <label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label>
         </section>`; }).join("")}</div>
       <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, settleLegResult } from "../public/parlay-store.js";
+import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, hasDuplicatePick, moveParlayToTrash, normalizePickLeg, pickIdentity, restoreParlayFromTrash, settleLegResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -60,6 +60,22 @@ test("liquida automáticamente los tres mercados permitidos", () => {
   assert.equal(settleLegResult("1X", result), "won");
   assert.equal(settleLegResult("over_2_5", result), "won");
   assert.equal(settleLegResult("btts_no", result), "lost");
+  assert.equal(settleLegResult("home_win", result), "won");
+  assert.equal(settleLegResult("away_over_0_5", result), "won");
+  assert.equal(settleLegResult("home_over_1_5", result), "won");
+});
+
+test("detecta duplicados exactos entre módulos por fixture, mercado y selección", () => {
+  const odds = { fixtureId: 77, marketCode: "btts", selectionCode: "btts_yes", sourceModule: "odds" };
+  const poisson = { ...odds, sourceModule: "poisson" };
+  assert.equal(hasDuplicatePick([odds], poisson), true);
+  assert.equal(hasDuplicatePick([odds], poisson, { includeSource: true }), false);
+  assert.equal(pickIdentity(odds), pickIdentity(poisson));
+});
+
+test("usa nombres normalizados cuando faltan códigos de mercado", () => {
+  const existing = { fixtureId: "9", market: "Ambos anotan", selection: "Sí" };
+  assert.equal(hasDuplicatePick([existing], { fixtureId: 9, market: " ambos  anotan ", selection: "Si" }), true);
 });
 
 test("calcula rendimiento teórico con una unidad por parlay", () => {

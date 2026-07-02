@@ -1,5 +1,6 @@
 import { calculatePoissonModel } from "./poisson-model.service.js";
 import { calculateTeamGoalProbability } from "./team-goal-probability.service.js";
+import { calculateCornersModel } from "./corners-model.service.js";
 
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, Number(value) || 0));
 const round = (value, digits = 1) => Number(Number(value).toFixed(digits));
@@ -110,6 +111,7 @@ export function generateDataPicks(dataset = {}) {
   }
   const poisson = calculatePoissonModel(dataset);
   const teamGoals = calculateTeamGoalProbability(dataset);
+  const corners = dataset.cornersModel || calculateCornersModel(dataset);
   const poissonBySelection = new Map((poisson.suggestedMarkets || []).map((pick) => [pick.selectionKey, pick]));
   const teamGoalBySelection = new Map((teamGoals.picks || []).map((pick) => [pick.selectionKey, pick]));
   const combined = picks.map((pick) => {
@@ -134,6 +136,8 @@ export function generateDataPicks(dataset = {}) {
     fixtureId: String(fixture.id || ""), picks: ranked, warnings,
     poisson: { status: poisson.status, lambdaHome: poisson.lambdaHome ?? null, lambdaAway: poisson.lambdaAway ?? null, warning: poisson.warning || "" },
     teamGoalProbability: { status: teamGoals.status, confidenceScore: teamGoals.confidenceScore ?? 0, bttsSupport: teamGoals.btts?.support || "neutral", warning: teamGoals.warning || "" },
+    corners: { status: corners.status, totalExpectedCorners: corners.totalExpectedCorners ?? null, liveAlert: corners.live?.alert || "", warning: corners.warning || "" },
+    liveContext: { active: fixture.status === "live", elapsed: fixture.elapsed ?? null, score: fixture.score || null },
     generatedAt: new Date().toISOString()
   };
 }
