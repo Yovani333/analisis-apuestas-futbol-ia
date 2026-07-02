@@ -143,7 +143,7 @@
       </section>
 
       <section class="insights-column" aria-label="Información y análisis del partido">
-        <section class="panel" aria-labelledby="data-title">
+        <section id="coverage-panel" class="panel" aria-labelledby="data-title">
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Cobertura</p>
@@ -187,7 +187,7 @@
           <div class="panel-heading">
             <div><p class="eyebrow">Motor estadístico</p><h2 id="data-picks-title">Picks basados en datos</h2></div>
             <div class="panel-actions">
-              <button id="show-data-picks" class="button button--primary button--compact" type="button" disabled>Ver Picks</button>
+              <button id="show-data-picks" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button>
               <span id="data-picks-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
           </div>
@@ -198,7 +198,7 @@
           <div class="panel-heading">
             <div><p class="eyebrow">Estadísticas avanzadas</p><h2 id="poisson-title">Modelo Poisson</h2></div>
             <div class="panel-actions">
-              <button id="show-poisson" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Ver datos</button>
+              <button id="show-poisson" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button>
               <span id="poisson-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
           </div>
@@ -208,13 +208,13 @@
         <section id="team-goals-panel" class="panel team-goals-panel advanced-module-panel" aria-labelledby="team-goals-title">
           <div class="panel-heading">
             <div><p class="eyebrow">Ataque vs defensa</p><h2 id="team-goals-title">Probabilidad de Gol por Equipo</h2></div>
-            <div class="panel-actions"><button id="show-team-goals" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Ver datos</button><span id="team-goals-status" class="status-badge status-badge--unavailable">No disponible</span></div>
+            <div class="panel-actions"><button id="show-team-goals" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="team-goals-status" class="status-badge status-badge--unavailable">No disponible</span></div>
           </div>
           <div id="team-goals-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para evaluar la posibilidad de gol de cada equipo.</div></div>
         </section>
 
         <section id="corners-panel" class="panel corners-panel advanced-module-panel" aria-labelledby="corners-title">
-          <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners</h2></div><div class="panel-actions"><button id="show-corners" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Ver datos</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+          <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners</h2></div><div class="panel-actions"><button id="show-corners" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
           <div id="corners-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar corners oficiales históricos.</div></div>
         </section>
 
@@ -247,6 +247,10 @@
         <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
       </section>
       <section class="guide-modules" aria-label="Módulos de análisis">
+        <details id="guide-coverage-module" class="guide-module guide-module--market">
+          <summary><span>Información base</span><strong>Cobertura y fuentes</strong><small>Datos del partido, disponibilidad, calidad y procedencia.</small><em>Mostrar</em></summary>
+          <div class="guide-module__body"><div id="guide-coverage-slot"></div><div id="guide-research-slot"></div></div>
+        </details>
         <details class="guide-module guide-module--market">
           <summary><span>Dato de mercado</span><strong>Ver cuotas</strong><small>Dato confiable de mercado; compara implícita contra modelo.</small><em>Mostrar</em></summary>
           <div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div>
@@ -355,6 +359,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260701-evidence-snapshots"></script>
+    <script type="module" src="app.js?v=20260701-guide-coverage"></script>
   </body>
 </html>

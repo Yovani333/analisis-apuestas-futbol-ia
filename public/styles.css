@@ -230,7 +230,6 @@ button { touch-action: manipulation; }
 .button--primary:hover { background: var(--primary-dark); }
 .button--secondary { color: var(--text); background: white; border-color: var(--border); }
 .button--secondary:hover { color: var(--primary-dark); border-color: #9fbcf5; }
-.button--ready { color: white !important; background: var(--success) !important; border-color: var(--success) !important; }
 .button--add { min-height: 32px; padding: 6px 9px; color: var(--primary-dark); background: var(--primary-soft); border-color: #c9dcff; font-size: .68rem; }
 .button--add:hover { background: #dbeafe; }
 .button--danger { color: var(--danger); background: white; border-color: #f2b8bd; }
