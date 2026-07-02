@@ -676,6 +676,7 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .guide-module > .guide-module__body { display: grid; gap: 12px; padding: 0 14px 14px; border-top: 1px solid var(--border); }
 .guide-module p { max-width: 900px; margin: 13px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.55; }
 .guide-inline-data { min-width: 0; }
+.evidence-status { margin: -3px 0 11px; color: var(--muted); font-size: .7rem; font-weight: 700; }
 .guide-module .panel { padding: 0; background: transparent; border: 0; box-shadow: none; }
 .guide-module .panel-heading { margin-top: 2px; }
 :root[data-theme="dark"] .guide-module { background: var(--surface); border-color: var(--border); }

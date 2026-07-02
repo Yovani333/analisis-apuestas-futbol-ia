@@ -5,6 +5,7 @@ import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
 } from "./parlay-store.js?v=20260630-common-picks";
+import { createEvidenceSnapshot, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260701-evidence";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -27,6 +28,7 @@ const state = {
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
+  evidenceSnapshots: loadEvidenceSnapshots(),
   savedTab: "individual",
   expandedParlays: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
@@ -41,6 +43,7 @@ const state = {
   isLoadingCorners: false,
   isRefreshingResearch: false,
   isRefreshingStatuses: false,
+  isCapturingEvidence: false,
   autoRefreshTimer: null
 };
 
@@ -65,6 +68,7 @@ const elements = {
   dataStatus: document.querySelector("#data-overall-status"),
   dataGrid: document.querySelector("#data-grid"),
   openOddsDetail: document.querySelector("#open-odds-detail"),
+  savePreMatchEvidence: document.querySelector("#save-pre-match-evidence"), evidenceStatus: document.querySelector("#evidence-status"),
   refreshCoverage: document.querySelector("#refresh-coverage"),
   researchContent: document.querySelector("#research-content"),
   toggleResearch: document.querySelector("#toggle-research"),
@@ -535,6 +539,11 @@ function renderFixtureData() {
   if (savedCorners) { elements.showCorners.textContent = "Mostrar"; elements.showCorners.classList.remove("button--ready"); }
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
   elements.openOddsDetail.disabled = false;
+  const evidence = latestEvidenceForFixture(state.evidenceSnapshots, fixture.id);
+  elements.savePreMatchEvidence.disabled = fixture.status !== "scheduled" || state.isCapturingEvidence;
+  elements.evidenceStatus.textContent = evidence
+    ? `Evidencia guardada: ${formatUpdatedAt(evidence.capturedAt)} · Lista para auditoría después del resultado final.`
+    : fixture.status === "scheduled" ? "Sin evidencia prepartido guardada." : "La evidencia solo puede guardarse antes del inicio.";
   elements.guideOddsContent.innerHTML = renderOddsDetail(fixture.confirmedData?.odds || []);
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
@@ -1458,7 +1467,7 @@ function showAnalysisEmpty() {
 function renderAuditFixtureOptions() {
   const fixtures = state.fixtures.filter((fixture) => fixture.status === "finished");
   elements.auditFixture.innerHTML = fixtures.length
-    ? `<option value="">Selecciona un partido</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</option>`).join("")}`
+    ? `<option value="">Selecciona un partido</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}${latestEvidenceForFixture(state.evidenceSnapshots, fixture.id) ? " · Evidencia guardada" : " · Sin snapshot"}</option>`).join("")}`
     : '<option value="">Busca partidos finalizados en el Dashboard</option>';
   elements.runAudit.disabled = !fixtures.length;
 }
@@ -1472,15 +1481,55 @@ function renderAuditResults(audit) {
     <td data-label="Confianza">${displayValue(row.confidence)}/100</td><td data-label="Calidad">${escapeHtml(row.dataQuality)}</td><td data-label="Resultado">${escapeHtml(row.finalScore)}</td>
     <td data-label="Estado"><strong>${escapeHtml(row.outcome)}</strong></td><td data-label="Error">${escapeHtml(row.errorDetected || "Sin error crítico")}</td><td data-label="Recomendación">${escapeHtml(row.recommendation)}</td></tr>`).join("");
   elements.auditResults.innerHTML = `<div class="history-metrics"><article><span>Candidatos evaluados</span><strong>${displayValue(metrics.totalPicks, 0)}</strong></article><article><span>Picks con cuota elegibles</span><strong>${displayValue(metrics.eligiblePicks, 0)}</strong></article><article><span>Hit rate descriptivo</span><strong>${displayValue(metrics.hitRate)}%</strong></article><article><span>ROI elegible</span><strong>${displayValue(metrics.ROI)}%</strong></article><article><span>Error calibración</span><strong>${displayValue(metrics.calibrationError)}</strong></article><article><span>NO BET</span><strong>${displayValue(metrics.noBets, 0)}</strong></article></div><p class="market-disclaimer">El ROI usa únicamente picks elegibles con cuota válida. La tabla completa también enseña candidatos descartados para explicar por qué fueron NO BET.</p><div class="detail-table-wrap audit-table-wrap"><table class="detail-table"><thead><tr><th>Decisión</th><th>Fecha</th><th>Partido</th><th>Liga</th><th>Mercado</th><th>Pick</th><th>Cuota</th><th>Prob. implícita</th><th>Prob. modelo</th><th>EV</th><th>Confianza</th><th>Data Quality</th><th>Resultado final</th><th>Estado</th><th>Error detectado</th><th>Recomendación</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const evidenceNote = audit.mode === "saved_pre_match_evidence"
+    ? `<div class="detail-note detail-note--info"><strong>Snapshot prepartido verificado</strong><span>Capturado ${escapeHtml(formatUpdatedAt(audit.capturedAt))}. Se usan exactamente los picks guardados antes del inicio.</span></div>`
+    : '<div class="detail-note"><strong>Reconstrucción histórica</strong><span>No se encontró un snapshot guardado para este partido.</span></div>';
+  elements.auditResults.insertAdjacentHTML("afterbegin", evidenceNote);
 }
 
 async function runSelectedAudit() {
   if (!elements.auditFixture.value) return;
   elements.runAudit.disabled = true;
   elements.runAudit.textContent = "Auditando…";
-  try { renderAuditResults(await footballDataService.auditFixture(elements.auditFixture.value)); }
+  try {
+    const evidence = latestEvidenceForFixture(state.evidenceSnapshots, elements.auditFixture.value);
+    renderAuditResults(await footballDataService.auditFixture(elements.auditFixture.value, evidence));
+  }
   catch (error) { elements.auditResults.innerHTML = `<div class="saved-empty"><h3>No se pudo ejecutar la auditoría</h3><p>${escapeHtml(error.message)}</p></div>`; }
   finally { elements.runAudit.disabled = false; elements.runAudit.textContent = "Ejecutar auditoría"; }
+}
+
+async function capturePreMatchEvidence() {
+  const fixture = selectedFixture();
+  if (!fixture || state.isCapturingEvidence) return;
+  if (fixture.status !== "scheduled") return showNotice("La evidencia debe guardarse antes de que inicie el partido.");
+  state.isCapturingEvidence = true;
+  elements.savePreMatchEvidence.disabled = true;
+  elements.savePreMatchEvidence.textContent = "Guardando…";
+  elements.evidenceStatus.textContent = "Recopilando módulos sin usar OpenAI…";
+  const fallback = (status, warning) => ({ status, warning, picks: [], suggestedMarkets: [] });
+  try {
+    const results = await Promise.allSettled([
+      footballDataService.getDataPicks(fixture), footballDataService.getPoissonModel(fixture),
+      footballDataService.getTeamGoalProbability(fixture), footballDataService.getCornersModel(fixture)
+    ]);
+    const value = (index, warning) => results[index].status === "fulfilled" ? results[index].value : fallback("not_available", warning);
+    const dataPicks = value(0, "Picks basados en datos no disponibles al capturar."), poisson = value(1, "Poisson no disponible al capturar.");
+    const teamGoals = value(2, "Gol por equipo no disponible al capturar."), corners = value(3, "Corners no disponible al capturar.");
+    state.dataPicksByFixture.set(fixture.id, dataPicks);
+    state.poissonByFixture.set(fixture.id, poisson);
+    state.teamGoalsByFixture.set(fixture.id, teamGoals);
+    state.cornersByFixture.set(fixture.id, corners);
+    const snapshot = createEvidenceSnapshot({ fixture, dataPicks, poisson, teamGoals, corners });
+    state.evidenceSnapshots = saveEvidenceSnapshot(snapshot);
+    showNotice("Evidencia prepartido guardada. No se utilizó OpenAI.");
+  } catch (error) {
+    showNotice(error.message || "No fue posible guardar la evidencia prepartido.");
+  } finally {
+    state.isCapturingEvidence = false;
+    elements.savePreMatchEvidence.textContent = "Guardar evidencia";
+    renderFixtureData();
+  }
 }
 
 function renderDataPicks(result) {
@@ -2141,6 +2190,7 @@ elements.matchesList.addEventListener("keydown", async (event) => {
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
+elements.savePreMatchEvidence.addEventListener("click", capturePreMatchEvidence);
 elements.auditFixture.addEventListener("change", () => { elements.runAudit.disabled = !elements.auditFixture.value; });
 elements.runAudit.addEventListener("click", runSelectedAudit);
 elements.notificationToggle.addEventListener("click", () => {

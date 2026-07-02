@@ -12,7 +12,7 @@ import { calculatePoissonModel } from "../services/poisson-model.service.js";
 import { calculateTeamGoalProbability } from "../services/team-goal-probability.service.js";
 import { calculateCornersModel } from "../services/corners-model.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
-import { runFixtureBacktest } from "../services/audit/backtest-engine.service.js";
+import { runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -88,6 +88,15 @@ apiRouter.post("/fixtures/:fixtureId/audit", requireLiveMode, asyncRoute(async (
   if (!result.finished) return res.status(409).json({ error: { code: "FIXTURE_NOT_FINISHED", message: result.appStatus === "live" ? "El partido sigue en vivo; la auditoría queda LIVE_PENDING." : "Solo se auditan partidos finalizados." } });
   const dataset = await getFixtureDataset(fixtureId, { includeHistorical: true });
   res.json(runFixtureBacktest(dataset, result));
+}));
+
+apiRouter.post("/fixtures/:fixtureId/audit/snapshot", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const evidence = req.body?.evidence;
+  if (String(evidence?.fixture?.id || "") !== String(fixtureId)) throw new AppError("La evidencia no corresponde al fixture seleccionado.", 400, "EVIDENCE_FIXTURE_MISMATCH");
+  const result = await getFixtureResult(fixtureId);
+  if (!result.finished) throw new AppError("El partido todavía no ha finalizado.", 409, "FIXTURE_NOT_FINISHED");
+  res.json(runSavedEvidenceBacktest(evidence, result));
 }));
 
 for (const [route, key] of [["statistics", "statistics"], ["standings", "standings"], ["head-to-head", "h2h"], ["injuries", "injuries"], ["lineups", "lineups"], ["odds", "odds"], ["events", "events"], ["players", "players"], ["team-statistics", "teamStatistics"]]) {

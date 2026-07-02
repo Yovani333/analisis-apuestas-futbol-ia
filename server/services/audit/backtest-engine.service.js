@@ -71,9 +71,7 @@ export function calculateAuditMetrics(records = []) {
   };
 }
 
-export function runFixtureBacktest(dataset, fixtureResult) {
-  const snapshot = createPreMatchSnapshot(dataset);
-  const generated = generateDataPicks(snapshot);
+function buildBacktestResult(dataset, fixtureResult, generated, metadata = {}) {
   const records = generated.picks.map((pick) => {
     const rules = auditPickRules(pick, generated.quality || dataset.dataQuality || {});
     const candidate = { ...pick, noBet: rules.noBet || pick.highlightColor === "red" };
@@ -91,5 +89,19 @@ export function runFixtureBacktest(dataset, fixtureResult) {
       explanation: pick.explanation
     };
   });
-  return { status: fixtureResult?.finished ? "completed" : "pending", fixtureId: String(dataset.fixture?.id || ""), mode: "pre_match_reconstruction", currentFixtureStatisticsUsed: false, records, metrics: calculateAuditMetrics(records), generatedAt: new Date().toISOString() };
+  return { status: fixtureResult?.finished ? "completed" : "pending", fixtureId: String(dataset.fixture?.id || ""), mode: metadata.mode || "pre_match_reconstruction", capturedAt: metadata.capturedAt || null, currentFixtureStatisticsUsed: false, records, metrics: calculateAuditMetrics(records), generatedAt: new Date().toISOString() };
+}
+
+export function runFixtureBacktest(dataset, fixtureResult) {
+  const snapshot = createPreMatchSnapshot(dataset);
+  return buildBacktestResult(snapshot, fixtureResult, generateDataPicks(snapshot));
+}
+
+export function runSavedEvidenceBacktest(evidence, fixtureResult) {
+  if (!evidence?.fixture?.id || evidence.fixture.status !== "scheduled") throw new TypeError("La evidencia prepartido no es válida.");
+  if (evidence.currentFixtureStatisticsUsed !== false || evidence.openAiUsed !== false) throw new TypeError("La evidencia contiene fuentes no permitidas para backtesting.");
+  const generated = evidence.modules?.dataPicks;
+  if (!generated || !Array.isArray(generated.picks)) throw new TypeError("La evidencia no contiene picks basados en datos.");
+  const dataset = { fixture: evidence.fixture, dataQuality: evidence.dataQuality, researchData: evidence.researchData || {}, preMatch: evidence.preMatch || {}, marketAnalysis: evidence.marketAnalysis || [] };
+  return buildBacktestResult(dataset, fixtureResult, generated, { mode: "saved_pre_match_evidence", capturedAt: evidence.capturedAt });
 }

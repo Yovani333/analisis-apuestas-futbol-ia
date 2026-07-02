@@ -150,6 +150,7 @@
               <h2 id="data-title">Datos del partido</h2>
             </div>
             <div class="panel-actions">
+              <button id="save-pre-match-evidence" class="button button--primary button--compact" type="button" disabled>Guardar evidencia</button>
               <button id="open-odds-detail" class="button button--secondary button--compact" type="button" disabled>Ver cuotas</button>
               <button id="refresh-coverage" class="button button--secondary button--compact" type="button" disabled>Actualizar</button>
               <span id="data-overall-status" class="status-badge status-badge--unavailable">No disponible</span>
@@ -158,6 +159,7 @@
           <div id="selected-match-summary" class="selected-summary selected-summary--empty">
             Selecciona un partido para revisar la cobertura de datos.
           </div>
+          <p id="evidence-status" class="evidence-status">Sin evidencia prepartido guardada.</p>
           <div id="data-grid" class="data-grid"></div>
         </section>
 
@@ -353,6 +355,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260701-pick-signals"></script>
+    <script type="module" src="app.js?v=20260701-evidence-snapshots"></script>
   </body>
 </html>

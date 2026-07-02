@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateAuditMetrics, createPreMatchSnapshot, runFixtureBacktest } from "../server/services/audit/backtest-engine.service.js";
+import { calculateAuditMetrics, createPreMatchSnapshot, runFixtureBacktest, runSavedEvidenceBacktest } from "../server/services/audit/backtest-engine.service.js";
 import { evaluatePickOutcome } from "../server/services/audit/pick-outcome-evaluator.service.js";
 import { auditPickRules } from "../server/services/audit/market-rules-audit.service.js";
 import { auditTodayResults } from "../server/services/audit/audit-today-results.service.js";
@@ -86,4 +86,16 @@ test("backtest no usa el fixture actual y devuelve registros auditables", () => 
   const result = runFixtureBacktest(dataset, finished(1, 1));
   assert.equal(result.currentFixtureStatisticsUsed, false);
   assert.ok(result.records.length > 0);
+});
+
+test("audita los picks exactos de una evidencia prepartido guardada", () => {
+  const evidence = {
+    capturedAt: "2026-07-02T18:00:00.000Z", currentFixtureStatisticsUsed: false, openAiUsed: false,
+    fixture: { id: 4, status: "scheduled", home: "A", away: "B", leagueName: "Prueba" }, dataQuality: { level: "Alta" }, researchData: {},
+    modules: { dataPicks: { source: "API-Football + modelo interno", quality: { label: "Alta" }, warnings: [], picks: [{ market: "Total", selection: "Más de 2.5", selectionKey: "over_2_5", decimalOdds: 2, impliedProbabilityPct: 50, modelProbabilityPct: 60, expectedValuePct: 20, confidenceScore: 70, highlightColor: "green", sourceModule: "data_picks", contradictingData: [] }] } }
+  };
+  const result = runSavedEvidenceBacktest(evidence, finished(2, 1));
+  assert.equal(result.mode, "saved_pre_match_evidence");
+  assert.equal(result.records[0].outcome, "HIT");
+  assert.equal(result.capturedAt, evidence.capturedAt);
 });
