@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260701-ui-phase11" />
+    <link rel="stylesheet" href="styles.css?v=20260701-analysis-guide" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -52,6 +52,26 @@
       <span id="runtime-description">Todos los equipos, partidos y datos mostrados son sintéticos.</span>
       <small id="site-last-update" class="site-last-update">Última actualización del sitio: consultando…</small>
     </div>
+    <section class="analysis-guide" aria-labelledby="analysis-guide-title">
+      <div class="analysis-guide__heading">
+        <div><p class="eyebrow">Apoyo para decidir</p><h2 id="analysis-guide-title">Guía de análisis</h2></div>
+        <button id="toggle-analysis-guide" class="button button--secondary button--compact" type="button" aria-expanded="false">Mostrar</button>
+      </div>
+      <div id="analysis-guide-content" class="analysis-guide__content" hidden>
+        <button class="analysis-guide__item analysis-guide__item--market" type="button" data-guide-target="odds">
+          <span>Dato de mercado</span><strong>Ver cuotas</strong><small>Máxima confianza como dato de mercado, pero no como recomendación. Compara la probabilidad implícita contra la probabilidad del modelo.</small>
+        </button>
+        <button class="analysis-guide__item analysis-guide__item--primary" type="button" data-guide-target="data-picks-panel">
+          <span>Decisión principal</span><strong>Picks basados en datos</strong><small>Considera solamente picks con EV positivo, buena calidad de datos y sin contradicciones fuertes.</small>
+        </button>
+        <button class="analysis-guide__item analysis-guide__item--support" type="button" data-guide-target="poisson-panel">
+          <span>Apoyo medio</span><strong>Modelo Poisson</strong><small>Úsalo para Over/Under y marcadores. Es sensible a la calidad de las estimaciones de entrada.</small>
+        </button>
+        <button class="analysis-guide__item analysis-guide__item--support" type="button" data-guide-target="team-goals-panel">
+          <span>Apoyo complementario</span><strong>Probabilidad de Gol por Equipo</strong><small>Útil para BTTS y goles de equipo. Deriva parcialmente de Poisson y no cuenta como confirmación independiente.</small>
+        </button>
+      </div>
+    </section>
     <div id="app-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
 
     <main id="contenido-principal" class="dashboard" data-view-panel="dashboard">
@@ -327,6 +347,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260701-backtesting"></script>
+    <script type="module" src="app.js?v=20260701-analysis-guide"></script>
   </body>
 </html>

@@ -121,6 +121,9 @@ Object.assign(elements, {
 Object.assign(elements, {
   auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results")
 });
+Object.assign(elements, {
+  toggleAnalysisGuide: document.querySelector("#toggle-analysis-guide"), analysisGuideContent: document.querySelector("#analysis-guide-content")
+});
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, (character) => ({
@@ -2112,6 +2115,23 @@ elements.matchesList.addEventListener("keydown", async (event) => {
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
+elements.toggleAnalysisGuide.addEventListener("click", () => {
+  const expanded = elements.toggleAnalysisGuide.getAttribute("aria-expanded") === "true";
+  elements.toggleAnalysisGuide.setAttribute("aria-expanded", String(!expanded));
+  elements.toggleAnalysisGuide.textContent = expanded ? "Mostrar" : "Ocultar";
+  elements.analysisGuideContent.hidden = expanded;
+});
+elements.analysisGuideContent.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-guide-target]");
+  if (!button) return;
+  switchView("dashboard");
+  if (button.dataset.guideTarget === "odds") {
+    if (!selectedFixture()) return showNotice("Selecciona un partido para consultar sus cuotas.");
+    openDataDetail("odds");
+    return;
+  }
+  document.querySelector(`#${button.dataset.guideTarget}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
 elements.auditFixture.addEventListener("change", () => { elements.runAudit.disabled = !elements.auditFixture.value; });
 elements.runAudit.addEventListener("click", runSelectedAudit);
 elements.notificationToggle.addEventListener("click", () => {

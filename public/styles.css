@@ -660,6 +660,23 @@ body:has(.data-dialog[open]) { overflow: hidden; }
   .pick-color-legend { gap: 8px; padding: 7px; }
 }
 
+.analysis-guide { width: min(1920px, calc(100% - 28px)); padding: 10px 14px; margin: 12px auto 0; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; }
+.analysis-guide__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.analysis-guide__heading h2 { margin: 1px 0 0; font-size: 1rem; }
+.analysis-guide__content { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--border); }
+.analysis-guide__item { display: grid; align-content: start; gap: 4px; min-width: 0; padding: 11px; color: var(--text); text-align: left; background: var(--surface-subtle); border: 1px solid var(--border); border-top: 3px solid #64748b; border-radius: 7px; cursor: pointer; }
+.analysis-guide__item:hover { border-color: var(--primary); transform: translateY(-1px); }
+.analysis-guide__item--market { border-top-color: #3978c5; }
+.analysis-guide__item--primary { border-top-color: #16805a; }
+.analysis-guide__item--support { border-top-color: #d49a20; }
+.analysis-guide__item span { color: var(--muted); font-size: .64rem; font-weight: 800; text-transform: uppercase; }
+.analysis-guide__item strong { font-size: .8rem; }
+.analysis-guide__item small { color: var(--muted); font-size: .68rem; line-height: 1.45; }
+:root[data-theme="dark"] .analysis-guide, :root[data-theme="dark"] .analysis-guide__item { color: var(--text); background: var(--surface); border-color: var(--border); }
+:root[data-theme="dark"] .analysis-guide__item { background: var(--surface-subtle); }
+@media (max-width: 900px) { .analysis-guide__content { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .analysis-guide { width: calc(100% - 14px); padding: 10px; margin-top: 7px; } .analysis-guide__content { grid-template-columns: 1fr; } .analysis-guide__heading .button { min-height: 40px; } }
+
 .audit-controls { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 9px; align-items: end; margin-bottom: 12px; }
 .audit-controls label { grid-column: 1 / -1; color: var(--muted); font-size: .72rem; font-weight: 800; }
 .audit-controls select { min-height: 42px; }
