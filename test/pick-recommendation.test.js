@@ -140,7 +140,7 @@ function profileDataset({ home, away, favoriteSide = null, favoritePercent = nul
   };
 }
 
-test("Senegal 1X es conservador e Iraq X2 es falso valor", () => {
+test("Senegal 1X con EV negativo e Iraq X2 de falso valor se evitan", () => {
   const input = profileDataset({
     home: "Senegal", away: "Iraq", homeAttack: 1.7, awayAttack: 0.65,
     markets: [calculation("1X", "Senegal o empate (1X)", -4, 1.04), calculation("X2", "Iraq o empate (X2)", 143, 3.4)]
@@ -148,29 +148,29 @@ test("Senegal 1X es conservador e Iraq X2 es falso valor", () => {
   const result = evaluatePickRecommendations(input);
   assert.equal(result.favoriteTeam, "Senegal");
   assert.equal(result.favoriteStrength, "strong");
-  assert.equal(result.picks.find((pick) => pick.selectionKey === "1X").highlightColor, "green");
+  assert.equal(result.picks.find((pick) => pick.selectionKey === "1X").highlightColor, "red");
   assert.equal(result.picks.find((pick) => pick.selectionKey === "X2").highlightColor, "red");
 });
 
-test("Belgium X2 queda verde y New Zealand 1X rojo", () => {
+test("Belgium X2 con EV negativo y New Zealand 1X quedan rojos", () => {
   const input = profileDataset({
     home: "New Zealand", away: "Belgium", homeAttack: 0.7, awayAttack: 1.9,
     markets: [calculation("1X", "New Zealand o empate (1X)", 150, 3.6), calculation("X2", "Belgium o empate (X2)", -3, 1.03)]
   });
   const result = evaluatePickRecommendations(input);
   assert.equal(result.favoriteTeam, "Belgium");
-  assert.equal(result.picks.find((pick) => pick.selectionKey === "X2").highlightColor, "green");
+  assert.equal(result.picks.find((pick) => pick.selectionKey === "X2").highlightColor, "red");
   assert.equal(result.picks.find((pick) => pick.selectionKey === "1X").colorMeaning, "Evitar");
 });
 
-test("Tunisia 1X no supera a Netherlands X2", () => {
+test("Tunisia 1X y Netherlands X2 se omiten cuando ninguno tiene valor", () => {
   const input = profileDataset({
     home: "Tunisia", away: "Netherlands", homeAttack: 0.75, awayAttack: 2,
     markets: [calculation("1X", "Tunisia o empate (1X)", 120, 3.2), calculation("X2", "Netherlands o empate (X2)", -2, 1.01)]
   });
   const result = evaluatePickRecommendations(input);
-  assert.equal(result.recommendedPick.selectionKey, "X2");
-  assert.equal(result.discardedPicks[0].selectionKey, "1X");
+  assert.equal(result.recommendedPick, null);
+  assert.deepEqual(new Set(result.discardedPicks.map((pick) => pick.selectionKey)), new Set(["1X", "X2"]));
 });
 
 test("perfil cerrado favorece Under 2.5 y BTTS No", () => {

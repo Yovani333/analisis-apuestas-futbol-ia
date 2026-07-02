@@ -278,10 +278,10 @@ export function invalidateFixtureCache(fixtureId) {
   }
 }
 
-export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}) {
+export async function getFixtureDataset(fixtureId, { forceRefresh = false, includeHistorical = false } = {}) {
   if (forceRefresh) invalidateFixtureCache(fixtureId);
   const cachedDataset = datasetCache.get(fixtureId);
-  if (cachedDataset?.expiresAt > Date.now()) return cachedDataset.value;
+  if (cachedDataset?.expiresAt > Date.now() && (!includeHistorical || cachedDataset.value.historicalEstimatedXg)) return cachedDataset.value;
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const base = fixtureRows[0];
   if (!base) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
@@ -360,7 +360,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false } = {}
   };
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
   const currentFixtureXgAvailable = ["available", "partial"].includes(dataset.estimatedXg?.status);
-  const historicalXgMode = fixture.status === "scheduled" || !currentFixtureXgAvailable;
+  const historicalXgMode = includeHistorical || fixture.status === "scheduled" || !currentFixtureXgAvailable;
   const retainOfficialHistoryForCorners = fixture.leagueSlug === "world-cup";
   console.info("[xg-mode]", {
     fixtureId: fixture.id,

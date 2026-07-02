@@ -53,7 +53,11 @@ function makePick(dataset, definition, probability, evidence, contradictions = [
   let highlightColor = confidence >= 70 ? "green" : confidence >= 50 ? "orange" : "red";
   let level = highlightColor === "green" ? "Confiable" : highlightColor === "orange" ? "Conservador" : "Evitar";
   if (ev !== null && ev >= 5 && confidence >= 55 && contradictions.length === 0) { highlightColor = "blue"; level = "Value"; }
-  if (ev !== null && ev < 0 && highlightColor === "blue") { highlightColor = "orange"; level = "Conservador"; }
+  if (ev !== null && ev < 0) {
+    highlightColor = ev <= -2 ? "red" : "orange";
+    level = ev <= -2 ? "Evitar" : "Conservador";
+    contradictions = [...contradictions, `la cuota exige ${implied}% y el modelo estima ${round(probability)}%`];
+  }
   if (contradictions.length && ev !== null && ev > 0) { highlightColor = confidence >= 50 ? "orange" : "red"; level = "Riesgo"; }
   const explanation = `${definition.selection}: probabilidad estimada ${round(probability)}% con ${evidence.slice(0, 2).join("; ") || "respaldo estadístico parcial"}.${contradictions.length ? ` Precaución: ${contradictions.join("; ")}.` : ""}`;
   return {

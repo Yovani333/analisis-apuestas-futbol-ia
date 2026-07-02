@@ -205,7 +205,7 @@ function riskFlagsFor(calculation, context, confirmations) {
   if (calculation.selectionKey === "btts_yes" && ["favorite_defensive", "closed_balanced"].includes(context.profile)) flags.push("btts_yes_weak_attack");
   if (calculation.selectionKey === "btts_no" && context.profile === "competitive_open") flags.push("btts_no_open_match");
   if (numeric(calculation.estimatedProbabilityPct) < 50) flags.push("model_probability_low");
-  if (numeric(calculation.expectedValuePct) < 0 && !(side && side === context.favorite.side)) flags.push("negative_ev_non_conservative");
+  if (numeric(calculation.expectedValuePct) < 0) flags.push("negative_ev");
   return flags;
 }
 
@@ -217,8 +217,8 @@ function riskScore(flags, calculation) {
 
 function explanationFor(item, favoriteName) {
   if (item.riskFlags.includes("false_value_underdog")) return `El EV es alto, pero el pick va contra un favorito real fuerte (${favoriteName}).`;
+  if (item.riskFlags.includes("negative_ev")) return `La cuota exige una probabilidad implícita de ${item.impliedProbabilityPct}%, pero el modelo estima ${item.estimatedProbabilityPct}%. No hay valor suficiente.`;
   if (item.highlightColor === "red") return "Falso valor probable o pick contrario al perfil del partido.";
-  if (item.expectedValuePct < 0 && item.safetyScore >= 75) return "Aunque el EV es negativo por cuota baja, la confianza futbolística y la seguridad son superiores.";
   if (item.selectionKey === "over_2_5" && item.profileAligned) return "El perfil del partido es abierto y hay señales ofensivas suficientes.";
   if (item.selectionKey === "under_2_5" && item.profileAligned) return "El perfil del partido es cerrado y las señales favorecen marcador corto.";
   if (item.selectionKey === "btts_yes" && item.profileAligned) return "Ambos equipos muestran señal ofensiva suficiente.";
@@ -228,7 +228,7 @@ function explanationFor(item, favoriteName) {
 }
 
 function classifyVisual(finalPickScore, riskFlags, risk) {
-  const severe = riskFlags.includes("false_value_underdog") || riskFlags.includes("negative_ev_non_conservative") || risk >= 70;
+  const severe = riskFlags.includes("false_value_underdog") || riskFlags.includes("negative_ev") || risk >= 70;
   if (!severe && finalPickScore >= 70) return { highlightColor: "green", confidenceLevel: "Alta", colorMeaning: "Confiable" };
   if (!severe && finalPickScore >= 50) return { highlightColor: "orange", confidenceLevel: "Media", colorMeaning: "Riesgo" };
   return { highlightColor: "red", confidenceLevel: "Baja", colorMeaning: "Evitar" };

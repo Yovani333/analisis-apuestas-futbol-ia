@@ -31,6 +31,9 @@
           <span aria-hidden="true">♧</span> Alertas
           <span id="alert-count" class="nav-count">0</span>
         </button>
+        <button class="main-nav__item" type="button" data-view="audit">
+          Auditoría
+        </button>
         <button class="main-nav__item" type="button" data-view="account">
           <span aria-hidden="true">◎</span> Mi cuenta <span aria-hidden="true">⌄</span>
         </button>
@@ -260,6 +263,20 @@
       <div id="alerts-list" class="alerts-list"></div>
     </main>
 
+    <main class="utility-view" data-view-panel="audit" hidden>
+      <section class="utility-heading">
+        <div><p class="eyebrow">Validación retrospectiva</p><h2>Auditoría de Picks / Backtesting</h2><p>Reconstruye el análisis prepartido y lo compara con el resultado final, sin usar OpenAI.</p></div>
+        <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+      </section>
+      <section class="panel audit-controls">
+        <label for="audit-fixture">Partido finalizado</label>
+        <select id="audit-fixture"><option value="">Busca partidos finalizados en el Dashboard</option></select>
+        <button id="run-audit" class="button button--primary" type="button" disabled>Ejecutar auditoría</button>
+      </section>
+      <div class="pick-color-legend"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Valor</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>
+      <section id="audit-results" class="panel"><div class="saved-empty"><h3>Sin auditoría ejecutada</h3><p>Selecciona un partido finalizado. Los partidos en vivo no se incluyen en resultados definitivos.</p></div></section>
+    </main>
+
     <main class="utility-view" data-view-panel="account" hidden>
       <section class="utility-heading"><div><p class="eyebrow">Preferencias locales</p><h2>Mi cuenta</h2><p>Configuración guardada únicamente en este navegador.</p></div><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></section>
       <form id="account-form" class="account-grid">
@@ -310,6 +327,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260701-ui-phase11"></script>
+    <script type="module" src="app.js?v=20260701-backtesting"></script>
   </body>
 </html>

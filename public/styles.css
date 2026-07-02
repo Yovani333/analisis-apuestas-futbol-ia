@@ -659,6 +659,16 @@ body:has(.data-dialog[open]) { overflow: hidden; }
   .coverage-table td:first-child, .coverage-table td:nth-child(3), .coverage-table td:nth-child(4), .coverage-table td:nth-child(5), .source-table td:last-child { min-width: 0; }
   .pick-color-legend { gap: 8px; padding: 7px; }
 }
+
+.audit-controls { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 9px; align-items: end; margin-bottom: 12px; }
+.audit-controls label { grid-column: 1 / -1; color: var(--muted); font-size: .72rem; font-weight: 800; }
+.audit-controls select { min-height: 42px; }
+.audit-table-wrap { max-height: 68vh; overflow: auto; overscroll-behavior: contain; }
+.audit-row--green { box-shadow: inset 4px 0 var(--success); }
+.audit-row--orange { box-shadow: inset 4px 0 var(--warning); }
+.audit-row--red { box-shadow: inset 4px 0 var(--danger); }
+:root[data-theme="dark"] .audit-row { background: var(--surface); color: var(--text); }
+@media (max-width: 520px) { .audit-controls { grid-template-columns: 1fr; } .audit-controls label { grid-column: auto; } .audit-controls .button { width: 100%; } .audit-table-wrap { max-height: none; overflow: visible; } }
 .site-last-update { padding-left: 9px; color: var(--muted); font-size: .66rem; border-left: 1px solid var(--border); }
 
 :root[data-theme="dark"] .app-header, :root[data-theme="dark"] .data-dialog,

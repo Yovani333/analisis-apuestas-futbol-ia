@@ -118,6 +118,9 @@ Object.assign(elements, {
   accountDarkMode: document.querySelector("#account-dark-mode"), accountAutoRefresh: document.querySelector("#account-auto-refresh"),
   accountDailyLimit: document.querySelector("#account-daily-limit")
 });
+Object.assign(elements, {
+  auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results")
+});
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, (character) => ({
@@ -1334,6 +1337,7 @@ function switchView(view) {
     if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   if (view === "saved") { renderSavedPicks(); renderSavedParlays(); }
+  if (view === "audit") renderAuditFixtureOptions();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1423,6 +1427,34 @@ function showAnalysisEmpty() {
   elements.analysisStatus.className = "status-badge status-badge--unavailable";
   elements.analysisStatus.textContent = "No disponible";
   elements.analysisContent.innerHTML = '<div class="empty-state"><span class="empty-state__icon" aria-hidden="true">✦</span><h3>Partido seleccionado</h3><p>Analiza primero con el Motor de Reglas. OpenAI queda como explicación opcional.</p></div>';
+}
+
+function renderAuditFixtureOptions() {
+  const fixtures = state.fixtures.filter((fixture) => fixture.status === "finished");
+  elements.auditFixture.innerHTML = fixtures.length
+    ? `<option value="">Selecciona un partido</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}</option>`).join("")}`
+    : '<option value="">Busca partidos finalizados en el Dashboard</option>';
+  elements.runAudit.disabled = !fixtures.length;
+}
+
+function renderAuditResults(audit) {
+  const metrics = audit.metrics || {};
+  const rows = (audit.records || []).map((row) => `<tr class="audit-row audit-row--${escapeHtml(row.color)}">
+    <td data-label="Fecha">${escapeHtml(String(row.date || "").slice(0, 10))}</td><td data-label="Partido">${escapeHtml(row.match)}</td><td data-label="Liga">${escapeHtml(row.league)}</td>
+    <td data-label="Mercado">${escapeHtml(row.market)}</td><td data-label="Pick">${escapeHtml(row.pick)}</td><td data-label="Cuota">${displayValue(row.odds)}</td>
+    <td data-label="Implícita">${displayValue(row.impliedProbability)}%</td><td data-label="Modelo">${displayValue(row.modelProbability)}%</td><td data-label="EV">${displayValue(row.expectedValue)}%</td>
+    <td data-label="Confianza">${displayValue(row.confidence)}/100</td><td data-label="Calidad">${escapeHtml(row.dataQuality)}</td><td data-label="Resultado">${escapeHtml(row.finalScore)}</td>
+    <td data-label="Estado"><strong>${escapeHtml(row.outcome)}</strong></td><td data-label="Error">${escapeHtml(row.errorDetected || "Sin error crítico")}</td><td data-label="Recomendación">${escapeHtml(row.recommendation)}</td></tr>`).join("");
+  elements.auditResults.innerHTML = `<div class="history-metrics"><article><span>Picks</span><strong>${displayValue(metrics.totalPicks, 0)}</strong></article><article><span>Hit rate</span><strong>${displayValue(metrics.hitRate)}%</strong></article><article><span>ROI teórico</span><strong>${displayValue(metrics.ROI)}%</strong></article><article><span>Error calibración</span><strong>${displayValue(metrics.calibrationError)}</strong></article><article><span>NO BET</span><strong>${displayValue(metrics.noBets, 0)}</strong></article></div><p class="market-disclaimer">Reconstrucción prepartido: no usa estadísticas del fixture actual. HIT no significa que el pick tuviera buen valor; NO BET puede acertar y seguir siendo una decisión correctamente omitida.</p><div class="detail-table-wrap audit-table-wrap"><table class="detail-table"><thead><tr><th>Fecha</th><th>Partido</th><th>Liga</th><th>Mercado</th><th>Pick</th><th>Cuota</th><th>Prob. implícita</th><th>Prob. modelo</th><th>EV</th><th>Confianza</th><th>Data Quality</th><th>Resultado final</th><th>Estado</th><th>Error detectado</th><th>Recomendación</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function runSelectedAudit() {
+  if (!elements.auditFixture.value) return;
+  elements.runAudit.disabled = true;
+  elements.runAudit.textContent = "Auditando…";
+  try { renderAuditResults(await footballDataService.auditFixture(elements.auditFixture.value)); }
+  catch (error) { elements.auditResults.innerHTML = `<div class="saved-empty"><h3>No se pudo ejecutar la auditoría</h3><p>${escapeHtml(error.message)}</p></div>`; }
+  finally { elements.runAudit.disabled = false; elements.runAudit.textContent = "Ejecutar auditoría"; }
 }
 
 function renderDataPicks(result) {
@@ -2080,6 +2112,8 @@ elements.matchesList.addEventListener("keydown", async (event) => {
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
+elements.auditFixture.addEventListener("change", () => { elements.runAudit.disabled = !elements.auditFixture.value; });
+elements.runAudit.addEventListener("click", runSelectedAudit);
 elements.notificationToggle.addEventListener("click", () => {
   const open = elements.notificationToggle.getAttribute("aria-expanded") === "true";
   elements.notificationToggle.setAttribute("aria-expanded", String(!open));
