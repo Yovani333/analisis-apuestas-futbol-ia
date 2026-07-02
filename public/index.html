@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260630-rule-engine" />
+    <link rel="stylesheet" href="styles.css?v=20260701-ui-phase11" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -115,6 +115,7 @@
           <button class="button button--primary button--full" type="submit">
             <span aria-hidden="true">⌕</span> Buscar partidos
           </button>
+          <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
           <p id="data-mode-note" class="helper-text">La búsqueda actual usa escenarios sintéticos y no representa partidos reales.</p>
         </form>
       </aside>
@@ -145,6 +146,7 @@
               <h2 id="data-title">Datos del partido</h2>
             </div>
             <div class="panel-actions">
+              <button id="open-odds-detail" class="button button--secondary button--compact" type="button" disabled>Ver cuotas</button>
               <button id="refresh-coverage" class="button button--secondary button--compact" type="button" disabled>Actualizar</button>
               <span id="data-overall-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
@@ -166,8 +168,6 @@
               <button id="refresh-research" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button>
             </div>
           </div>
-
-          <div class="quick-filters" aria-label="Filtros rápidos"><button id="set-today" class="button button--secondary button--compact" type="button" data-quick-date="today">Hoy</button><button class="button button--secondary button--compact" type="button" data-quick-date="tomorrow">Mañana</button><button class="button button--secondary button--compact" type="button" data-quick-date="week">Esta semana</button><button class="button button--secondary button--compact" type="button" data-quick-status="live">En vivo</button><button class="button button--secondary button--compact" type="button" data-quick-status="scheduled">Próximos</button></div>
           <div id="research-content" hidden>
             <div id="research-summary" class="research-empty">
               Selecciona un partido para consultar el nivel de confianza y las fuentes utilizadas.
@@ -188,27 +188,27 @@
           <div id="data-picks-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para evaluar mercados con los datos disponibles.</div></div>
         </section>
 
-        <section id="poisson-panel" class="panel poisson-panel" aria-labelledby="poisson-title">
+        <section id="poisson-panel" class="panel poisson-panel advanced-module-panel" aria-labelledby="poisson-title">
           <div class="panel-heading">
             <div><p class="eyebrow">Estadísticas avanzadas</p><h2 id="poisson-title">Modelo Poisson</h2></div>
             <div class="panel-actions">
-              <button id="show-poisson" class="button button--secondary button--compact" type="button" disabled>Ver datos</button>
+              <button id="show-poisson" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Ver datos</button>
               <span id="poisson-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
           </div>
           <div id="poisson-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para calcular probabilidades con Poisson.</div></div>
         </section>
 
-        <section id="team-goals-panel" class="panel team-goals-panel" aria-labelledby="team-goals-title">
+        <section id="team-goals-panel" class="panel team-goals-panel advanced-module-panel" aria-labelledby="team-goals-title">
           <div class="panel-heading">
             <div><p class="eyebrow">Ataque vs defensa</p><h2 id="team-goals-title">Probabilidad de Gol por Equipo</h2></div>
-            <div class="panel-actions"><button id="show-team-goals" class="button button--secondary button--compact" type="button" disabled>Ver datos</button><span id="team-goals-status" class="status-badge status-badge--unavailable">No disponible</span></div>
+            <div class="panel-actions"><button id="show-team-goals" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Ver datos</button><span id="team-goals-status" class="status-badge status-badge--unavailable">No disponible</span></div>
           </div>
           <div id="team-goals-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para evaluar la posibilidad de gol de cada equipo.</div></div>
         </section>
 
-        <section id="corners-panel" class="panel corners-panel" aria-labelledby="corners-title">
-          <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners</h2></div><div class="panel-actions"><button id="show-corners" class="button button--secondary button--compact" type="button" disabled>Ver datos</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+        <section id="corners-panel" class="panel corners-panel advanced-module-panel" aria-labelledby="corners-title">
+          <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners</h2></div><div class="panel-actions"><button id="show-corners" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Ver datos</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
           <div id="corners-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar corners oficiales históricos.</div></div>
         </section>
 
@@ -308,10 +308,8 @@
 
     <button id="open-parlay-slip" class="parlay-fab" type="button" aria-label="Abrir mi parlay" hidden>
       Mi parlay <span id="parlay-fab-count">0</span>
-          </button>
-          <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
-          <button id="clear-filters" class="button button--secondary button--full" type="button">Limpiar filtros</button>
+    </button>
 
-    <script type="module" src="app.js?v=20260701-quality-matrix"></script>
+    <script type="module" src="app.js?v=20260701-ui-phase11"></script>
   </body>
 </html>

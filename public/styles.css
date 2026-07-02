@@ -1214,3 +1214,45 @@ body {
   .pick-actions { width: 100%; }
   .pick-actions .button { flex: 1 1 130px; }
 }
+
+/* Phase 11: compact hierarchy for advanced data modules. */
+.advanced-module-panel { border-top-width: 3px; }
+.advanced-module-panel:has(> [hidden]) { padding-top: 11px; padding-bottom: 11px; }
+.advanced-module-panel:has(> [hidden]) .panel-heading { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
+.advanced-module-panel .button[aria-expanded="true"] { color: #ffffff; background: var(--success); border-color: var(--success); }
+.coverage-table-wrap { max-height: min(580px, 62vh); overflow: auto; overscroll-behavior: contain; }
+.coverage-table thead { position: sticky; top: 0; z-index: 1; }
+
+:root[data-theme="dark"] .data-pick,
+:root[data-theme="dark"] .team-goal-card,
+:root[data-theme="dark"] .corner-team,
+:root[data-theme="dark"] .poisson-summary article,
+:root[data-theme="dark"] .poisson-probabilities div,
+:root[data-theme="dark"] .likely-scores div,
+:root[data-theme="dark"] .team-goal-kpis span,
+:root[data-theme="dark"] .team-goal-evidence > div { color: var(--text); background: var(--surface-subtle); border-color: var(--border); }
+:root[data-theme="dark"] .data-picks-warnings,
+:root[data-theme="dark"] .corner-summary,
+:root[data-theme="dark"] .analysis-timing--early_value,
+:root[data-theme="dark"] .analysis-timing--too_early { color: #fde68a; background: #3b2f15; border-color: #765c20; }
+:root[data-theme="dark"] .team-goal-summary,
+:root[data-theme="dark"] .live-corner-alert,
+:root[data-theme="dark"] .analysis-timing--ideal,
+:root[data-theme="dark"] .analysis-timing--final_confirmation,
+:root[data-theme="dark"] .analysis-timing--last_review { color: #a7f3d0; background: #12382b; border-color: #28634c; }
+:root[data-theme="dark"] .analysis-timing { color: #bfdbfe; background: #172f4c; border-color: #315b87; }
+:root[data-theme="dark"] .source-chip--api { color: #bfdbfe; background: #1d3553; }
+:root[data-theme="dark"] .source-chip--model { color: #c4b5fd; background: #35285c; }
+:root[data-theme="dark"] .source-chip--external { color: #fef3c7; background: #433719; }
+
+@media (max-width: 520px) {
+  .panel-heading { align-items: stretch; flex-direction: column; }
+  .panel-actions { width: 100%; align-items: center; flex-flow: row wrap; }
+  .panel-actions .button { flex: 1 1 125px; min-height: 40px; }
+  .panel-actions .status-badge { margin-left: auto; }
+  .coverage-table-wrap { max-height: none; overflow: visible; }
+  .coverage-table thead { position: static; }
+  .advanced-module-panel:has(> [hidden]) .panel-heading { flex-direction: row; align-items: center; }
+  .advanced-module-panel:has(> [hidden]) .panel-actions { width: auto; justify-content: flex-end; }
+  .advanced-module-panel:has(> [hidden]) .panel-actions .button { flex: 0 0 auto; }
+}

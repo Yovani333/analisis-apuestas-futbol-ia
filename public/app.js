@@ -64,6 +64,7 @@ const elements = {
   selectedSummary: document.querySelector("#selected-match-summary"),
   dataStatus: document.querySelector("#data-overall-status"),
   dataGrid: document.querySelector("#data-grid"),
+  openOddsDetail: document.querySelector("#open-odds-detail"),
   refreshCoverage: document.querySelector("#refresh-coverage"),
   researchContent: document.querySelector("#research-content"),
   toggleResearch: document.querySelector("#toggle-research"),
@@ -507,6 +508,7 @@ function renderFixtureData() {
   elements.cornersContent.hidden = true;
   if (savedCorners) { elements.showCorners.textContent = "Mostrar"; elements.showCorners.classList.remove("button--ready"); }
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
+  elements.openOddsDetail.disabled = false;
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
 }
@@ -1901,6 +1903,7 @@ elements.dataGrid.addEventListener("click", (event) => {
   const card = event.target.closest("[data-category]");
   if (card) openDataDetail(card.dataset.category);
 });
+elements.openOddsDetail.addEventListener("click", () => openDataDetail("odds"));
 elements.researchGrid.addEventListener("click", (event) => {
   const supportingButton = event.target.closest("[data-supporting-module]");
   if (supportingButton) {
