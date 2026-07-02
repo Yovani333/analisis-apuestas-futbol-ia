@@ -1278,8 +1278,8 @@ body {
 .advanced-module-panel:has(> [hidden]) { padding-top: 11px; padding-bottom: 11px; }
 .advanced-module-panel:has(> [hidden]) .panel-heading { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
 .advanced-module-panel .button[aria-expanded="true"] { color: #ffffff; background: var(--success); border-color: var(--success); }
-.coverage-table-wrap { max-height: min(580px, 62vh); overflow: auto; overscroll-behavior: contain; }
-.coverage-table thead { position: sticky; top: 0; z-index: 1; }
+.coverage-table-wrap { max-height: none; overflow-x: auto; overflow-y: visible; overscroll-behavior: auto; }
+.coverage-table thead { position: static; }
 
 :root[data-theme="dark"] .data-pick,
 :root[data-theme="dark"] .team-goal-card,

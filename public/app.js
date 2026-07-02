@@ -1464,7 +1464,7 @@ function openGuideCoverage() {
   switchView("guide");
   const coverage = document.querySelector("#guide-coverage-module");
   if (coverage) coverage.open = true;
-  window.requestAnimationFrame(() => coverage?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  window.requestAnimationFrame(() => coverage?.scrollIntoView({ behavior: "auto", block: "start" }));
 }
 
 function showAnalysisEmpty() {
