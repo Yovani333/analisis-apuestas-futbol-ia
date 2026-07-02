@@ -122,8 +122,12 @@ Object.assign(elements, {
   auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results")
 });
 Object.assign(elements, {
-  analysisGuideContent: document.querySelector("#analysis-guide-content")
+  analysisGuideContent: document.querySelector("#analysis-guide-content"), guideOddsContent: document.querySelector("#guide-odds-content")
 });
+
+document.querySelector("#guide-data-picks-slot")?.append(document.querySelector("#data-picks-panel"));
+document.querySelector("#guide-poisson-slot")?.append(document.querySelector("#poisson-panel"));
+document.querySelector("#guide-team-goals-slot")?.append(document.querySelector("#team-goals-panel"));
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, (character) => ({
@@ -515,6 +519,7 @@ function renderFixtureData() {
   if (savedCorners) { elements.showCorners.textContent = "Mostrar"; elements.showCorners.classList.remove("button--ready"); }
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
   elements.openOddsDetail.disabled = false;
+  elements.guideOddsContent.innerHTML = renderOddsDetail(fixture.confirmedData?.odds || []);
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
 }
@@ -2115,17 +2120,6 @@ elements.matchesList.addEventListener("keydown", async (event) => {
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
-elements.analysisGuideContent.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-guide-target]");
-  if (!button) return;
-  switchView("dashboard");
-  if (button.dataset.guideTarget === "odds") {
-    if (!selectedFixture()) return showNotice("Selecciona un partido para consultar sus cuotas.");
-    openDataDetail("odds");
-    return;
-  }
-  document.querySelector(`#${button.dataset.guideTarget}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-});
 elements.auditFixture.addEventListener("change", () => { elements.runAudit.disabled = !elements.auditFixture.value; });
 elements.runAudit.addEventListener("click", runSelectedAudit);
 elements.notificationToggle.addEventListener("click", () => {
