@@ -212,6 +212,22 @@ function selectedLeagueSlugs() {
   return [...elements.form.querySelectorAll('input[name="league"]:checked')].map((input) => input.value);
 }
 
+function pickSignalClass(pick = {}) {
+  const odds = Number(pick.decimalOdds ?? pick.cuota_decimal);
+  const ev = Number(pick.expectedValuePct ?? pick.valor_esperado);
+  const confidence = Number(pick.finalPickScore ?? pick.confidenceScore ?? pick.confidencePct ?? 0);
+  const contradictions = [...(pick.contradictingData || []), ...(pick.riskFlags || [])];
+  const approvedColor = pick.highlightColor ? ["green", "blue"].includes(pick.highlightColor) : true;
+  const passes = odds > 1 && Number.isFinite(ev) && ev > 0 && confidence >= 60
+    && contradictions.length === 0 && approvedColor
+    && !pick.requiresReview && !pick.requiere_revision;
+  return passes ? "pick-signal--pass" : "pick-signal--fail";
+}
+
+function decoratePickSignals(container, selector, picks = []) {
+  container.querySelectorAll(selector).forEach((element, index) => element.classList.add(pickSignalClass(picks[index] || {})));
+}
+
 function showModuleReady(button, content) {
   content.hidden = false;
   button.textContent = "Listo";
@@ -689,7 +705,8 @@ function renderResearchModuleDetail(moduleKey, research) {
     ]);
     const legend = `<div class="pick-color-legend" aria-label="Leyenda de colores"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Confiable</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>`;
     const summary = decision.matchProfile ? `<div class="pick-decision-summary"><div><span>Favorito real</span><strong>${escapeHtml(decision.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(decision.favoriteStrength || "none")}</small></div><div><span>Perfil</span><strong>${escapeHtml(decision.matchProfile)}</strong></div><div><span>Mejor pick</span><strong>${escapeHtml(decision.recommendedPick?.selection || "Sin pick")}</strong></div><div><span>Alternativa conservadora</span><strong>${escapeHtml(decision.conservativeAlternative?.selection || "Sin alternativa")}</strong></div></div>` : "";
-    content = rows.length ? `${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación"], rows)}` : emptyDetail("No hay cuotas principales verificables.");
+    const rowClasses = (module.markets || []).map(pickSignalClass);
+    content = rows.length ? `${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación"], rows, rowClasses)}` : emptyDetail("No hay cuotas principales verificables.");
   } else if (moduleKey === "contextCalendar") {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
   } else if (moduleKey === "statsForm") {
@@ -838,9 +855,9 @@ function emptyDetail(message) {
   return `<div class="detail-empty"><strong>No hay datos para mostrar</strong><p>${escapeHtml(message)}</p></div>`;
 }
 
-function detailTable(headers, rows) {
+function detailTable(headers, rows, rowClasses = []) {
   if (!rows.length) return "";
-  return `<div class="detail-table-wrap"><table class="detail-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell, index) => `<td data-label="${escapeHtml(headers[index] || "Dato")}">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  return `<div class="detail-table-wrap"><table class="detail-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row, rowIndex) => `<tr class="${escapeHtml(rowClasses[rowIndex] || "")}">${row.map((cell, index) => `<td data-label="${escapeHtml(headers[index] || "Dato")}">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
 function formatSiteRelease(value) {
@@ -1385,7 +1402,7 @@ function renderAnalysis(analysis) {
     <section class="confidence-picks">
       <div class="confidence-picks__heading"><h3>Posibles picks por confianza</h3><small>Ordenados por confianza evaluada, no únicamente por EV.</small></div>
       <div class="confidence-picks__table" role="table" aria-label="Posibles picks ordenados por confianza">
-        ${pickReview.confidencePicks.map((pick) => `<div class="confidence-pick confidence-pick--${confidenceColor(pick)}" role="row">
+        ${pickReview.confidencePicks.map((pick) => `<div class="confidence-pick confidence-pick--${confidenceColor(pick)} ${pickSignalClass(pick)}" role="row">
           <span role="cell">${pick.rank}</span>
           <div role="cell"><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)} · ${escapeHtml(categoryLabels[pick.pickCategory] || pick.pickCategory)}</small>${pick.warning ? `<small>${escapeHtml(pick.warning)}</small>` : ""}</div>
           <div role="cell"><strong>${displayValue(pick.confidencePct)}%</strong><small>Prob. modelo ${displayValue(pick.estimatedProbabilityPct)}% · EV ${displayValue(pick.expectedValuePct)}%</small></div>
@@ -1429,6 +1446,7 @@ function renderAnalysis(analysis) {
     </div>
     <p class="analysis-warning">${escapeHtml(analysis.advertencia)}${analysis._source === "mock" ? " Esta salida usa datos sintéticos y no debe utilizarse para apostar." : ""}</p>
   `;
+  decoratePickSignals(elements.analysisContent, ".market-row--actionable", analysis.mercados_sugeridos);
 }
 
 function showAnalysisEmpty() {
@@ -1480,7 +1498,7 @@ function renderDataPicks(result) {
     <div class="analysis-timing analysis-timing--${escapeHtml(timing.window)}"><strong>${escapeHtml(timing.label)}</strong><span>${timing.minutesToKickoff === null ? "Hora del partido no disponible" : `${escapeHtml(timing.minutesToKickoff)} minutos para el inicio`}${timing.isConfirmed ? " · Confirmado por frescura" : ""}</span>${timing.warning ? `<small>${escapeHtml(timing.warning)}</small>` : ""}</div>
     ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
     <div class="data-picks-grid">${result.picks.map((pick) => `
-      <article class="data-pick data-pick--${escapeHtml(pick.highlightColor)}">
+      <article class="data-pick data-pick--${escapeHtml(pick.highlightColor)} ${pickSignalClass(pick)}">
         <div class="data-pick__heading"><div><small>${escapeHtml(pick.market)}</small><strong>${escapeHtml(pick.selection)}</strong></div><span>${escapeHtml(pick.level)}</span></div>
         <div class="data-pick__metrics"><span>Modelo <b>${displayValue(pick.modelProbabilityPct)}%</b></span><span>Cuota <b>${displayValue(pick.decimalOdds)}</b></span><span>EV <b>${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</b></span><span>Confianza <b>${escapeHtml(pick.confidenceScore)}%</b></span></div>
         <p>${escapeHtml(pick.explanation)}</p>
@@ -1578,6 +1596,7 @@ function renderPoisson(result) {
     </div>
     <section class="poisson-markets"><h3>Mercados derivados</h3>${result.suggestedMarkets.length ? result.suggestedMarkets.map((pick) => `<article class="poisson-market poisson-market--${escapeHtml(pick.highlightColor)}"><div><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)} · Modelo ${escapeHtml(pick.probabilityPct)}% · Cuota ${displayValue(pick.decimalOdds)} · EV ${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</small><small>Confianza ${escapeHtml(pick.confidenceScore)}/100 · ${escapeHtml(pick.level)}</small></div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-poisson="${escapeHtml(pick.selectionKey)}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-poisson="${escapeHtml(pick.selectionKey)}">Agregar al parlay</button></div></article>`).join("") : '<p class="muted-text">No hay mercados con respaldo mínimo suficiente.</p>'}</section>
     <p class="market-disclaimer">Poisson es una referencia matemática parcial y no decide por sí solo el pick final.</p>`;
+  decoratePickSignals(elements.poissonContent, ".poisson-market", result.suggestedMarkets);
 }
 
 async function loadPoisson() {
@@ -1645,6 +1664,7 @@ function renderTeamGoals(result) {
   }
   const teamCard = (team) => `<article class="team-goal-card"><div class="team-goal-card__heading"><div><small>${escapeHtml(team.side === "home" ? "Equipo 1 / local" : "Equipo 2 / visitante")}</small><h3>${escapeHtml(team.team)}</h3></div>${statusBadge(team.status === "available" ? "Disponible" : "Parcial")}</div><div class="team-goal-kpis"><span>Marca 0.5+<strong>${escapeHtml(team.over05Pct)}%</strong></span><span>No marca<strong>${escapeHtml(team.noGoalPct)}%</strong></span><span>Marca 1.5+<strong>${escapeHtml(team.over15Pct)}%</strong></span><span>Confianza<strong>${escapeHtml(team.confidenceScore)}/100</strong></span></div><div class="team-goal-evidence"><div><strong>Apoya</strong>${team.supportingData.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div><div><strong>Contradice</strong>${team.contradictingData.length ? team.contradictingData.map((item) => `<span>${escapeHtml(item)}</span>`).join("") : "<span>Sin contradicción fuerte detectada.</span>"}</div></div></article>`;
   elements.teamGoalsContent.innerHTML = `<div class="team-goal-summary"><strong>BTTS: ${escapeHtml(result.btts.support)}</strong><span>Sí ${escapeHtml(result.btts.yesProbabilityPct)}% · No ${escapeHtml(result.btts.noProbabilityPct)}% · Confianza ${escapeHtml(result.confidenceScore)}/100</span></div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="team-goal-grid">${teamCard(result.teams.home)}${teamCard(result.teams.away)}</div><section class="poisson-markets"><h3>Mercados derivados</h3>${result.picks.length ? result.picks.map((pick) => `<article class="poisson-market poisson-market--${escapeHtml(pick.highlightColor)}"><div><strong>${escapeHtml(pick.selection)}</strong><small>Modelo ${escapeHtml(pick.modelProbabilityPct)}% · Cuota ${displayValue(pick.decimalOdds)} · EV ${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</small><small>Confianza ${escapeHtml(pick.confidenceScore)}/100 · ${escapeHtml(pick.level)}</small></div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-team-goal="${escapeHtml(pick.selectionKey)}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-team-goal="${escapeHtml(pick.selectionKey)}">Agregar al parlay</button></div></article>`).join("") : '<p class="muted-text">No hay mercado con respaldo mínimo.</p>'}</section><p class="market-disclaimer">La probabilidad combina varias señales. Posesión aislada no implica peligro real ni alta confianza.</p>`;
+  decoratePickSignals(elements.teamGoalsContent, ".poisson-market", result.picks);
 }
 
 async function loadTeamGoals() {
@@ -1673,6 +1693,7 @@ function renderCorners(result) {
   if (result.status === "not_available") { elements.cornersContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warning || "Corners no disponible.")}</div>`; return; }
   const team = (data, label) => `<article class="corner-team"><div><small>${escapeHtml(label)}</small><h3>${escapeHtml(data.tier)}</h3></div><div class="team-goal-kpis"><span>A favor<strong>${displayValue(data.cornersForAvg)}</strong></span><span>En contra<strong>${displayValue(data.cornersAgainstAvg)}</strong></span><span>Posesión<strong>${displayValue(data.possessionAvg)}%</strong></span><span>Tiros<strong>${displayValue(data.shotsAvg)}</strong></span><span>Bloqueados<strong>${displayValue(data.blockedShotsAvg)}</strong></span><span>Esperados<strong>${displayValue(data.expectedCorners)}</strong></span></div><small>${data.useful} oficiales usados · ${data.excludedFriendlies} amistosos excluidos</small><small>${escapeHtml(data.competitions.join(" · ") || "Competición no informada")}</small></article>`;
   elements.cornersContent.innerHTML = `<div class="corner-summary"><strong>${escapeHtml(result.preMatchSignal)}</strong><span>Total esperado ${escapeHtml(result.totalExpectedCorners)} · Disparidad ${escapeHtml(result.disparity)} · Confianza ${escapeHtml(result.confidenceScore)}/100</span></div>${result.live?.alert ? `<div class="live-corner-alert">${escapeHtml(result.live.alert)}</div>` : ""}${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="corner-grid">${team(result.teams.home, selectedFixture()?.home || "Local")}${team(result.teams.away, selectedFixture()?.away || "Visitante")}</div><div class="detail-note detail-note--info"><strong>Game State</strong><span>${escapeHtml(result.live?.competitiveNeed || "Necesidad competitiva no disponible")}</span></div>${result.picks?.length ? `<section class="poisson-markets"><h3>Mercados con cuota disponible</h3>${result.picks.map((pick) => `<article class="poisson-market poisson-market--${escapeHtml(pick.highlightColor)}"><div><strong>${escapeHtml(pick.selection)}</strong><small>Cuota ${displayValue(pick.decimalOdds)} · Modelo ${displayValue(pick.modelProbabilityPct)}% · EV ${displayValue(pick.expectedValuePct)}%</small></div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-corners="${escapeHtml(pick.selectionKey)}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-corners="${escapeHtml(pick.selectionKey)}">Agregar al parlay</button></div></article>`).join("")}</section>` : '<p class="market-disclaimer">No se muestra Agregar pick porque no hay una cuota de corners compatible.</p>'}`;
+  decoratePickSignals(elements.cornersContent, ".poisson-market", result.picks);
 }
 
 async function loadCorners() {

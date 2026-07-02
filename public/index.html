@@ -246,20 +246,20 @@
       </section>
       <section class="guide-modules" aria-label="Módulos de análisis">
         <details class="guide-module guide-module--market">
-          <summary><span>Dato de mercado</span><strong>Ver cuotas</strong><em>Mostrar</em></summary>
-          <div class="guide-module__body"><p>Máxima confianza como dato de mercado, pero no como recomendación. Compara siempre la probabilidad implícita contra la probabilidad del modelo.</p><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div>
+          <summary><span>Dato de mercado</span><strong>Ver cuotas</strong><small>Dato confiable de mercado; compara implícita contra modelo.</small><em>Mostrar</em></summary>
+          <div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div>
         </details>
         <details class="guide-module guide-module--primary">
-          <summary><span>Decisión principal</span><strong>Picks basados en datos</strong><em>Mostrar</em></summary>
-          <div class="guide-module__body"><p>Considera solamente picks con EV positivo, buena calidad de datos y sin contradicciones fuertes.</p><div id="guide-data-picks-slot"></div></div>
+          <summary><span>Decisión principal</span><strong>Picks basados en datos</strong><small>Prioriza EV positivo, buena calidad y sin contradicciones.</small><em>Mostrar</em></summary>
+          <div class="guide-module__body"><div id="guide-data-picks-slot"></div></div>
         </details>
         <details class="guide-module guide-module--support">
-          <summary><span>Apoyo medio</span><strong>Modelo Poisson</strong><em>Mostrar</em></summary>
-          <div class="guide-module__body"><p>Úsalo como apoyo para Over/Under y marcadores. Es sensible a la calidad de las estimaciones de entrada.</p><div id="guide-poisson-slot"></div></div>
+          <summary><span>Apoyo medio</span><strong>Modelo Poisson</strong><small>Apoyo para goles y marcadores; depende de buenos datos de entrada.</small><em>Mostrar</em></summary>
+          <div class="guide-module__body"><div id="guide-poisson-slot"></div></div>
         </details>
         <details class="guide-module guide-module--support">
-          <summary><span>Apoyo complementario</span><strong>Probabilidad de Gol por Equipo</strong><em>Mostrar</em></summary>
-          <div class="guide-module__body"><p>Útil para BTTS y goles de equipo. Deriva parcialmente de Poisson y no cuenta como confirmación independiente.</p><div id="guide-team-goals-slot"></div></div>
+          <summary><span>Apoyo complementario</span><strong>Probabilidad de Gol por Equipo</strong><small>Útil para BTTS; no es confirmación independiente de Poisson.</small><em>Mostrar</em></summary>
+          <div class="guide-module__body"><div id="guide-team-goals-slot"></div></div>
         </details>
       </section>
     </main>
@@ -353,6 +353,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260701-analysis-guide-modules"></script>
+    <script type="module" src="app.js?v=20260701-pick-signals"></script>
   </body>
 </html>
