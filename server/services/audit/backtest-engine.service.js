@@ -36,6 +36,7 @@ export function createPreMatchSnapshot(dataset = {}) {
 
 function metricSummary(records = []) {
   const settled = records.filter((row) => ["HIT", "MISS", "VOID"].includes(row.outcome));
+  const bettable = settled.filter((row) => Number(row.odds) > 1);
   const hits = settled.filter((row) => row.outcome === "HIT").length;
   const misses = settled.filter((row) => row.outcome === "MISS").length;
   const voids = settled.filter((row) => row.outcome === "VOID").length;
@@ -43,15 +44,15 @@ function metricSummary(records = []) {
     const values = records.map((row) => Number(row[key])).filter(Number.isFinite);
     return values.length ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)) : null;
   };
-  const profitLoss = settled.reduce((sum, row) => row.outcome === "HIT" && Number(row.odds) > 1 ? sum + Number(row.odds) - 1 : row.outcome === "MISS" ? sum - 1 : sum, 0);
+  const profitLoss = bettable.reduce((sum, row) => row.outcome === "HIT" ? sum + Number(row.odds) - 1 : row.outcome === "MISS" ? sum - 1 : sum, 0);
   const calibration = settled.map((row) => Math.abs((Number(row.modelProbability) || 0) - (row.outcome === "HIT" ? 100 : 0)));
   return {
-    totalPicks: records.length, hits, misses, voids,
+    totalPicks: records.length, eligiblePicks: bettable.length, hits, misses, voids,
     noBets: records.filter((row) => row.outcome === "NO_BET").length,
     hitRate: hits + misses ? Number((hits / (hits + misses) * 100).toFixed(2)) : null,
     avgConfidence: mean("confidence"), avgOdds: mean("odds"), impliedProbability: mean("impliedProbability"),
     modelProbability: mean("modelProbability"), expectedValue: mean("expectedValue"),
-    profitLossFlatStake: Number(profitLoss.toFixed(2)), ROI: settled.length ? Number((profitLoss / settled.length * 100).toFixed(2)) : null,
+    profitLossFlatStake: Number(profitLoss.toFixed(2)), ROI: bettable.length ? Number((profitLoss / bettable.length * 100).toFixed(2)) : null,
     calibrationError: calibration.length ? Number((calibration.reduce((a, b) => a + b, 0) / calibration.length).toFixed(2)) : null,
     falseConfidenceRate: Number((records.filter((row) => row.outcome === "MISS" && row.confidence >= 70).length / Math.max(1, misses) * 100).toFixed(2))
   };
@@ -83,7 +84,7 @@ export function runFixtureBacktest(dataset, fixtureResult) {
       odds: pick.decimalOdds, impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
       expectedValue: pick.expectedValuePct, confidence: pick.confidenceScore, dataQuality: generated.quality?.label || dataset.dataQuality?.level || "No disponible",
       finalScore: fixtureResult?.finished ? `${fixtureResult.goals?.home}-${fixtureResult.goals?.away}` : "Pendiente",
-      outcome, errorDetected: rules.errors.join(" "), recommendation: rules.recommendation, color: rules.color,
+      outcome, decision: candidate.noBet ? "EVITAR" : rules.color === "green" ? "VALOR" : "RIESGO", errorDetected: rules.errors.join(" "), recommendation: rules.recommendation, color: rules.color,
       source: generated.source, sourceModule: pick.sourceModule, teamIds: { home: dataset.fixture?.homeTeamId ?? null, away: dataset.fixture?.awayTeamId ?? null },
       missingFields: generated.warnings || [], warnings: [...(generated.warnings || []), ...(pick.contradictingData || [])],
       supportingData: pick.supportingData, contradictingData: pick.contradictingData,

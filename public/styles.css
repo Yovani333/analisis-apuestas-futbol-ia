@@ -667,6 +667,11 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .audit-row--green { box-shadow: inset 4px 0 var(--success); }
 .audit-row--orange { box-shadow: inset 4px 0 var(--warning); }
 .audit-row--red { box-shadow: inset 4px 0 var(--danger); }
+.audit-row--green { background: color-mix(in srgb, var(--success-soft) 55%, var(--surface)); }
+.audit-row--orange { background: color-mix(in srgb, var(--warning-soft) 55%, var(--surface)); }
+.audit-row--red { background: color-mix(in srgb, var(--danger-soft) 55%, var(--surface)); }
+.audit-decision { display: inline-flex; padding: 4px 7px; color: #fff; font-size: .65rem; font-weight: 900; border-radius: 4px; }
+.audit-decision--green { background: #16805a; } .audit-decision--orange { background: #b77912; } .audit-decision--red { background: #c2404c; }
 :root[data-theme="dark"] .audit-row { background: var(--surface); color: var(--text); }
 @media (max-width: 520px) { .audit-controls { grid-template-columns: 1fr; } .audit-controls label { grid-column: auto; } .audit-controls .button { width: 100%; } .audit-table-wrap { max-height: none; overflow: visible; } }
 .site-last-update { padding-left: 9px; color: var(--muted); font-size: .66rem; border-left: 1px solid var(--border); }
