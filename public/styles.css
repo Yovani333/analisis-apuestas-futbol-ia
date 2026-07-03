@@ -1316,3 +1316,76 @@ body {
   .advanced-module-panel:has(> [hidden]) .panel-actions { width: auto; justify-content: flex-end; }
   .advanced-module-panel:has(> [hidden]) .panel-actions .button { flex: 0 0 auto; }
 }
+
+/* Keep expanded guide modules inside the viewport. */
+.guide-view, .guide-modules, .guide-module, .guide-module__body,
+#guide-coverage-slot, #guide-research-slot, #coverage-panel, #research-panel,
+#research-content, .source-coverage, .source-registry, .source-matrix,
+.research-grid, .research-card, .research-supporting, .supporting-grid {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.guide-module__body, #research-content { overflow: hidden; }
+#research-content .detail-table-wrap, #research-content .coverage-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+.source-pill, .research-card, .supporting-card,
+.research-card dd, .research-card p, .research-card__footer {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Dark-mode contrast for analysis and data-transparency content. */
+:root[data-theme="dark"] .research-summary,
+:root[data-theme="dark"] .confidence-score,
+:root[data-theme="dark"] .pick-review > div,
+:root[data-theme="dark"] .analysis-card,
+:root[data-theme="dark"] .analysis-context,
+:root[data-theme="dark"] .form-summary article {
+  color: var(--text);
+  background: var(--surface-subtle);
+  border-color: var(--border);
+}
+:root[data-theme="dark"] .confidence-track { background: var(--neutral-soft); }
+:root[data-theme="dark"] .research-summary,
+:root[data-theme="dark"] .research-supporting,
+:root[data-theme="dark"] .source-registry,
+:root[data-theme="dark"] .source-matrix,
+:root[data-theme="dark"] .research-card,
+:root[data-theme="dark"] .supporting-card {
+  color: var(--text);
+  background: var(--surface-subtle);
+  border-color: var(--border);
+}
+:root[data-theme="dark"] .research-card h3,
+:root[data-theme="dark"] .research-card dd,
+:root[data-theme="dark"] .analysis-card h3,
+:root[data-theme="dark"] .analysis-card strong,
+:root[data-theme="dark"] .pick-review strong,
+:root[data-theme="dark"] .confidence-pick strong { color: var(--text); }
+:root[data-theme="dark"] .analysis-warning,
+:root[data-theme="dark"] .pick-review p,
+:root[data-theme="dark"] .detail-note {
+  color: #fde68a;
+  background: var(--warning-soft);
+  border-color: #765c20;
+}
+:root[data-theme="dark"] .detail-note--info {
+  color: #bfdbfe;
+  background: var(--primary-soft);
+  border-color: #42658f;
+}
+:root[data-theme="dark"] .quality-summary {
+  color: #a7f3d0;
+  background: var(--success-soft);
+  border-color: #28634c;
+}
+
+@media (max-width: 720px) {
+  .source-table td:last-child { min-width: 0; }
+  .research-card dd { white-space: normal; text-overflow: clip; }
+}
