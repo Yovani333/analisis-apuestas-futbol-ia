@@ -15,7 +15,7 @@
         <span class="brand__mark" aria-hidden="true"><span>⚽</span><i>↗</i></span>
         <div>
           <h1>Análisis de Apuestas de Fútbol</h1>
-          <p>Busca partidos por liga y genera análisis con IA</p>
+          <p>Busca partidos por liga y genera análisis basado en datos</p>
         </div>
       </div>
 
@@ -163,7 +163,7 @@
               <strong>Evidencia prepartido</strong>
               <p id="evidence-status" class="evidence-status">Selecciona un partido programado para guardar la evidencia.</p>
             </div>
-            <button id="save-pre-match-evidence" class="button button--secondary button--compact" type="button" disabled>Guardar evidencia</button>
+            <div class="evidence-actions"><button id="save-pre-match-evidence" class="button button--secondary button--compact" type="button" disabled>Guardar evidencia</button><button id="download-evidence-txt" class="button button--secondary button--compact" type="button" disabled>Descargar evidencia .txt</button></div>
           </div>
           <div id="data-grid" class="data-grid"></div>
         </section>
@@ -227,19 +227,20 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Evaluación responsable</p>
-              <h2 id="analysis-title"><span aria-hidden="true">✦</span> Análisis IA</h2>
+              <h2 id="analysis-title">Análisis con datos</h2>
             </div>
             <div class="panel-actions">
               <button id="generate-selected-analysis" class="button button--primary button--compact" type="button" disabled>Analizar con datos</button>
-              <button id="explain-selected-analysis" class="button button--secondary button--compact" type="button" disabled>Explicar con IA</button>
+              <button id="toggle-analysis" class="button button--secondary button--compact" type="button" aria-expanded="false">Mostrar</button>
+              <button id="explain-selected-analysis" type="button" hidden disabled aria-hidden="true"></button>
               <span id="analysis-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
           </div>
-          <div id="analysis-content" aria-live="polite">
+          <div id="analysis-content" aria-live="polite" hidden>
             <div class="empty-state">
               <span class="empty-state__icon" aria-hidden="true">✦</span>
               <h3>Aún no hay análisis</h3>
-              <p>Elige un partido y pulsa “Analizar con datos”. La explicación con IA es opcional.</p>
+              <p>Elige un partido y pulsa “Analizar con datos”. El resultado proviene del motor determinístico.</p>
             </div>
           </div>
         </section>
@@ -256,22 +257,13 @@
           <summary><span>Información base</span><strong>Cobertura y fuentes</strong><small>Datos del partido, disponibilidad, calidad y procedencia.</small><em>Mostrar</em></summary>
           <div class="guide-module__body"><div id="guide-coverage-slot"></div><div id="guide-research-slot"></div></div>
         </details>
-        <details class="guide-module guide-module--market">
-          <summary><span>Dato de mercado</span><strong>Ver cuotas</strong><small>Dato confiable de mercado; compara implícita contra modelo.</small><em>Mostrar</em></summary>
-          <div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div>
-        </details>
-        <details class="guide-module guide-module--primary">
-          <summary><span>Decisión principal</span><strong>Picks basados en datos</strong><small>Prioriza EV positivo, buena calidad y sin contradicciones.</small><em>Mostrar</em></summary>
-          <div class="guide-module__body"><div id="guide-data-picks-slot"></div></div>
-        </details>
+        <details class="guide-module guide-module--support"><summary><span>Apoyo ofensivo</span><strong>Probabilidad de Gol por Equipo</strong><small>Cruza ataque, defensa, forma y calidad de muestra.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-team-goals-slot"></div></div></details>
         <details class="guide-module guide-module--support">
           <summary><span>Apoyo medio</span><strong>Modelo Poisson</strong><small>Apoyo para goles y marcadores; depende de buenos datos de entrada.</small><em>Mostrar</em></summary>
           <div class="guide-module__body"><div id="guide-poisson-slot"></div></div>
         </details>
-        <details class="guide-module guide-module--support">
-          <summary><span>Apoyo complementario</span><strong>Probabilidad de Gol por Equipo</strong><small>Útil para BTTS; no es confirmación independiente de Poisson.</small><em>Mostrar</em></summary>
-          <div class="guide-module__body"><div id="guide-team-goals-slot"></div></div>
-        </details>
+        <details class="guide-module guide-module--market"><summary><span>Dato de mercado</span><strong>Ver cuotas</strong><small>Compara cuota e implícita contra el modelo; no crea la predicción.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div></details>
+        <details class="guide-module guide-module--primary"><summary><span>Decisión final</span><strong>Picks basados en datos</strong><small>Integra cobertura, goles, Poisson, cuotas, EV y contradicciones.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-data-picks-slot"></div></div></details>
       </section>
     </main>
 
@@ -364,6 +356,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260701-pick-signal-consistency"></script>
+    <script type="module" src="app.js?v=20260702-picks-engine-v2"></script>
   </body>
 </html>

@@ -30,7 +30,9 @@ export function createEvidenceSnapshot({ fixture, dataPicks, poisson, teamGoals,
     fixture: {
       id: fixture.id, date: fixture.date, time: fixture.time, utcDateTime: fixture.utcDateTime || null,
       status: fixture.status, statusLabel: fixture.statusLabel, leagueName: fixture.leagueName,
-      leagueSlug: fixture.leagueSlug, home: fixture.home, away: fixture.away,
+      leagueSlug: fixture.leagueSlug, leagueId: fixture.leagueId ?? null, season: fixture.season ?? null,
+      country: fixture.country || fixture.countryLabel || null, source: fixture.dataSource || "api-football",
+      home: fixture.home, away: fixture.away,
       homeTeamId: fixture.homeTeamId ?? null, awayTeamId: fixture.awayTeamId ?? null,
       favorite: fixture.favorite || null, neutralVenue: Boolean(fixture.neutralVenue)
     },
@@ -53,4 +55,46 @@ export function saveEvidenceSnapshot(snapshot, storage = globalThis.localStorage
   const snapshots = [snapshot, ...read(storage).filter((item) => item.id !== snapshot.id)].slice(0, MAX_SNAPSHOTS);
   storage?.setItem(EVIDENCE_SNAPSHOTS_KEY, JSON.stringify(snapshots));
   return snapshots;
+}
+
+const textValue = (value) => value === null || value === undefined || value === "" ? "No disponible" : String(value);
+export function evidenceSnapshotToText(snapshot, { includeRejected = true } = {}) {
+  const fixture = snapshot.fixture || {};
+  const modules = snapshot.modules || {};
+  const poisson = modules.poisson || {};
+  const goals = modules.teamGoals || {};
+  const allPicks = modules.dataPicks?.picks || [];
+  const picks = includeRejected ? allPicks : allPicks.filter((pick) => ["VALOR", "PRECAUCIÓN"].includes(pick.decision));
+  const lines = [
+    "EVIDENCIA PREPARTIDO AUDITABLE", "=".repeat(34),
+    `Partido: ${textValue(fixture.home)} vs ${textValue(fixture.away)}`,
+    `Liga: ${textValue(fixture.leagueName)} (ID ${textValue(fixture.leagueId)})`, `País: ${textValue(fixture.country)}`, `Temporada: ${textValue(fixture.season)}`,
+    `Fecha del partido: ${textValue(fixture.utcDateTime || `${fixture.date || ""} ${fixture.time || ""}`)}`,
+    `Generada: ${textValue(snapshot.capturedAt)}`, `Fixture ID: ${textValue(fixture.id)}`,
+    `Home team ID: ${textValue(fixture.homeTeamId)}`, `Away team ID: ${textValue(fixture.awayTeamId)}`,
+    `Estado: ${textValue(fixture.statusLabel || fixture.status)}`, "Fuente principal: API-Football + modelos internos", "",
+    "COBERTURA Y FUENTES", `Fuente declarada: ${textValue(fixture.source)}`,
+    `Módulos consultados: ${textValue(snapshot.researchData?.sourceCoverage?.map((row) => row.module || row.label || row.moduleKey).filter(Boolean).join(", "))}`,
+    `Calidad: ${textValue(snapshot.dataQuality?.score)}/100 (${textValue(snapshot.dataQuality?.level)})`,
+    `Datos faltantes: ${textValue(snapshot.dataQuality?.missing?.join(", "))}`, `Última actualización: ${textValue(snapshot.researchData?.updatedAt || snapshot.capturedAt)}`, "",
+    "PROBABILIDAD DE GOL POR EQUIPO",
+    `Local anota: ${textValue(goals.homeGoalProbability)}%`, `Visitante anota: ${textValue(goals.awayGoalProbability)}%`,
+    `BTTS Sí: ${textValue(goals.btts?.yesProbabilityPct)}%`, `BTTS No: ${textValue(goals.btts?.noProbabilityPct)}%`,
+    `Riesgo local sin anotar: ${textValue(goals.homeFailedToScoreRisk)}%`, `Riesgo visitante sin anotar: ${textValue(goals.awayFailedToScoreRisk)}%`,
+    `Calidad del módulo: ${textValue(goals.teamGoalDataQuality)}/100`, "",
+    "MODELO POISSON", `Lambda local: ${textValue(poisson.lambdaHome)}`, `Lambda visitante: ${textValue(poisson.lambdaAway)}`,
+    `Total esperado: ${poisson.lambdaHome != null && poisson.lambdaAway != null ? Number(poisson.lambdaHome + poisson.lambdaAway).toFixed(2) : "No disponible"}`,
+    ...Object.entries(poisson.probabilities || {}).map(([key, value]) => `${key}: ${textValue(value)}%`),
+    `Marcadores probables: ${textValue(poisson.likelyScores?.map((row) => `${row.score} (${row.probabilityPct}%)`).join(", "))}`, "",
+    "PICKS CLASIFICADOS"
+  ];
+  picks.forEach((pick, index) => lines.push("", `${index + 1}. ${textValue(pick.market)} - ${textValue(pick.selection)}`,
+    `Decisión: ${textValue(pick.decision)}`, `Cuota: ${textValue(pick.decimalOdds)} | Bookmaker: ${textValue(pick.bookmaker)} | Fuente: ${textValue(pick.sourceProvider)}`,
+    `Modelo: ${textValue(pick.modelProbabilityPct)}% | Implícita: ${textValue(pick.impliedProbabilityPct)}% | EV: ${textValue(pick.expectedValuePct)}%`,
+    `Confianza: ${textValue(pick.confidenceScore)}/100 | Calidad: ${textValue(pick.dataQualityScore)}/100`,
+    `Soporte Poisson: ${textValue(pick.poissonSupportScore)} | Soporte Gol por Equipo: ${textValue(pick.teamGoalSupportScore)} | Contradicción: ${textValue(pick.contradictionLevel)}`,
+    `Origen: ${textValue(pick.sourceModule)} | Motivo: ${textValue(pick.explanation)} | Timestamp: ${textValue(pick.generatedAt)}`));
+  lines.push("", "RESUMEN FINAL", `Recomendación: ${textValue(modules.dataPicks?.finalDecision || "NO BET")}`, "",
+    "Resultado final del partido: Pendiente", "Comparación posterior: Pendiente", "Aciertos: Pendiente", "Errores detectados: Pendiente", "Notas de auditoría: Pendiente");
+  return lines.join("\r\n");
 }

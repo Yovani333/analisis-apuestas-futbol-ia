@@ -94,9 +94,11 @@ export function calculatePoissonModel(dataset = {}) {
   const pct = (value) => round(value * 100, 1);
   const probabilities = {
     homeWin: pct(homeWin), draw: pct(draw), awayWin: pct(awayWin),
-    doubleChance1X: pct(homeWin + draw), doubleChanceX2: pct(awayWin + draw),
+    doubleChance1X: pct(homeWin + draw), doubleChanceX2: pct(awayWin + draw), doubleChance12: pct(homeWin + awayWin),
     over05: pct(over05), over15: pct(over15), over25: pct(over25),
-    under25: pct(under25), under35: pct(under35), bttsYes: pct(bttsYes), bttsNo: pct(1 - bttsYes)
+    under25: pct(under25), under35: pct(under35), bttsYes: pct(bttsYes), bttsNo: pct(1 - bttsYes),
+    homeOver05: pct(1 - Math.exp(-lambdas.home)), awayOver05: pct(1 - Math.exp(-lambdas.away)),
+    homeOver15: pct(1 - Math.exp(-lambdas.home) * (1 + lambdas.home)), awayOver15: pct(1 - Math.exp(-lambdas.away) * (1 + lambdas.away))
   };
   const sampleSize = Math.min(numeric(dataset.researchData?.xgXga?.homeSampleSize) ?? numeric(dataset.researchData?.xgXga?.sampleSize) ?? 0, numeric(dataset.researchData?.xgXga?.awaySampleSize) ?? numeric(dataset.researchData?.xgXga?.sampleSize) ?? 0);
   let quality = numeric(dataset.researchData?.totalConfidenceScore) ?? numeric(dataset.dataQuality?.score) ?? 45;
@@ -113,6 +115,8 @@ export function calculatePoissonModel(dataset = {}) {
     ["match_winner", "away_win", "Resultado 1X2", `${fixture.away || "Visitante"} gana`, probabilities.awayWin],
     ["double_chance", "1X", "Doble oportunidad", `${fixture.home || "Local"} o empate (1X)`, probabilities.doubleChance1X],
     ["double_chance", "X2", "Doble oportunidad", `${fixture.away || "Visitante"} o empate (X2)`, probabilities.doubleChanceX2],
+    ["double_chance", "12", "Doble oportunidad", `${fixture.home || "Local"} o ${fixture.away || "Visitante"} (12)`, probabilities.doubleChance12],
+    ["over_under_1_5", "over_1_5", "Total de goles 1.5", "Más de 1.5 goles", probabilities.over15],
     ["over_under_2_5", "over_2_5", "Total de goles 2.5", "Más de 2.5 goles", probabilities.over25],
     ["over_under_2_5", "under_2_5", "Total de goles 2.5", "Menos de 2.5 goles", probabilities.under25],
     ["under_3_5", "under_3_5", "Total de goles 3.5", "Menos de 3.5 goles", probabilities.under35],

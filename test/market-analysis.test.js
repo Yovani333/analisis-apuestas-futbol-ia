@@ -47,3 +47,13 @@ test("usa nombres de equipos en doble oportunidad sin asumir localía", () => {
   assert.equal(odds.selections[1].selection, "Empate o Japón (X2)");
   assert.doesNotMatch(odds.selections.map((item) => item.selection).join(" "), /local|visitante/i);
 });
+
+test("prioriza Caliente y después Playdoit entre bookmakers autorizados", () => {
+  const bet = { name: "Goals Over/Under", values: [{ value: "Over 2.5", odd: "1.90" }] };
+  const odds = normalizeOdds([{ update: "2026-07-02T10:00:00Z", bookmakers: [
+    { id: 1, name: "Casa genérica", bets: [bet] }, { id: 2, name: "Playdoit.mx", bets: [bet] }, { id: 3, name: "Casino Caliente", bets: [bet] }
+  ] }]);
+  assert.equal(odds.bookmaker, "Casino Caliente");
+  assert.equal(odds.preferred, true);
+  assert.equal(odds.selections[0].isPreferredBookmaker, true);
+});

@@ -71,6 +71,58 @@ function makePick(dataset, definition, probability, evidence, contradictions = [
   };
 }
 
+function normalizeDecisionPick(dataset, pick, poisson, teamGoals, quality, generatedAt) {
+  const quoted = existingMarket(dataset, pick.selectionKey) || {};
+  const poissonPick = (poisson.suggestedMarkets || []).find((item) => item.selectionKey === pick.selectionKey);
+  const teamPick = (teamGoals.picks || []).find((item) => item.selectionKey === pick.selectionKey);
+  const poissonProbability = number(poissonPick?.modelProbabilityPct ?? poisson.probabilities?.[{
+    home_win: "homeWin", draw: "draw", away_win: "awayWin", "1X": "doubleChance1X", X2: "doubleChanceX2", "12": "doubleChance12",
+    over_1_5: "over15", over_2_5: "over25", under_2_5: "under25", under_3_5: "under35", btts_yes: "bttsYes", btts_no: "bttsNo",
+    home_over_0_5: "homeOver05", away_over_0_5: "awayOver05", home_over_1_5: "homeOver15", away_over_1_5: "awayOver15"
+  }[pick.selectionKey]]);
+  const teamProbability = number(teamPick?.modelProbabilityPct);
+  const modelProbability = number(pick.modelProbabilityPct) ?? poissonProbability ?? teamProbability;
+  const decimalOdds = number(pick.decimalOdds ?? quoted.decimalOdds);
+  const impliedProbability = decimalOdds ? round(100 / decimalOdds) : null;
+  const ev = decimalOdds && modelProbability !== null ? round(modelProbability * decimalOdds - 100) : null;
+  const poissonSupportScore = poissonProbability === null || modelProbability === null ? 0 : clamp(100 - Math.abs(poissonProbability - modelProbability) * 4);
+  const teamGoalSupportScore = teamProbability === null || modelProbability === null ? 0 : clamp(100 - Math.abs(teamProbability - modelProbability) * 4);
+  const supportCount = [poissonSupportScore >= 55, teamGoalSupportScore >= 55, ev !== null && ev > 0].filter(Boolean).length;
+  const contradictions = [...new Set([...(pick.contradictingData || [])])];
+  if (poissonProbability !== null && teamProbability !== null && Math.abs(poissonProbability - teamProbability) >= 15) contradictions.push("Poisson y Probabilidad de Gol difieren 15 puntos o más.");
+  const contradictionLevel = contradictions.length >= 2 ? "high" : contradictions.length ? "medium" : "low";
+  const contradictionScore = contradictionLevel === "high" ? 0 : contradictionLevel === "medium" ? 50 : 100;
+  const evScore = ev === null ? 0 : clamp(50 + ev * 2);
+  const confidenceScore = round(quality * .25 + poissonSupportScore * .25 + teamGoalSupportScore * .20 + evScore * .20 + contradictionScore * .10, 0);
+  const shortTournament = ["world-cup", "cup"].some((value) => String(dataset.fixture?.leagueSlug || "").includes(value));
+  let decision = "NO BET";
+  if (ev !== null && ev < 0) decision = "EVITAR";
+  else if (contradictionLevel === "high") decision = "EVITAR";
+  else if (decimalOdds && ev > 0 && quality >= 65 && confidenceScore >= 55 && supportCount >= 2 && contradictionLevel === "low" && !shortTournament) decision = "VALOR";
+  else if (decimalOdds && ev > 0 && confidenceScore >= 45 && quality >= 45) decision = "PRECAUCIÓN";
+  const color = { VALOR: "green", PRECAUCIÓN: "orange", EVITAR: "red", "NO BET": "gray" }[decision];
+  const bookmaker = quoted.bookmaker || dataset.preMatch?.odds?.bookmaker || "No disponible";
+  const sourceProvider = quoted.sourceProvider || quoted.source || (decimalOdds ? "api-football" : "not_available");
+  const preferred = /caliente|playdoit/i.test(bookmaker);
+  const reason = decision === "NO BET" ? (!decimalOdds ? "No hay cuota verificable para ejecutar este mercado." : "No alcanza respaldo y confianza suficientes.")
+    : decision === "EVITAR" ? (ev !== null && ev < 0 ? "La probabilidad implícita supera la estimación del modelo." : "Las señales internas se contradicen.")
+      : `${supportCount} señales respaldan el mercado con EV ${ev}%.`;
+  return {
+    ...pick, decimalOdds, impliedProbabilityPct: impliedProbability, expectedValuePct: ev,
+    modelProbabilityPct: modelProbability, estimatedProbabilityPct: modelProbability,
+    confidenceScore, decision, level: decision, highlightColor: color, colorMeaning: decision,
+    bookmaker, bookmakerId: quoted.bookmakerId ?? null, sourceProvider, isPreferredBookmaker: preferred,
+    oddsFreshnessStatus: quoted.oddsFreshnessStatus || (quoted.updatedAt ? "available" : decimalOdds ? "unknown" : "unavailable"),
+    oddsUpdatedAt: quoted.updatedAt || dataset.fetchedAt || null,
+    dataQualityScore: quality, poissonSupportScore, teamGoalSupportScore, contradictionLevel,
+    supportCount, explanation: reason, sourceModule: "Picks basados en datos", generatedAt,
+    status: decision === "VALOR" ? "available" : decision === "PRECAUCIÓN" ? "partial" : "not_available",
+    isSportsPick: !decimalOdds, contradictingData: contradictions,
+    supportingData: pick.supportingData || [], sourcesUsed: pick.sourcesUsed || [pick.sourceModule || "modelo interno"],
+    canAdd: ["VALOR", "PRECAUCIÓN"].includes(decision)
+  };
+}
+
 export function generateDataPicks(dataset = {}) {
   const fixture = dataset.fixture || {};
   const expected = expectations(dataset);
@@ -134,16 +186,26 @@ export function generateDataPicks(dataset = {}) {
       sourcesUsed: [...new Set([...pick.sourcesUsed, ...(signal ? ["Modelo Poisson interno"] : []), ...(teamSignal ? ["Probabilidad de Gol por Equipo"] : [])])]
     };
   });
-  const ranked = combined.sort((a, b) => b.confidenceScore - a.confidenceScore || (b.expectedValuePct ?? -999) - (a.expectedValuePct ?? -999));
-  const status = ranked.length ? (quality >= 70 ? "available" : "partial") : "not_available";
+  const generatedAt = new Date().toISOString();
+  const extraCandidates = [...(poisson.suggestedMarkets || []), ...(teamGoals.picks || [])]
+    .filter((candidate) => !combined.some((pick) => pick.selectionKey === candidate.selectionKey));
+  const decisionOrder = { VALOR: 0, PRECAUCIÓN: 1, EVITAR: 2, "NO BET": 3 };
+  const ranked = [...combined, ...extraCandidates]
+    .map((pick) => normalizeDecisionPick(dataset, pick, poisson, teamGoals, quality, generatedAt))
+    .sort((a, b) => decisionOrder[a.decision] - decisionOrder[b.decision] || b.confidenceScore - a.confidenceScore || (b.expectedValuePct ?? -999) - (a.expectedValuePct ?? -999));
+  const actionablePicks = ranked.filter((pick) => pick.canAdd);
+  const status = actionablePicks.some((pick) => pick.decision === "VALOR") ? "available" : ranked.length ? "partial" : "not_available";
+  if (!actionablePicks.length) warnings.push("NO BET: no existe un mercado con cuota, EV y respaldo suficientes.");
   return {
     status,
     source: "API-Football + modelo interno", sourceModule: "data_picks", dataQualityScore: quality,
-    fixtureId: String(fixture.id || ""), picks: ranked, warnings, quality: resolveModuleQuality({ score: ranked.length ? quality : 0, status, notes: warnings }),
+    modelVersion: "picks-data-engine-v2", fixtureId: String(fixture.id || ""), picks: ranked, actionablePicks,
+    finalDecision: actionablePicks.length ? (actionablePicks.some((pick) => pick.decision === "VALOR") ? "EJECUTABLE" : "PRECAUCIÓN") : "NO BET",
+    warnings, quality: resolveModuleQuality({ score: ranked.length ? quality : 0, status, notes: warnings }),
     poisson: { status: poisson.status, lambdaHome: poisson.lambdaHome ?? null, lambdaAway: poisson.lambdaAway ?? null, warning: poisson.warning || "" },
     teamGoalProbability: { status: teamGoals.status, confidenceScore: teamGoals.confidenceScore ?? 0, bttsSupport: teamGoals.btts?.support || "neutral", warning: teamGoals.warning || "" },
     corners: { status: corners.status, totalExpectedCorners: corners.totalExpectedCorners ?? null, liveAlert: corners.live?.alert || "", warning: corners.warning || "" },
     liveContext: { active: fixture.status === "live", elapsed: fixture.elapsed ?? null, score: fixture.score || null },
-    generatedAt: new Date().toISOString()
+    generatedAt
   };
 }

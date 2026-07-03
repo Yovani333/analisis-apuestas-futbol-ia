@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createEvidenceSnapshot, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "../public/evidence-store.js";
+import { createEvidenceSnapshot, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "../public/evidence-store.js";
 
 function storage() {
   const values = new Map();
@@ -31,4 +31,18 @@ test("guarda y recupera la evidencia más reciente por fixture", () => {
   const loaded = loadEvidenceSnapshots(store);
   assert.equal(loaded.length, 2);
   assert.equal(latestEvidenceForFixture(loaded, 7).id, latest.id);
+});
+
+test("genera evidencia textual con modelos, picks y campos de auditoría", () => {
+  const fixture = { id: 9, status: "scheduled", home: "México", away: "Japón", leagueName: "Mundial" };
+  const snapshot = createEvidenceSnapshot({ fixture,
+    dataPicks: { finalDecision: "PRECAUCIÓN", picks: [{ market: "Total", selection: "Over 1.5", decision: "PRECAUCIÓN", decimalOdds: 1.5, expectedValuePct: 5, confidenceScore: 60 }] },
+    poisson: { lambdaHome: 1.4, lambdaAway: 1.1, probabilities: { over15: 71 } },
+    teamGoals: { homeGoalProbability: 75, awayGoalProbability: 65, btts: { yesProbabilityPct: 54 } }
+  });
+  const text = evidenceSnapshotToText(snapshot);
+  assert.match(text, /EVIDENCIA PREPARTIDO AUDITABLE/);
+  assert.match(text, /Lambda local: 1.4/);
+  assert.match(text, /Decisión: PRECAUCIÓN/);
+  assert.match(text, /Resultado final del partido: Pendiente/);
 });
