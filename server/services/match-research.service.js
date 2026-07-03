@@ -16,6 +16,7 @@ function moduleBase(status, updatedAt, source = SOURCE, message = "") {
 }
 
 function flattenStandings(rows = []) {
+  if (!Array.isArray(rows)) throw new TypeError("La clasificación no tiene formato de arreglo.");
   return rows.flatMap((entry) => entry?.league?.standings || []).flat();
 }
 

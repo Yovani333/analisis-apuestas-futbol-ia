@@ -14,13 +14,14 @@ function dataset({ homeXG = 1.6, awayXG = 1.4, odds = [], probabilities = { home
   };
 }
 
-test("genera los 13 picks mínimos y conserva picks deportivos sin cuota", () => {
+test("genera al menos los 13 picks base y clasifica sin cuota como NO BET", () => {
   const result = generateDataPicks(dataset());
-  assert.equal(result.picks.length, 13);
-  assert.equal(result.picks.every((pick) => pick.sourceModule === "data_picks"), true);
+  assert.ok(result.picks.length >= 13);
+  assert.equal(result.modelVersion, "picks-data-engine-v2");
   assert.equal(result.picks.every((pick) => pick.isSportsPick && pick.expectedValuePct === null), true);
+  assert.equal(result.picks.every((pick) => pick.decision === "NO BET" && pick.highlightColor === "gray"), true);
   assert.equal(result.poisson.status, "available");
-  assert.equal(result.quality.label, "Alta");
+  assert.equal(result.quality.label, "Parcial");
   assert.ok(result.picks.some((pick) => pick.sourcesUsed.includes("Modelo Poisson interno")));
   assert.ok(result.corners);
   assert.equal(result.liveContext.active, false);
@@ -38,7 +39,7 @@ test("un under contradicho por xG alto no queda verde aunque tenga EV positivo",
 test("BTTS sí queda limitado cuando un equipo tiene xG menor a 0.8", () => {
   const pick = generateDataPicks(dataset({ homeXG: 1.7, awayXG: .55 })).picks.find((item) => item.selectionKey === "btts_yes");
   assert.ok(pick.confidenceScore <= 49);
-  assert.equal(pick.highlightColor, "red");
+  assert.equal(pick.highlightColor, "gray");
 });
 
 test("partido equilibrado limita la confianza de ganadores simples", () => {

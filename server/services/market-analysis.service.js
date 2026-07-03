@@ -85,11 +85,14 @@ function findOdd(bet, patterns) {
 }
 
 export function normalizeOdds(rows = [], teams = {}) {
-  const bookmakers = rows.flatMap((row) => row.bookmakers || []);
-  const bookmaker = bookmakers.find((item) => {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const bookmakers = safeRows.flatMap((row) => row.bookmakers || []);
+  const eligible = bookmakers.filter((item) => {
     const names = (item.bets || []).map((bet) => normalizedName(bet.name)).join("|");
     return /double chance|goals over under|both teams.*score/.test(names);
-  }) || bookmakers[0];
+  });
+  const preference = (item) => /caliente/.test(normalizedName(item?.name)) ? 0 : /playdoit/.test(normalizedName(item?.name)) ? 1 : 2;
+  const bookmaker = [...eligible].sort((a, b) => preference(a) - preference(b))[0] || bookmakers[0];
   if (!bookmaker) return { bookmaker: null, updatedAt: rows[0]?.update || null, selections: [] };
 
   const doubleChance = findBet(bookmaker, /double chance/);
@@ -97,6 +100,10 @@ export function normalizeOdds(rows = [], teams = {}) {
   const btts = findBet(bookmaker, /both teams.*score|both teams to score/);
   const homeLabel = teams.homeName ? `${teams.homeName} o empate (1X)` : "Equipo 1 o empate (1X)";
   const awayLabel = teams.awayName ? `Empate o ${teams.awayName} (X2)` : "Empate o equipo 2 (X2)";
+  const preferred = preference(bookmaker) < 2;
+  const enrich = (item) => ({ ...item, bookmaker: bookmaker.name || "No disponible", bookmakerId: bookmaker.id ?? null,
+    sourceProvider: "api-football", status: preferred ? "available" : "fallback", isPreferredBookmaker: preferred,
+    oddsFreshnessStatus: safeRows[0]?.update ? "available" : "unknown", updatedAt: safeRows[0]?.update || null });
   const selections = [
     { marketKey: "double_chance", selectionKey: "1X", market: "Doble oportunidad", selection: homeLabel, decimalOdds: findOdd(doubleChance, [/home draw/, /^1x$/, /local empate/]) },
     { marketKey: "double_chance", selectionKey: "X2", market: "Doble oportunidad", selection: awayLabel, decimalOdds: findOdd(doubleChance, [/draw away/, /^x2$/, /empate visitante/]) },
@@ -104,9 +111,11 @@ export function normalizeOdds(rows = [], teams = {}) {
     { marketKey: "over_under_2_5", selectionKey: "under_2_5", market: "Total de goles 2.5", selection: "Menos de 2.5 goles", decimalOdds: findOdd(totals, [/under 2 5/, /menos de 2 5/]) },
     { marketKey: "btts", selectionKey: "btts_yes", market: "Ambos equipos anotan", selection: "Sí", decimalOdds: findOdd(btts, [/^yes$/, /^si$/]) },
     { marketKey: "btts", selectionKey: "btts_no", market: "Ambos equipos anotan", selection: "No", decimalOdds: findOdd(btts, [/^no$/]) }
-  ].filter((item) => item.decimalOdds);
+  ].filter((item) => item.decimalOdds).map(enrich);
 
-  return { bookmaker: bookmaker.name || "No disponible", updatedAt: rows[0]?.update || null, selections };
+  return { bookmaker: bookmaker.name || "No disponible", bookmakerId: bookmaker.id ?? null, preferred,
+    warning: preferred ? "" : "La casa preferida no está disponible en el proveedor actual. Se usó cuota alternativa o captura manual.",
+    updatedAt: safeRows[0]?.update || null, selections };
 }
 
 function smoothedRate(successes, trials) {
@@ -182,7 +191,7 @@ export function calculateDataQuality({ homeForm, awayForm, odds, standings, inju
 }
 
 function relevantStandings(rows, teamIds) {
-  return rows.flatMap((entry) => entry.league?.standings || []).flat()
+  return (Array.isArray(rows) ? rows : []).flatMap((entry) => entry.league?.standings || []).flat()
     .filter((row) => teamIds.includes(row.team?.id))
     .map((row) => ({ rank: row.rank, team: row.team?.name, points: row.points, group: row.group, form: row.form, played: row.all?.played, goalsFor: row.all?.goals?.for, goalsAgainst: row.all?.goals?.against }));
 }

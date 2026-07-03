@@ -5,7 +5,7 @@ import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
 } from "./parlay-store.js?v=20260630-common-picks";
-import { createEvidenceSnapshot, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260701-evidence";
+import { createEvidenceSnapshot, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260702-evidence-v2";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -68,7 +68,7 @@ const elements = {
   dataStatus: document.querySelector("#data-overall-status"),
   dataGrid: document.querySelector("#data-grid"),
   openOddsDetail: document.querySelector("#open-odds-detail"),
-  evidenceToolbar: document.querySelector("#evidence-toolbar"), savePreMatchEvidence: document.querySelector("#save-pre-match-evidence"), evidenceStatus: document.querySelector("#evidence-status"),
+  evidenceToolbar: document.querySelector("#evidence-toolbar"), savePreMatchEvidence: document.querySelector("#save-pre-match-evidence"), downloadEvidenceTxt: document.querySelector("#download-evidence-txt"), evidenceStatus: document.querySelector("#evidence-status"),
   refreshCoverage: document.querySelector("#refresh-coverage"),
   researchContent: document.querySelector("#research-content"),
   toggleResearch: document.querySelector("#toggle-research"),
@@ -84,7 +84,7 @@ const elements = {
   analysisStatus: document.querySelector("#analysis-status"),
   analysisContent: document.querySelector("#analysis-content"),
   generateSelectedAnalysis: document.querySelector("#generate-selected-analysis"),
-  explainSelectedAnalysis: document.querySelector("#explain-selected-analysis"),
+  explainSelectedAnalysis: document.querySelector("#explain-selected-analysis"), toggleAnalysis: document.querySelector("#toggle-analysis"),
   showDataPicks: document.querySelector("#show-data-picks"),
   dataPicksStatus: document.querySelector("#data-picks-status"),
   dataPicksContent: document.querySelector("#data-picks-content"),
@@ -548,6 +548,7 @@ function renderFixtureData() {
   const evidence = latestEvidenceForFixture(state.evidenceSnapshots, fixture.id);
   elements.evidenceToolbar.hidden = fixture.status !== "scheduled";
   elements.savePreMatchEvidence.disabled = fixture.status !== "scheduled" || state.isCapturingEvidence;
+  elements.downloadEvidenceTxt.disabled = fixture.status !== "scheduled" || !evidence;
   elements.evidenceStatus.textContent = evidence
     ? `Evidencia guardada: ${formatUpdatedAt(evidence.capturedAt)} · Lista para auditoría después del resultado final.`
     : fixture.status === "scheduled" ? "Sin evidencia prepartido guardada." : "La evidencia solo puede guardarse antes del inicio.";
@@ -1546,6 +1547,22 @@ async function capturePreMatchEvidence() {
   }
 }
 
+function downloadCurrentEvidence() {
+  const fixture = selectedFixture();
+  const snapshot = latestEvidenceForFixture(state.evidenceSnapshots, fixture?.id);
+  if (!fixture || !snapshot) return showNotice("Primero guarda la evidencia prepartido.");
+  const safeName = (value) => String(value || "equipo").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, "").toLowerCase();
+  const blob = new Blob([evidenceSnapshotToText(snapshot)], { type: "text/plain;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `evidencia_${fixture.date}_${safeName(fixture.home)}_vs_${safeName(fixture.away)}.txt`;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 function renderDataPicks(result) {
   const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
   elements.dataPicksStatus.className = `status-badge status-badge--${statusClass(status)}`;
@@ -1557,18 +1574,18 @@ function renderDataPicks(result) {
   const fixture = selectedFixture();
   const timing = resolveAnalysisTiming({ kickoffAt: fixture?.utcDateTime, lastUpdatedAt: result.generatedAt });
   elements.dataPicksContent.innerHTML = `
-    <div class="data-picks-summary"><strong>${result.picks.length} selecciones evaluadas</strong><span>Calidad ${escapeHtml(result.quality?.label || "No disponible")} · ${displayValue(result.dataQualityScore)}/100 · ${escapeHtml(result.source)}</span></div>
+    <div class="data-picks-summary"><strong>${escapeHtml(result.finalDecision || "NO BET")} · ${result.picks.length} selecciones evaluadas</strong><span>Motor ${escapeHtml(result.modelVersion || "v1")} · Calidad ${escapeHtml(result.quality?.label || "No disponible")} · ${displayValue(result.dataQualityScore)}/100</span></div>
     <div class="analysis-timing analysis-timing--${escapeHtml(timing.window)}"><strong>${escapeHtml(timing.label)}</strong><span>${timing.minutesToKickoff === null ? "Hora del partido no disponible" : `${escapeHtml(timing.minutesToKickoff)} minutos para el inicio`}${timing.isConfirmed ? " · Confirmado por frescura" : ""}</span>${timing.warning ? `<small>${escapeHtml(timing.warning)}</small>` : ""}</div>
     ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
     <div class="data-picks-grid">${result.picks.map((pick) => `
       <article class="data-pick data-pick--${escapeHtml(pick.highlightColor)} ${pickSignalClass(pick)}">
-        <div class="data-pick__heading"><div><small>${escapeHtml(pick.market)}</small><strong>${escapeHtml(pick.selection)}</strong></div><span>${escapeHtml(pick.level)}</span></div>
-        <div class="data-pick__metrics"><span>Modelo <b>${displayValue(pick.modelProbabilityPct)}%</b></span><span>Cuota <b>${displayValue(pick.decimalOdds)}</b></span><span>EV <b>${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</b></span><span>Confianza <b>${escapeHtml(pick.confidenceScore)}%</b></span></div>
+        <div class="data-pick__heading"><div><small>${escapeHtml(pick.market)}</small><strong>${escapeHtml(pick.selection)}</strong></div><span>${escapeHtml(pick.decision || pick.level)}</span></div>
+        <div class="data-pick__metrics"><span>Modelo <b>${displayValue(pick.modelProbabilityPct)}%</b></span><span>Cuota <b>${displayValue(pick.decimalOdds)}</b></span><span>EV <b>${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</b></span><span>Confianza <b>${escapeHtml(pick.confidenceScore)}%</b></span><span>Poisson <b>${displayValue(pick.poissonSupportScore)}/100</b></span><span>Gol/equipo <b>${displayValue(pick.teamGoalSupportScore)}/100</b></span></div>
         <p>${escapeHtml(pick.explanation)}</p>
-        <small>Fuentes: ${escapeHtml(pick.sourcesUsed?.join(" · ") || "modelo interno")}</small>
+        <small>Bookmaker: ${escapeHtml(pick.bookmaker || "No disponible")} · Contradicción: ${escapeHtml(pick.contradictionLevel || "No disponible")} · Origen: ${escapeHtml(pick.sourceModule || "Picks basados en datos")}</small>
         <div class="pick-actions">
-          <button class="button button--secondary button--compact" type="button" data-save-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.highlightColor === "red" ? "disabled" : ""}>Guardar individual</button>
-          <button class="button button--primary button--compact" type="button" data-add-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.highlightColor === "red" ? "disabled" : ""}>Agregar al parlay</button>
+          <button class="button button--secondary button--compact" type="button" data-save-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.canAdd ? "" : "disabled"}>Guardar individual</button>
+          <button class="button button--primary button--compact" type="button" data-add-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.canAdd ? "" : "disabled"}>Agregar pick</button>
         </div>
       </article>`).join("")}</div>`;
 }
@@ -1601,16 +1618,16 @@ function addDataPickToParlay(selectionKey) {
   const fixture = selectedFixture();
   const result = state.dataPicksByFixture.get(fixture?.id);
   const pick = result?.picks?.find((item) => item.selectionKey === selectionKey);
-  if (!fixture || !pick || pick.highlightColor === "red") return showNotice("Este pick no tiene respaldo suficiente para agregarlo.");
+  if (!fixture || !pick || !pick.canAdd) return showNotice("Solo se permiten picks VALOR o PRECAUCIÓN.");
   appendPickToParlay({
     id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}`, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
     market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey,
     decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null,
     impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
     estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
-    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.level,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.decision, decision: pick.decision,
     reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
-    analysisStatus: pick.status, sourceModule: "data_picks", source: "API-Football + modelo interno",
+    analysisStatus: pick.status, sourceModule: "Picks basados en datos", source: pick.sourceProvider, bookmaker: pick.bookmaker, dataQualityScore: pick.dataQualityScore, poissonSupportScore: pick.poissonSupportScore, teamGoalSupportScore: pick.teamGoalSupportScore, contradictionLevel: pick.contradictionLevel,
     supportingData: pick.supportingData, contradictingData: pick.contradictingData
   }, "Pick agregado a Mi parlay. Se guardará únicamente cuando nombres y guardes el parlay.");
 }
@@ -1619,7 +1636,7 @@ function saveDataPick(selectionKey) {
   const fixture = selectedFixture();
   const result = state.dataPicksByFixture.get(fixture?.id);
   const pick = result?.picks?.find((item) => item.selectionKey === selectionKey);
-  if (!fixture || !pick || pick.highlightColor === "red") return showNotice("Este pick no tiene respaldo suficiente para guardarlo.");
+  if (!fixture || !pick || !pick.canAdd) return showNotice("Solo se permiten picks VALOR o PRECAUCIÓN.");
   saveIndividualLeg({
     id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}`, fixtureId: fixture.id,
     league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
@@ -1627,9 +1644,9 @@ function saveDataPick(selectionKey) {
     decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null,
     impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
     estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
-    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.level,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.decision, decision: pick.decision,
     reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
-    result: "pending", sourceModule: "data_picks", source: "API-Football + modelo interno",
+    result: "pending", sourceModule: "Picks basados en datos", source: pick.sourceProvider, bookmaker: pick.bookmaker, dataQualityScore: pick.dataQualityScore, poissonSupportScore: pick.poissonSupportScore, teamGoalSupportScore: pick.teamGoalSupportScore, contradictionLevel: pick.contradictionLevel,
     supportingData: pick.supportingData, contradictingData: pick.contradictingData
   });
 }
@@ -1801,6 +1818,9 @@ async function selectFixture(fixtureId, analysisMode = null) {
   }
 
   state.isAnalyzing = true;
+  elements.analysisContent.hidden = false;
+  elements.toggleAnalysis.textContent = "Ocultar";
+  elements.toggleAnalysis.setAttribute("aria-expanded", "true");
   elements.analysisStatus.className = "status-badge status-badge--processing";
   elements.analysisStatus.textContent = "Procesando";
   elements.analysisContent.innerHTML = '<div class="empty-state"><div class="loading-spinner" aria-hidden="true"></div><h3>Evaluando cobertura</h3><p>Generando una respuesta JSON simulada sin completar datos ausentes…</p></div>';
@@ -2047,7 +2067,8 @@ elements.toggleResearch.addEventListener("click", () => {
 });
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
-elements.explainSelectedAnalysis.addEventListener("click", explainSelectedFixture);
+elements.toggleAnalysis.addEventListener("click", () => toggleReadyModule(elements.toggleAnalysis, elements.analysisContent));
+elements.downloadEvidenceTxt.addEventListener("click", downloadCurrentEvidence);
 elements.showDataPicks.addEventListener("click", loadDataPicks);
 elements.dataPicksContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-data-pick]");

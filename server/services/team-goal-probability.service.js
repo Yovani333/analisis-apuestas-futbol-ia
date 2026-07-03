@@ -77,5 +77,15 @@ export function calculateTeamGoalProbability(dataset = {}) {
   const status = confidenceScore >= 70 && home.status === "available" && away.status === "available" ? "available" : "partial";
   const warnings = [...(poisson.warnings || [])];
   if (home.contradictingData.length || away.contradictingData.length) warnings.push("Existen señales ofensivas contradictorias; no usar una sola métrica como fundamento.");
-  return { status, source: "API-Football + modelo interno", sourceModule: "team_goal_probability", modelVersion: "team-goal-probability-v1", fixtureId: String(dataset.fixture?.id || ""), teams: { home, away }, btts: { support: bttsSupport, yesProbabilityPct: poisson.probabilities.bttsYes, noProbabilityPct: poisson.probabilities.bttsNo }, picks, confidenceScore, quality: resolveModuleQuality({ score: confidenceScore, status, notes: warnings }), warnings, warning: warnings.join(" "), generatedAt: new Date().toISOString() };
+  return {
+    status, source: "API-Football + modelo interno", sourceModule: "team_goal_probability", modelVersion: "team-goal-probability-v2",
+    fixtureId: String(dataset.fixture?.id || ""), teams: { home, away },
+    homeGoalProbability: home.over05Pct, awayGoalProbability: away.over05Pct,
+    homeOver05Probability: home.over05Pct, awayOver05Probability: away.over05Pct,
+    homeFailedToScoreRisk: home.noGoalPct, awayFailedToScoreRisk: away.noGoalPct,
+    defensiveResistanceHome: away.noGoalPct, defensiveResistanceAway: home.noGoalPct,
+    btts: { support: bttsSupport, yesProbabilityPct: poisson.probabilities.bttsYes, noProbabilityPct: poisson.probabilities.bttsNo },
+    picks, confidenceScore, teamGoalDataQuality: confidenceScore,
+    quality: resolveModuleQuality({ score: confidenceScore, status, notes: warnings }), warnings, warning: warnings.join(" "), generatedAt: new Date().toISOString()
+  };
 }
