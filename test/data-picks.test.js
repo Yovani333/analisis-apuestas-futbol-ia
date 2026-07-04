@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { generateDataPicks } from "../server/services/data-picks.service.js";
 
-function dataset({ homeXG = 1.6, awayXG = 1.4, odds = [], probabilities = { home: 48, draw: 28, away: 24 } } = {}) {
+function dataset({ homeXG = 1.6, awayXG = 1.4, odds = [], probabilities = { home: 48, draw: 28, away: 24 }, sampleSize = 5 } = {}) {
   return {
     fixture: { id: 10, home: "Local", away: "Visitante", favorite: { probabilities } },
     dataQuality: { score: 82 }, marketAnalysis: odds,
     researchData: {
       totalConfidenceScore: 82, odds: { markets: odds },
-      xgXga: { homeXG, awayXG, homeXGA: awayXG, awayXGA: homeXG, sampleSizeHome: 5, sampleSizeAway: 5 },
+      xgXga: { homeXG, awayXG, homeXGA: awayXG, awayXGA: homeXG, sampleSizeHome: sampleSize, sampleSizeAway: sampleSize },
       statsForm: {}, favorite: { probabilities }
     }
   };
@@ -17,7 +17,7 @@ function dataset({ homeXG = 1.6, awayXG = 1.4, odds = [], probabilities = { home
 test("genera al menos los 13 picks base y clasifica sin cuota como NO BET", () => {
   const result = generateDataPicks(dataset());
   assert.ok(result.picks.length >= 13);
-  assert.equal(result.modelVersion, "picks-data-engine-v2");
+  assert.equal(result.modelVersion, "picks-data-engine-v3");
   assert.equal(result.picks.every((pick) => pick.isSportsPick && pick.expectedValuePct === null), true);
   assert.equal(result.picks.every((pick) => pick.decision === "NO BET" && pick.highlightColor === "gray"), true);
   assert.equal(result.poisson.status, "available");
@@ -47,4 +47,21 @@ test("partido equilibrado limita la confianza de ganadores simples", () => {
   for (const key of ["home_win", "draw", "away_win"]) {
     assert.ok(result.picks.find((pick) => pick.selectionKey === key).confidenceScore <= 64);
   }
+});
+
+test("separa EV puntual de EV conservador y no usa EV para inflar confianza", () => {
+  const odds = [{ selectionKey: "home_win", decimalOdds: 2.4, source: "api-football" }];
+  const pick = generateDataPicks(dataset({ odds, sampleSize: 8, probabilities: { home: 58, draw: 24, away: 18 } })).picks.find((item) => item.selectionKey === "home_win");
+  assert.ok(pick.expectedValuePct > pick.conservativeExpectedValuePct);
+  assert.ok(Number.isFinite(pick.statisticalConfidenceScore));
+  assert.ok(Number.isFinite(pick.footballConfidenceScore));
+  assert.ok(Number.isFinite(pick.riskScore));
+});
+
+test("una muestra menor a tres impide que EV alto se vuelva pick ejecutable", () => {
+  const odds = [{ selectionKey: "home_win", decimalOdds: 3, source: "api-football" }];
+  const pick = generateDataPicks(dataset({ odds, sampleSize: 1, probabilities: { home: 60, draw: 22, away: 18 } })).picks.find((item) => item.selectionKey === "home_win");
+  assert.ok(pick.expectedValuePct > 0);
+  assert.equal(pick.canAdd, false);
+  assert.equal(pick.decision, "NO BET");
 });
