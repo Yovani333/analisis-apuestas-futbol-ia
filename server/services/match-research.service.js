@@ -108,12 +108,15 @@ export function getH2HData(dataset) {
 export function getOddsData(dataset) {
   const apiMarkets = (dataset.marketAnalysis || []).map((market) => ({
     marketKey: market.marketKey, selectionKey: market.selectionKey, market: market.market,
-    selection: market.selection, decimalOdds: market.decimalOdds, bookmaker: dataset.preMatch?.odds?.bookmaker || "",
+    selection: market.selection, decimalOdds: market.decimalOdds, bookmaker: market.bookmaker || dataset.preMatch?.odds?.bookmaker || "",
+    bookmakerId: market.bookmakerId ?? null, sourceProvider: market.sourceProvider || "api-football",
+    status: market.status || "available", isPreferredBookmaker: Boolean(market.isPreferredBookmaker),
+    oddsFreshnessStatus: market.oddsFreshnessStatus || "unknown",
     impliedProbabilityPct: market.impliedProbabilityPct, noVigImpliedProbabilityPct: market.noVigImpliedProbabilityPct,
     bookmakerMarginPct: market.bookmakerMarginPct, estimatedProbabilityPct: market.estimatedProbabilityPct,
     fairOdds: market.fairOdds, expectedValuePct: market.expectedValuePct, positiveValue: market.positiveValue,
     requiresReview: market.requiresReview, method: market.method,
-    updatedAt: dataset.preMatch?.odds?.updatedAt || dataset.fetchedAt
+    updatedAt: market.updatedAt || dataset.preMatch?.odds?.updatedAt || dataset.fetchedAt
   }));
   const oddspedia = dataset.externalSources?.oddspedia;
   const externalMarkets = apiMarkets.length ? [] : (oddspedia?.data?.markets || []).map((market, index) => ({

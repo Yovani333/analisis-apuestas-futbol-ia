@@ -57,3 +57,31 @@ test("prioriza Caliente y después Playdoit entre bookmakers autorizados", () =>
   assert.equal(odds.preferred, true);
   assert.equal(odds.selections[0].isPreferredBookmaker, true);
 });
+
+test("normaliza mercados ampliados desde distintas casas sin asignación ambigua", () => {
+  const odds = normalizeOdds([{ update: "2026-07-04T15:00:00Z", bookmakers: [
+    { id: 10, name: "10Bet", bets: [
+      { name: "Match Winner", values: [{ value: "Home", odd: "2.10" }, { value: "Draw", odd: "3.20" }, { value: "Away", odd: "3.50" }] },
+      { name: "Goals Over/Under", values: [{ value: "Over 1.5", odd: "1.35" }, { value: "Under 3.5", odd: "1.70" }] }
+    ] },
+    { id: 20, name: "Playdoit.mx", bets: [
+      { name: "Double Chance", values: [{ value: "Home/Away", odd: "1.25" }] },
+      { name: "Home Team Total Goals", values: [{ value: "Over 0.5", odd: "1.30" }] }
+    ] }
+  ] }], { homeName: "Canada", awayName: "Morocco" });
+  const byKey = Object.fromEntries(odds.selections.map((item) => [item.selectionKey, item]));
+  assert.equal(byKey.home_win.decimalOdds, 2.1);
+  assert.equal(byKey.over_1_5.decimalOdds, 1.35);
+  assert.equal(byKey.under_3_5.decimalOdds, 1.7);
+  assert.equal(byKey["12"].bookmaker, "Playdoit.mx");
+  assert.equal(byKey.home_over_0_5.decimalOdds, 1.3);
+  assert.equal(odds.bookmaker, "Múltiples casas");
+});
+
+test("conserva cuotas ampliadas sin inventar probabilidad ni EV en el análisis base", () => {
+  const form = { played: 5, matches: Array.from({ length: 5 }, () => ({ venue: "Local", result: "W", over25: true, btts: true })) };
+  const calculations = calculateMarketAnalysis(form, form, { selections: [{ marketKey: "match_winner", selectionKey: "home_win", market: "Resultado 1X2", selection: "Canada", decimalOdds: 2, bookmaker: "Casa" }] });
+  assert.equal(calculations[0].impliedProbabilityPct, 50);
+  assert.equal(calculations[0].estimatedProbabilityPct, null);
+  assert.equal(calculations[0].expectedValuePct, null);
+});

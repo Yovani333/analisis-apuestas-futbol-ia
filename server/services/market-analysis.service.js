@@ -84,37 +84,55 @@ function findOdd(bet, patterns) {
   return asDecimal(value?.odd);
 }
 
+function escapedPattern(value = "") {
+  const normalized = normalizedName(value);
+  return normalized ? new RegExp(`^${normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) : null;
+}
+
 export function normalizeOdds(rows = [], teams = {}) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const bookmakers = safeRows.flatMap((row) => row.bookmakers || []);
-  const eligible = bookmakers.filter((item) => {
-    const names = (item.bets || []).map((bet) => normalizedName(bet.name)).join("|");
-    return /double chance|goals over under|both teams.*score/.test(names);
-  });
   const preference = (item) => /caliente/.test(normalizedName(item?.name)) ? 0 : /playdoit/.test(normalizedName(item?.name)) ? 1 : 2;
-  const bookmaker = [...eligible].sort((a, b) => preference(a) - preference(b))[0] || bookmakers[0];
-  if (!bookmaker) return { bookmaker: null, updatedAt: rows[0]?.update || null, selections: [] };
-
-  const doubleChance = findBet(bookmaker, /double chance/);
-  const totals = findBet(bookmaker, /goals over under|over under/);
-  const btts = findBet(bookmaker, /both teams.*score|both teams to score/);
+  const orderedBookmakers = [...bookmakers].sort((a, b) => preference(a) - preference(b));
+  if (!orderedBookmakers.length) return { bookmaker: null, updatedAt: rows[0]?.update || null, selections: [] };
   const homeLabel = teams.homeName ? `${teams.homeName} o empate (1X)` : "Equipo 1 o empate (1X)";
   const awayLabel = teams.awayName ? `Empate o ${teams.awayName} (X2)` : "Empate o equipo 2 (X2)";
-  const preferred = preference(bookmaker) < 2;
-  const enrich = (item) => ({ ...item, bookmaker: bookmaker.name || "No disponible", bookmakerId: bookmaker.id ?? null,
-    sourceProvider: "api-football", status: preferred ? "available" : "fallback", isPreferredBookmaker: preferred,
-    oddsFreshnessStatus: safeRows[0]?.update ? "available" : "unknown", updatedAt: safeRows[0]?.update || null });
-  const selections = [
-    { marketKey: "double_chance", selectionKey: "1X", market: "Doble oportunidad", selection: homeLabel, decimalOdds: findOdd(doubleChance, [/home draw/, /^1x$/, /local empate/]) },
-    { marketKey: "double_chance", selectionKey: "X2", market: "Doble oportunidad", selection: awayLabel, decimalOdds: findOdd(doubleChance, [/draw away/, /^x2$/, /empate visitante/]) },
-    { marketKey: "over_under_2_5", selectionKey: "over_2_5", market: "Total de goles 2.5", selection: "Más de 2.5 goles", decimalOdds: findOdd(totals, [/over 2 5/, /mas de 2 5/]) },
-    { marketKey: "over_under_2_5", selectionKey: "under_2_5", market: "Total de goles 2.5", selection: "Menos de 2.5 goles", decimalOdds: findOdd(totals, [/under 2 5/, /menos de 2 5/]) },
-    { marketKey: "btts", selectionKey: "btts_yes", market: "Ambos equipos anotan", selection: "Sí", decimalOdds: findOdd(btts, [/^yes$/, /^si$/]) },
-    { marketKey: "btts", selectionKey: "btts_no", market: "Ambos equipos anotan", selection: "No", decimalOdds: findOdd(btts, [/^no$/]) }
-  ].filter((item) => item.decimalOdds).map(enrich);
-
-  return { bookmaker: bookmaker.name || "No disponible", bookmakerId: bookmaker.id ?? null, preferred,
-    warning: preferred ? "" : "La casa preferida no está disponible en el proveedor actual. Se usó cuota alternativa o captura manual.",
+  const homeNamePattern = escapedPattern(teams.homeName);
+  const awayNamePattern = escapedPattern(teams.awayName);
+  const definitions = [
+    ["match_winner", "home_win", "Resultado 1X2", teams.homeName || "Equipo 1 gana", /^(match winner|1x2)$/, [/^home$/, /^1$/, homeNamePattern].filter(Boolean)],
+    ["match_winner", "draw", "Resultado 1X2", "Empate", /^(match winner|1x2)$/, [/^draw$/, /^x$/]],
+    ["match_winner", "away_win", "Resultado 1X2", teams.awayName || "Equipo 2 gana", /^(match winner|1x2)$/, [/^away$/, /^2$/, awayNamePattern].filter(Boolean)],
+    ["double_chance", "1X", "Doble oportunidad", homeLabel, /^double chance$/, [/home draw/, /^1x$/, /local empate/]],
+    ["double_chance", "X2", "Doble oportunidad", awayLabel, /^double chance$/, [/draw away/, /^x2$/, /empate visitante/]],
+    ["double_chance", "12", "Doble oportunidad", `${teams.homeName || "Equipo 1"} o ${teams.awayName || "Equipo 2"} (12)`, /^double chance$/, [/home away/, /^12$/, /local visitante/]],
+    ["over_under_1_5", "over_1_5", "Total de goles 1.5", "Más de 1.5 goles", /^(goals over under|over under|total goals)$/, [/^over 1 5$/, /^mas de 1 5$/]],
+    ["over_under_2_5", "over_2_5", "Total de goles 2.5", "Más de 2.5 goles", /^(goals over under|over under|total goals)$/, [/^over 2 5$/, /^mas de 2 5$/]],
+    ["over_under_2_5", "under_2_5", "Total de goles 2.5", "Menos de 2.5 goles", /^(goals over under|over under|total goals)$/, [/^under 2 5$/, /^menos de 2 5$/]],
+    ["over_under_3_5", "under_3_5", "Total de goles 3.5", "Menos de 3.5 goles", /^(goals over under|over under|total goals)$/, [/^under 3 5$/, /^menos de 3 5$/]],
+    ["btts", "btts_yes", "Ambos equipos anotan", "Sí", /^(both teams.*score|both teams to score)$/, [/^yes$/, /^si$/]],
+    ["btts", "btts_no", "Ambos equipos anotan", "No", /^(both teams.*score|both teams to score)$/, [/^no$/]],
+    ["home_team_goals", "home_over_0_5", `Goles de ${teams.homeName || "Equipo 1"}`, `${teams.homeName || "Equipo 1"} más de 0.5`, /^(home team total goals|home goals over under|team total.*home)$/, [/^over 0 5$/]],
+    ["home_team_goals", "home_over_1_5", `Goles de ${teams.homeName || "Equipo 1"}`, `${teams.homeName || "Equipo 1"} más de 1.5`, /^(home team total goals|home goals over under|team total.*home)$/, [/^over 1 5$/]],
+    ["away_team_goals", "away_over_0_5", `Goles de ${teams.awayName || "Equipo 2"}`, `${teams.awayName || "Equipo 2"} más de 0.5`, /^(away team total goals|away goals over under|team total.*away)$/, [/^over 0 5$/]],
+    ["away_team_goals", "away_over_1_5", `Goles de ${teams.awayName || "Equipo 2"}`, `${teams.awayName || "Equipo 2"} más de 1.5`, /^(away team total goals|away goals over under|team total.*away)$/, [/^over 1 5$/]]
+  ];
+  const selections = definitions.flatMap(([marketKey, selectionKey, market, selection, betPattern, valuePatterns]) => {
+    for (const bookmaker of orderedBookmakers) {
+      const decimalOdds = findOdd(findBet(bookmaker, betPattern), valuePatterns);
+      if (!decimalOdds) continue;
+      const preferred = preference(bookmaker) < 2;
+      return [{ marketKey, selectionKey, market, selection, decimalOdds,
+        bookmaker: bookmaker.name || "No disponible", bookmakerId: bookmaker.id ?? null,
+        sourceProvider: "api-football", status: preferred ? "available" : "fallback", isPreferredBookmaker: preferred,
+        oddsFreshnessStatus: safeRows[0]?.update ? "available" : "unknown", updatedAt: safeRows[0]?.update || null }];
+    }
+    return [];
+  });
+  const usedBookmakers = [...new Set(selections.map((item) => item.bookmaker))];
+  const preferred = selections.some((item) => item.isPreferredBookmaker);
+  return { bookmaker: usedBookmakers.length === 1 ? usedBookmakers[0] : usedBookmakers.length ? "Múltiples casas" : null, bookmakerId: null, preferred,
+    warning: selections.length && !preferred ? "Las casas preferidas no están disponibles en el proveedor actual. Se usaron cuotas alternativas verificadas por mercado." : "",
     updatedAt: safeRows[0]?.update || null, selections };
 }
 
@@ -147,12 +165,25 @@ export function calculateMarketAnalysis(homeForm, awayForm, oddsSummary) {
   const marginByMarket = Object.fromEntries(["over_under_2_5", "btts"].map((marketKey) => {
     const selections = oddsSummary.selections.filter((item) => item.marketKey === marketKey);
     const sum = selections.reduce((total, item) => total + 1 / item.decimalOdds, 0);
-    return [marketKey, selections.length === 2 ? sum : null];
+    const sameBookmaker = selections.length === 2 && selections.every((item) => item.bookmaker === selections[0].bookmaker);
+    return [marketKey, sameBookmaker ? sum : null];
   }));
 
   return oddsSummary.selections.map((selection) => {
     const probability = probabilities[selection.selectionKey];
     const implied = 1 / selection.decimalOdds;
+    if (!Number.isFinite(probability)) return {
+      ...selection,
+      estimatedProbabilityPct: null,
+      impliedProbabilityPct: round(implied * 100, 1),
+      noVigImpliedProbabilityPct: null,
+      bookmakerMarginPct: null,
+      fairOdds: null,
+      expectedValuePct: null,
+      sampleSize: combinedPlayed,
+      method: "Cuota normalizada desde API-Football; la probabilidad y el EV corresponden al módulo específico que la consuma.",
+      positiveValue: false
+    };
     const expectedValue = probability * selection.decimalOdds - 1;
     const impliedSum = marginByMarket[selection.marketKey];
     return {
