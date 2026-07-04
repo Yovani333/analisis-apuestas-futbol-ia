@@ -150,6 +150,12 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/corners`, { method: "POST" });
   },
 
+  async getSpecificMarkets(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", groups: [], warnings: ["Los mercados específicos requieren datos reales normalizados."] };
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/markets/specific`, { method: "POST" });
+  },
+
   async getResearchData(fixtureId, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return null;

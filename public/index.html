@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260702-dark-responsive-fix" />
+    <link rel="stylesheet" href="styles.css?v=20260703-specific-markets-tooltips-v2" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -190,7 +190,7 @@
 
         <section id="data-picks-panel" class="panel data-picks-panel" aria-labelledby="data-picks-title">
           <div class="panel-heading">
-            <div><p class="eyebrow">Motor estadístico</p><h2 id="data-picks-title">Picks basados en datos</h2></div>
+            <div><p class="eyebrow">Motor estadístico</p><h2 id="data-picks-title">Picks basados en datos <button class="info-tooltip" type="button" data-tooltip-key="picks" aria-label="Información sobre Picks" aria-expanded="false">?</button></h2></div>
             <div class="panel-actions">
               <button id="show-data-picks" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button>
               <span id="data-picks-status" class="status-badge status-badge--unavailable">No disponible</span>
@@ -201,7 +201,7 @@
 
         <section id="poisson-panel" class="panel poisson-panel advanced-module-panel" aria-labelledby="poisson-title">
           <div class="panel-heading">
-            <div><p class="eyebrow">Estadísticas avanzadas</p><h2 id="poisson-title">Modelo Poisson</h2></div>
+            <div><p class="eyebrow">Estadísticas avanzadas</p><h2 id="poisson-title">Modelo Poisson <button class="info-tooltip" type="button" data-tooltip-key="poisson" aria-label="Información sobre Modelo Poisson" aria-expanded="false">?</button></h2></div>
             <div class="panel-actions">
               <button id="show-poisson" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button>
               <span id="poisson-status" class="status-badge status-badge--unavailable">No disponible</span>
@@ -212,14 +212,14 @@
 
         <section id="team-goals-panel" class="panel team-goals-panel advanced-module-panel" aria-labelledby="team-goals-title">
           <div class="panel-heading">
-            <div><p class="eyebrow">Ataque vs defensa</p><h2 id="team-goals-title">Probabilidad de Gol por Equipo</h2></div>
+            <div><p class="eyebrow">Ataque vs defensa</p><h2 id="team-goals-title">Probabilidad de Gol por Equipo <button class="info-tooltip" type="button" data-tooltip-key="model_probability" aria-label="Información sobre Probabilidad del modelo" aria-expanded="false">?</button></h2></div>
             <div class="panel-actions"><button id="show-team-goals" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="team-goals-status" class="status-badge status-badge--unavailable">No disponible</span></div>
           </div>
           <div id="team-goals-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para evaluar la posibilidad de gol de cada equipo.</div></div>
         </section>
 
         <section id="corners-panel" class="panel corners-panel advanced-module-panel" aria-labelledby="corners-title">
-          <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners</h2></div><div class="panel-actions"><button id="show-corners" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+          <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners <button class="info-tooltip" type="button" data-tooltip-key="corners" aria-label="Información sobre Corners" aria-expanded="false">?</button></h2></div><div class="panel-actions"><button id="show-corners" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
           <div id="corners-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar corners oficiales históricos.</div></div>
         </section>
 
@@ -258,6 +258,16 @@
           <div class="guide-module__body"><div id="guide-coverage-slot"></div><div id="guide-research-slot"></div></div>
         </details>
         <details class="guide-module guide-module--support"><summary><span>Apoyo ofensivo</span><strong>Probabilidad de Gol por Equipo</strong><small>Cruza ataque, defensa, forma y calidad de muestra.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-team-goals-slot"></div></div></details>
+        <details id="guide-specific-markets-module" class="guide-module guide-module--specific">
+          <summary><span>Selecciones concretas</span><strong>Mercados específicos</strong><small>Corners, BTTS, hándicap, goles de equipo y mercados combinados, solo con datos suficientes.</small><em>Mostrar</em></summary>
+          <div class="guide-module__body">
+            <section id="specific-markets-panel" class="panel advanced-module-panel" aria-labelledby="specific-markets-title">
+              <div class="panel-heading"><div><p class="eyebrow">Picks por mercado</p><h2 id="specific-markets-title">Apuestas específicas</h2></div><div class="panel-actions"><button id="show-specific-markets" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="specific-markets-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+              <div id="specific-markets-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar mercados específicos.</div></div>
+            </section>
+            <div id="guide-corners-slot"></div>
+          </div>
+        </details>
         <details class="guide-module guide-module--support">
           <summary><span>Apoyo medio</span><strong>Modelo Poisson</strong><small>Apoyo para goles y marcadores; depende de buenos datos de entrada.</small><em>Mostrar</em></summary>
           <div class="guide-module__body"><div id="guide-poisson-slot"></div></div>
@@ -336,7 +346,7 @@
       <div class="parlay-slip__header">
         <div>
           <p class="eyebrow">Cupón en preparación</p>
-          <h2 id="parlay-slip-title">Mi parlay <span id="parlay-leg-count">0</span></h2>
+          <h2 id="parlay-slip-title">Mi parlay <button class="info-tooltip" type="button" data-tooltip-key="parlays" aria-label="Información sobre Parlays" aria-expanded="false">?</button> <span id="parlay-leg-count">0</span></h2>
         </div>
         <div class="parlay-slip__controls">
           <button id="parlay-slip-minimize" class="parlay-slip__control" type="button" aria-label="Minimizar cupón" aria-expanded="true">−</button>
@@ -356,6 +366,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260702-picks-engine-v2"></script>
+    <script type="module" src="app.js?v=20260703-specific-markets-tooltips-v3"></script>
   </body>
 </html>

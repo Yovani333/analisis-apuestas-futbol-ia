@@ -1389,3 +1389,107 @@ body {
   .source-table td:last-child { min-width: 0; }
   .research-card dd { white-space: normal; text-overflow: clip; }
 }
+
+/* Shared explanatory tooltips. */
+.term-with-help { display: inline-flex; align-items: center; gap: 4px; }
+.info-tooltip {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--primary-dark);
+  font: 800 .65rem/1 inherit;
+  vertical-align: middle;
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--border));
+  border-radius: 50%;
+  cursor: help;
+}
+.info-tooltip:hover, .info-tooltip:focus-visible, .info-tooltip[aria-expanded="true"] { color: white; background: var(--primary); outline: 2px solid var(--primary-soft); }
+.info-tooltip-popover {
+  position: fixed;
+  z-index: 1000;
+  width: min(330px, calc(100vw - 20px));
+  max-height: min(360px, calc(100dvh - 20px));
+  padding: 12px;
+  overflow-y: auto;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--primary);
+  border-radius: 8px;
+  box-shadow: 0 18px 45px rgb(8 20 38 / 28%);
+}
+.info-tooltip-popover strong { display: block; margin-bottom: 5px; font-size: .82rem; }
+.info-tooltip-popover p, .info-tooltip-popover dl { margin: 0 0 8px; font-size: .72rem; line-height: 1.45; }
+.info-tooltip-popover dl { display: grid; gap: 5px; }
+.info-tooltip-popover dl div { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 6px; }
+.info-tooltip-popover dt { color: var(--muted); font-weight: 800; }
+.info-tooltip-popover dd { margin: 0; }
+.info-tooltip-popover small { display: block; padding-top: 7px; color: var(--warning); font-size: .66rem; border-top: 1px solid var(--border); }
+
+/* Specific betting markets. */
+.guide-module--specific { border-left-color: #0f8a70; }
+.specific-markets-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.specific-market { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 11px; background: var(--surface-subtle); border: 1px solid var(--border); border-left: 4px solid #64748b; border-radius: 7px; }
+.specific-market--available { border-left-color: var(--success); }
+.specific-market--partial { border-left-color: var(--warning); }
+.specific-market--not_available { border-left-color: var(--danger); }
+.specific-market > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.specific-market h3 { margin: 0; font-size: .78rem; }
+.specific-market > p, .specific-market > footer, .specific-market__observed { margin: 0; color: var(--muted); font-size: .66rem; }
+.specific-market > footer { padding-top: 7px; border-top: 1px solid var(--border); }
+.specific-market__missing, .specific-market__alternative { display: grid; gap: 2px; padding: 7px; color: var(--muted); font-size: .64rem; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; }
+.specific-market__missing strong { color: var(--danger); }
+.specific-market__alternative strong { color: var(--primary); }
+.specific-pick { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--success); border-radius: 6px; }
+.specific-pick > div:first-child { display: grid; min-width: 0; gap: 2px; }
+.specific-pick strong { font-size: .73rem; overflow-wrap: anywhere; }
+.specific-pick small { color: var(--muted); font-size: .61rem; }
+
+/* Low-odds monitor: market signal, not a recommendation. */
+@keyframes oddsMonitorPulse {
+  0%, 100% { border-color: #65b995; box-shadow: 0 0 0 0 rgb(8 122 85 / 0%); }
+  50% { border-color: #16805a; box-shadow: 0 0 0 3px rgb(8 122 85 / 13%); }
+}
+.odds-monitor { padding: 12px; margin-bottom: 13px; color: var(--text); background: var(--success-soft); border: 1px solid #65b995; border-left: 5px solid var(--success); border-radius: 8px; animation: oddsMonitorPulse 2.8s ease-in-out infinite; }
+.odds-monitor > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.odds-monitor h3, .odds-monitor .eyebrow { margin: 0; }
+.odds-monitor > header > span { color: var(--success); font-size: .66rem; font-weight: 800; }
+.odds-monitor__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.odds-monitor__grid article { display: grid; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border)); border-radius: 6px; }
+.odds-monitor__grid span, .odds-monitor__grid small, .odds-monitor__grid p { margin: 0; color: var(--muted); font-size: .63rem; }
+.odds-monitor__grid strong { color: var(--success); font-size: .78rem; }
+.odds-monitor__warning { margin: 9px 0 0; color: var(--text); font-size: .66rem; line-height: 1.45; }
+
+/* Reusable overflow safety for dialogs and floating panels. */
+.data-dialog[open] { display: flex; max-height: min(88dvh, 860px); flex-direction: column; }
+.data-dialog__content { min-height: 0; flex: 1 1 auto; padding-bottom: max(22px, env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+.notification-popover, .parlay-slip { max-height: min(88dvh, 760px); overflow-y: auto; overscroll-behavior: contain; }
+
+:root[data-theme="dark"] .info-tooltip-popover,
+:root[data-theme="dark"] .specific-market,
+:root[data-theme="dark"] .specific-pick,
+:root[data-theme="dark"] .specific-market__missing,
+:root[data-theme="dark"] .specific-market__alternative,
+:root[data-theme="dark"] .odds-monitor__grid article { color: var(--text); background: var(--surface-subtle); border-color: var(--border); }
+:root[data-theme="dark"] .odds-monitor { color: var(--text); background: var(--success-soft); border-color: #28634c; }
+
+@media (max-width: 720px) {
+  .specific-markets-grid, .odds-monitor__grid { grid-template-columns: 1fr; }
+  .specific-pick { align-items: stretch; flex-direction: column; }
+  .specific-pick .pick-actions, .specific-pick .button { width: 100%; }
+  .data-dialog[open] { width: calc(100% - 12px); max-height: calc(100dvh - 12px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odds-monitor { animation: none; }
+}
+
+@media (min-width: 821px) and (max-width: 1400px) {
+  .app-header { flex-wrap: wrap; gap: 8px 18px; padding-bottom: 0; }
+  .main-nav { order: 2; width: 100%; min-width: 0; max-width: 100%; min-height: 48px; overflow-x: auto; }
+  .main-nav__item { flex: 0 0 auto; }
+}

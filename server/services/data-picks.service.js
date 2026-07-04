@@ -115,7 +115,7 @@ function normalizeDecisionPick(dataset, pick, poisson, teamGoals, quality, gener
     oddsFreshnessStatus: quoted.oddsFreshnessStatus || (quoted.updatedAt ? "available" : decimalOdds ? "unknown" : "unavailable"),
     oddsUpdatedAt: quoted.updatedAt || dataset.fetchedAt || null,
     dataQualityScore: quality, poissonSupportScore, teamGoalSupportScore, contradictionLevel,
-    supportCount, explanation: reason, sourceModule: "Picks basados en datos", generatedAt,
+    supportCount, explanation: reason, sourceModule: "data_picks", generatedAt,
     status: decision === "VALOR" ? "available" : decision === "PRECAUCIÓN" ? "partial" : "not_available",
     isSportsPick: !decimalOdds, contradictingData: contradictions,
     supportingData: pick.supportingData || [], sourcesUsed: pick.sourcesUsed || [pick.sourceModule || "modelo interno"],

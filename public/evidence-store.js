@@ -1,3 +1,5 @@
+import { pickOriginLabel } from "./pick-origins.js";
+
 export const EVIDENCE_SNAPSHOTS_KEY = "football-ai.evidence-snapshots.v1";
 const MAX_SNAPSHOTS = 50;
 
@@ -93,7 +95,7 @@ export function evidenceSnapshotToText(snapshot, { includeRejected = true } = {}
     `Modelo: ${textValue(pick.modelProbabilityPct)}% | Implícita: ${textValue(pick.impliedProbabilityPct)}% | EV: ${textValue(pick.expectedValuePct)}%`,
     `Confianza: ${textValue(pick.confidenceScore)}/100 | Calidad: ${textValue(pick.dataQualityScore)}/100`,
     `Soporte Poisson: ${textValue(pick.poissonSupportScore)} | Soporte Gol por Equipo: ${textValue(pick.teamGoalSupportScore)} | Contradicción: ${textValue(pick.contradictionLevel)}`,
-    `Origen: ${textValue(pick.sourceModule)} | Motivo: ${textValue(pick.explanation)} | Timestamp: ${textValue(pick.generatedAt)}`));
+    `Origen: ${textValue(pickOriginLabel(pick.sourceModule))} | Motivo: ${textValue(pick.explanation)} | Timestamp: ${textValue(pick.generatedAt)}`));
   lines.push("", "RESUMEN FINAL", `Recomendación: ${textValue(modules.dataPicks?.finalDecision || "NO BET")}`, "",
     "Resultado final del partido: Pendiente", "Comparación posterior: Pendiente", "Aciertos: Pendiente", "Errores detectados: Pendiente", "Notas de auditoría: Pendiente");
   return lines.join("\r\n");
