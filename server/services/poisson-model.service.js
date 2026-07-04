@@ -47,7 +47,8 @@ function calculateLambdas(dataset) {
 }
 
 function marketOdds(dataset, selectionKey) {
-  const row = (dataset.researchData?.odds?.markets || dataset.marketAnalysis || []).find((item) => item.selectionKey === selectionKey);
+  const rows = [...(dataset.researchData?.odds?.markets || []), ...(dataset.marketAnalysis || [])];
+  const row = rows.find((item) => item.selectionKey === selectionKey && numeric(item.decimalOdds) !== null);
   return numeric(row?.decimalOdds);
 }
 
@@ -121,12 +122,16 @@ export function calculatePoissonModel(dataset = {}) {
     ["over_under_2_5", "under_2_5", "Total de goles 2.5", "Menos de 2.5 goles", probabilities.under25],
     ["under_3_5", "under_3_5", "Total de goles 3.5", "Menos de 3.5 goles", probabilities.under35],
     ["btts", "btts_yes", "Ambos anotan", "Sí", probabilities.bttsYes],
-    ["btts", "btts_no", "Ambos anotan", "No", probabilities.bttsNo]
+    ["btts", "btts_no", "Ambos anotan", "No", probabilities.bttsNo],
+    ["home_team_goals", "home_over_0_5", `Goles de ${fixture.home || "Local"}`, `${fixture.home || "Local"} más de 0.5`, probabilities.homeOver05],
+    ["home_team_goals", "home_over_1_5", `Goles de ${fixture.home || "Local"}`, `${fixture.home || "Local"} más de 1.5`, probabilities.homeOver15],
+    ["away_team_goals", "away_over_0_5", `Goles de ${fixture.away || "Visitante"}`, `${fixture.away || "Visitante"} más de 0.5`, probabilities.awayOver05],
+    ["away_team_goals", "away_over_1_5", `Goles de ${fixture.away || "Visitante"}`, `${fixture.away || "Visitante"} más de 1.5`, probabilities.awayOver15]
   ];
   const suggestedMarkets = definitions
     .filter(([, , , , probability]) => probability >= 55 && status !== "not_available")
     .map(([marketKey, selectionKey, market, selection, probability]) => marketPick(dataset, { marketKey, selectionKey, market, selection, supportingData: [...baseSupport, `Poisson ${probability}%`] }, probability, quality))
-    .sort((a, b) => b.confidenceScore - a.confidenceScore).slice(0, 6);
+    .sort((a, b) => Number(Boolean(b.decimalOdds)) - Number(Boolean(a.decimalOdds)) || b.confidenceScore - a.confidenceScore);
   const moduleQuality = resolveModuleQuality({ score: quality, status, notes: warnings });
   return {
     status, source: "API-Football + modelo Poisson interno", sourceModule: "poisson", modelVersion: "poisson-v1",

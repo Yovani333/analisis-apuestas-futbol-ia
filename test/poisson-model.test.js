@@ -49,3 +49,19 @@ test("Mundial con muestra corta queda advertido y sin confianza fuerte", () => {
   assert.equal(result.status, "partial");
   assert.match(result.warning, /Mundial|torneo corto/i);
 });
+
+test("Poisson consume cuotas ampliadas y prioriza mercados ejecutables", () => {
+  const odds = [
+    { selectionKey: "home_win", decimalOdds: 2.1 },
+    { selectionKey: "over_1_5", decimalOdds: 1.4 },
+    { selectionKey: "home_over_0_5", decimalOdds: 1.3 }
+  ];
+  const result = calculatePoissonModel(dataset({ odds, xgXga: { homeXG: 2.2, homeXGA: 0.8, awayXG: 1.1, awayXGA: 1.7, sampleSize: 8 } }));
+  for (const key of ["home_win", "over_1_5", "home_over_0_5"]) {
+    const pick = result.suggestedMarkets.find((item) => item.selectionKey === key);
+    assert.ok(pick);
+    assert.ok(pick.decimalOdds > 1);
+    assert.equal(pick.isSportsPick, false);
+  }
+  assert.equal(result.suggestedMarkets[0].decimalOdds !== null, true);
+});
