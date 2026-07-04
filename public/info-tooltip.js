@@ -16,12 +16,23 @@ export function labelWithTooltip(label, explicitKey = null) {
   return key ? `<span class="term-with-help">${escapeHtml(label)}${infoTooltip(key)}</span>` : escapeHtml(label);
 }
 
+export function setTooltipPopoverOpen(popover, open) {
+  if (open) {
+    popover.hidden = false;
+    if (typeof popover.showPopover === "function" && !popover.matches(":popover-open")) popover.showPopover();
+    return;
+  }
+  if (typeof popover.hidePopover === "function" && popover.matches(":popover-open")) popover.hidePopover();
+  popover.hidden = true;
+}
+
 export function initializeInfoTooltips(root = document) {
   if (root.querySelector("#info-tooltip-popover")) return;
   const popover = document.createElement("aside");
   popover.id = "info-tooltip-popover";
   popover.className = "info-tooltip-popover";
   popover.setAttribute("role", "tooltip");
+  popover.setAttribute("popover", "manual");
   popover.hidden = true;
   document.body.append(popover);
   let activeTrigger = null;
@@ -44,7 +55,7 @@ export function initializeInfoTooltips(root = document) {
     if (activeTrigger) activeTrigger.setAttribute("aria-expanded", "false");
     activeTrigger = null;
     pinnedByClick = false;
-    popover.hidden = true;
+    setTooltipPopoverOpen(popover, false);
   };
 
   const open = (trigger, pinned = false) => {
@@ -55,7 +66,7 @@ export function initializeInfoTooltips(root = document) {
     pinnedByClick = pinned;
     trigger.setAttribute("aria-expanded", "true");
     popover.innerHTML = `<strong>${escapeHtml(definition.title)}</strong><p>${escapeHtml(definition.meaning)}</p><dl><div><dt>Uso</dt><dd>${escapeHtml(definition.use)}</dd></div><div><dt>Interpretación</dt><dd>${escapeHtml(definition.interpretation)}</dd></div></dl><small>${escapeHtml(definition.warning)}</small>`;
-    popover.hidden = false;
+    setTooltipPopoverOpen(popover, true);
     requestAnimationFrame(position);
   };
 

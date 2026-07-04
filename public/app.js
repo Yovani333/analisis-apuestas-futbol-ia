@@ -6,7 +6,8 @@ import {
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
 } from "./parlay-store.js?v=20260630-common-picks";
 import { createEvidenceSnapshot, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260702-evidence-v2";
-import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260703-v2";
+import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
+import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260703";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 
@@ -257,6 +258,42 @@ function toggleReadyModule(button, content) {
   button.textContent = content.hidden ? "Mostrar" : "Ocultar";
   button.classList.remove("button--ready");
   button.setAttribute("aria-expanded", String(!content.hidden));
+}
+
+const guideModuleParts = {
+  "guide-coverage-module": { contents: () => [elements.researchContent], buttons: () => [elements.toggleResearch] },
+  "guide-team-goals-module": { contents: () => [elements.teamGoalsContent], buttons: () => [elements.showTeamGoals], load: () => loadTeamGoals() },
+  "guide-specific-markets-module": { contents: () => [elements.specificMarketsContent, elements.cornersContent], buttons: () => [elements.showSpecificMarkets, elements.showCorners], load: () => Promise.all([loadSpecificMarkets(), loadCorners()]) },
+  "guide-poisson-module": { contents: () => [elements.poissonContent], buttons: () => [elements.showPoisson], load: () => loadPoisson() },
+  "guide-odds-module": { contents: () => [], buttons: () => [] },
+  "guide-data-picks-module": { contents: () => [elements.dataPicksContent], buttons: () => [elements.showDataPicks], load: () => loadDataPicks() }
+};
+
+function resetAnalysisGuide() {
+  collapseGuideModules({
+    details: document.querySelectorAll("#analysis-guide-content details.guide-module"),
+    parts: Object.values(guideModuleParts),
+    extraContents: [elements.analysisContent],
+    extraButtons: [elements.toggleAnalysis]
+  });
+}
+
+function handleGuideModuleToggle(details) {
+  const part = guideModuleParts[details.id];
+  if (!part) return;
+  if (!details.open) {
+    part.contents().forEach((content) => { if (content) content.hidden = true; });
+    part.buttons().forEach(resetModuleButton);
+    return;
+  }
+  if (!selectedFixture()) return;
+  if (details.id === "guide-coverage-module") {
+    elements.researchContent.hidden = false;
+    elements.toggleResearch.setAttribute("aria-expanded", "true");
+    elements.toggleResearch.textContent = "Ocultar";
+    return;
+  }
+  part.load?.();
 }
 
 function competitionLeagues(value = elements.competition.value) {
@@ -1892,6 +1929,7 @@ function saveSpecificMarketPick(reference) { const leg = specificMarketLeg(refer
 
 async function selectFixture(fixtureId, analysisMode = null) {
   if (state.isAnalyzing) return;
+  if (state.selectedFixtureId !== fixtureId) resetAnalysisGuide();
   state.selectedFixtureId = fixtureId;
   renderMatches();
   const fixtureIndex = state.fixtures.findIndex((fixture) => fixture.id === fixtureId);
@@ -2067,6 +2105,8 @@ async function searchFixtures(event) {
   elements.filterError.textContent = error;
   if (error || state.isSearching) return;
 
+  resetAnalysisGuide();
+  clearSelectedFixtureData();
   state.hasSearched = true;
   state.isSearching = true;
   const submitButton = elements.form.querySelector('button[type="submit"]');
@@ -2081,17 +2121,9 @@ async function searchFixtures(event) {
       dateTo: elements.dateTo.value,
       status: elements.status.value
     });
-    if (!state.fixtures.some((fixture) => fixture.id === state.selectedFixtureId)) {
-      state.selectedFixtureId = state.fixtures[0]?.id || null;
-    }
     const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
     elements.searchFeedback.textContent = `Búsqueda ${source} completada · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
     renderMatches();
-    if (state.selectedFixtureId) {
-      renderFixtureData();
-      const saved = state.analysisByFixture.get(state.selectedFixtureId);
-      saved ? renderAnalysis(saved) : showAnalysisEmpty();
-    }
   } catch (error) {
     elements.filterError.hidden = false;
     elements.filterError.textContent = error.message;
@@ -2123,6 +2155,9 @@ function handleFilterChange(event) {
 
 elements.form.addEventListener("change", handleFilterChange);
 elements.form.addEventListener("submit", searchFixtures);
+document.querySelectorAll("#analysis-guide-content details.guide-module").forEach((details) => {
+  details.addEventListener("toggle", () => handleGuideModuleToggle(details));
+});
 elements.clearFilters.addEventListener("click", clearFilters);
 elements.form.querySelector(".quick-filters").addEventListener("click", (event) => {
   const dateButton = event.target.closest("[data-quick-date]");

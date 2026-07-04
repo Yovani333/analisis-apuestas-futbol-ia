@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260703-specific-markets-tooltips-v2" />
+    <link rel="stylesheet" href="styles.css?v=20260704-guide-reset-tooltip-layer-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -257,7 +257,7 @@
           <summary><span>Información base</span><strong>Cobertura y fuentes</strong><small>Datos del partido, disponibilidad, calidad y procedencia.</small><em>Mostrar</em></summary>
           <div class="guide-module__body"><div id="guide-coverage-slot"></div><div id="guide-research-slot"></div></div>
         </details>
-        <details class="guide-module guide-module--support"><summary><span>Apoyo ofensivo</span><strong>Probabilidad de Gol por Equipo</strong><small>Cruza ataque, defensa, forma y calidad de muestra.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-team-goals-slot"></div></div></details>
+        <details id="guide-team-goals-module" class="guide-module guide-module--support"><summary><span>Apoyo ofensivo</span><strong>Probabilidad de Gol por Equipo</strong><small>Cruza ataque, defensa, forma y calidad de muestra.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-team-goals-slot"></div></div></details>
         <details id="guide-specific-markets-module" class="guide-module guide-module--specific">
           <summary><span>Selecciones concretas</span><strong>Mercados específicos</strong><small>Corners, BTTS, hándicap, goles de equipo y mercados combinados, solo con datos suficientes.</small><em>Mostrar</em></summary>
           <div class="guide-module__body">
@@ -268,12 +268,12 @@
             <div id="guide-corners-slot"></div>
           </div>
         </details>
-        <details class="guide-module guide-module--support">
+        <details id="guide-poisson-module" class="guide-module guide-module--support">
           <summary><span>Apoyo medio</span><strong>Modelo Poisson</strong><small>Apoyo para goles y marcadores; depende de buenos datos de entrada.</small><em>Mostrar</em></summary>
           <div class="guide-module__body"><div id="guide-poisson-slot"></div></div>
         </details>
-        <details class="guide-module guide-module--market"><summary><span>Dato de mercado</span><strong>Ver cuotas</strong><small>Compara cuota e implícita contra el modelo; no crea la predicción.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div></details>
-        <details class="guide-module guide-module--primary"><summary><span>Decisión final</span><strong>Picks basados en datos</strong><small>Integra cobertura, goles, Poisson, cuotas, EV y contradicciones.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-data-picks-slot"></div></div></details>
+        <details id="guide-odds-module" class="guide-module guide-module--market"><summary><span>Dato de mercado</span><strong>Ver cuotas</strong><small>Compara cuota e implícita contra el modelo; no crea la predicción.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div></details>
+        <details id="guide-data-picks-module" class="guide-module guide-module--primary"><summary><span>Decisión final</span><strong>Picks basados en datos</strong><small>Integra cobertura, goles, Poisson, cuotas, EV y contradicciones.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-data-picks-slot"></div></div></details>
       </section>
     </main>
 
@@ -366,6 +366,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260703-specific-markets-tooltips-v3"></script>
+    <script type="module" src="app.js?v=20260704-guide-reset-tooltip-layer-v1"></script>
   </body>
 </html>
