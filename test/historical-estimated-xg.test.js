@@ -100,8 +100,18 @@ test("partido programado con cinco partidos útiles produce histórico parcial d
   assert.equal(result.sampleSizeAway, 5);
   assert.equal(result.homeXGHistoricalAverage, result.homeTeam.historicalEstimatedXGAvg);
   assert.equal(result.fixturesUsedHome.length, 5);
+  assert.equal(result.homeTeam.calculation.recencyWeightingApplied, true);
+  assert.ok(result.homeTeam.effectiveSampleSize < result.homeTeam.sampleSize);
+  assert.equal(result.calculation.shrinkageApplied, false);
   assert.match(result.confidence.notes.join(" "), /confiabilidad histórica es media/i);
   assert.match(result.warning, /No corresponde a xG oficial/);
+});
+
+test("aplica shrinkage solo cuando recibe una media de liga verificable", async () => {
+  const result = await getHistoricalEstimatedXgXga(input(5, 5, { leagueBaseline: { xg: 1, xga: 1 }, priorStrength: 5 }));
+  assert.equal(result.calculation.shrinkageApplied, true);
+  assert.equal(result.homeTeam.calculation.shrinkageApplied, true);
+  assert.ok(result.homeTeam.historicalEstimatedXGAvg < result.homeTeam.historicalEstimatedXGSimpleAvg);
 });
 
 test("seis partidos útiles producen una muestra histórica aceptable", async () => {

@@ -4,8 +4,13 @@ import {
   extractPenaltyCountFromEvents,
   extractTeamStatsFromApiFootball
 } from "./xg-data-extractor.js";
+import {
+  calculateRecencyWeightedAverage,
+  PREDICTIVE_ADJUSTMENTS_VERSION,
+  shrinkEstimate
+} from "../predictive-adjustments.service.js";
 
-export const HISTORICAL_MODEL_VERSION = "historical-estimated-xg-v1";
+export const HISTORICAL_MODEL_VERSION = "historical-estimated-xg-v2";
 export const HISTORICAL_XG_WARNING = "xG / xGA estimado con base en partidos anteriores. No corresponde a xG oficial ni al xG del partido actual.";
 export const WORLD_CUP_XG_WARNING = "Modo Mundial: muestra estadística limitada. El xG/xGA histórico estimado usa partidos anteriores de cada selección y debe interpretarse con cautela.";
 
@@ -36,6 +41,9 @@ function emptyTeam(team) {
     name: team?.name || "",
     historicalEstimatedXGAvg: null,
     historicalEstimatedXGAAvg: null,
+    historicalEstimatedXGSimpleAvg: null,
+    historicalEstimatedXGASimpleAvg: null,
+    effectiveSampleSize: 0,
     sampleSize: 0,
     fixturesUsed: [],
     missingFields: [],
@@ -106,7 +114,10 @@ async function buildTeamHistory({
   limit,
   getFixtureStatistics,
   getFixtureEvents,
-  worldCup
+  worldCup,
+  leagueBaseline,
+  recencyDecay,
+  priorStrength
 }) {
   const fixtures = previousFinishedFixtures(fixtureRows, currentFixtureDate, limit);
   const outcomes = await Promise.all(fixtures.map(async (fixture) => {
@@ -168,10 +179,18 @@ async function buildTeamHistory({
   if (records.some((record) => record.estimatedXG > 6 || record.estimatedXGA > 6)) {
     notes.push("Un resultado histórico fue superior a 6.00; revisar posibles datos inflados o inconsistentes.");
   }
+  const weightedXg = calculateRecencyWeightedAverage(records.map((record) => record.estimatedXG), recencyDecay);
+  const weightedXga = calculateRecencyWeightedAverage(records.map((record) => record.estimatedXGA), recencyDecay);
+  const adjustedXg = shrinkEstimate({ estimate: weightedXg.value, sampleSize: weightedXg.effectiveSampleSize, prior: leagueBaseline?.xg, priorStrength });
+  const adjustedXga = shrinkEstimate({ estimate: weightedXga.value, sampleSize: weightedXga.effectiveSampleSize, prior: leagueBaseline?.xga, priorStrength });
+  if (!adjustedXg.applied || !adjustedXga.applied) notes.push("No se aplico ajuste hacia la media porque no hay una media de liga verificable.");
   return {
     ...emptyTeam(team),
-    historicalEstimatedXGAvg: average(records.map((record) => record.estimatedXG)),
-    historicalEstimatedXGAAvg: average(records.map((record) => record.estimatedXGA)),
+    historicalEstimatedXGAvg: adjustedXg.value,
+    historicalEstimatedXGAAvg: adjustedXga.value,
+    historicalEstimatedXGSimpleAvg: average(records.map((record) => record.estimatedXG)),
+    historicalEstimatedXGASimpleAvg: average(records.map((record) => record.estimatedXGA)),
+    effectiveSampleSize: Math.min(weightedXg.effectiveSampleSize, weightedXga.effectiveSampleSize),
     sampleSize: records.length,
     fixturesUsed: records.map(({ rawStats, eventsAvailable, ...record }) => record),
     missingFields,
@@ -180,7 +199,15 @@ async function buildTeamHistory({
       usedFixtures: records.length,
       skippedFixtures
     },
-    confidence: { ...confidence, notes }
+    confidence: { ...confidence, notes },
+    calculation: {
+      recencyDecay,
+      recencyWeightingApplied: records.length > 1,
+      shrinkageApplied: adjustedXg.applied && adjustedXga.applied,
+      priorStrength,
+      leagueBaseline: leagueBaseline || null,
+      adjustmentsVersion: PREDICTIVE_ADJUSTMENTS_VERSION
+    }
   };
 }
 
@@ -195,6 +222,9 @@ export async function getHistoricalEstimatedXgXga({
   getFixtureEvents,
   limit = 5,
   worldCup = false,
+  leagueBaseline = null,
+  recencyDecay = 0.9,
+  priorStrength = 5,
   updatedAt = new Date().toISOString()
 }) {
   if (typeof getFixtureStatistics !== "function" || typeof getFixtureEvents !== "function") {
@@ -204,11 +234,11 @@ export async function getHistoricalEstimatedXgXga({
     const [home, away] = await Promise.all([
       buildTeamHistory({
         team: homeTeam, fixtureRows: homePreviousFixtures, fixtureDate, limit,
-        getFixtureStatistics, getFixtureEvents, worldCup
+        getFixtureStatistics, getFixtureEvents, worldCup, leagueBaseline, recencyDecay, priorStrength
       }),
       buildTeamHistory({
         team: awayTeam, fixtureRows: awayPreviousFixtures, fixtureDate, limit,
-        getFixtureStatistics, getFixtureEvents, worldCup
+        getFixtureStatistics, getFixtureEvents, worldCup, leagueBaseline, recencyDecay, priorStrength
       })
     ]);
     const score = Math.min(home.confidence.score, away.confidence.score);
@@ -236,6 +266,12 @@ export async function getHistoricalEstimatedXgXga({
         score,
         label: score >= 80 ? "high" : score >= 50 ? "medium" : score > 0 ? "low" : "not_available",
         notes
+      },
+      calculation: {
+        recencyDecay,
+        priorStrength,
+        shrinkageApplied: home.calculation.shrinkageApplied && away.calculation.shrinkageApplied,
+        adjustmentsVersion: PREDICTIVE_ADJUSTMENTS_VERSION
       },
       warning: [HISTORICAL_XG_WARNING, worldCup ? WORLD_CUP_XG_WARNING : ""].filter(Boolean).join(" "),
       updatedAt
