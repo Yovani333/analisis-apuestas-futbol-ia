@@ -63,6 +63,9 @@ test("métricas calculan ROI y falsa confianza", () => {
   assert.equal(metrics.calibrationSampleSize, 2);
   assert.equal(metrics.brierScore, 0.325);
   assert.ok(metrics.logLoss > 0);
+  assert.deepEqual(metrics.hitRateInterval95, { lowPct: 9.45, highPct: 90.55 });
+  assert.equal(metrics.highConfidenceErrorRate, 50);
+  assert.equal(metrics.calibrationReadiness.canRecalibrate, false);
 });
 
 test("calibración excluye VOID, NO BET y probabilidades ausentes", () => {
@@ -77,6 +80,15 @@ test("calibración excluye VOID, NO BET y probabilidades ausentes", () => {
   assert.equal(metrics.brierScore, 0.09);
   assert.equal(metrics.calibrationBands.find((band) => band.band === "70-79%").count, 1);
   assert.equal(metrics.byModelVersion.v3.totalPicks, 2);
+  assert.equal(metrics.expectedCalibrationError, 30);
+});
+
+test("solo habilita estudio de recalibración con cien resultados válidos", () => {
+  const records = Array.from({ length: 100 }, (_, index) => ({ outcome: index < 65 ? "HIT" : "MISS", modelProbability: 65 }));
+  const metrics = calculateAuditMetrics(records);
+  assert.equal(metrics.calibrationReadiness.status, "adequate");
+  assert.equal(metrics.calibrationReadiness.canRecalibrate, true);
+  assert.equal(metrics.expectedCalibrationError, 0);
 });
 
 test("EV conservador no positivo bloquea un supuesto value", () => {
