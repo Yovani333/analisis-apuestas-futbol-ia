@@ -25,7 +25,7 @@ export function createEvidenceSnapshot({ fixture, dataPicks, poisson, teamGoals,
   if (!fixture?.id) throw new TypeError("La evidencia requiere fixtureId.");
   if (fixture.status !== "scheduled") throw new TypeError("Solo se permite guardar evidencia antes del inicio.");
   return structuredClone({
-    version: 1,
+    version: 2,
     id: `${fixture.id}:${now.getTime()}`,
     capturedAt: now.toISOString(),
     timezone: "America/Tijuana",
@@ -47,6 +47,12 @@ export function createEvidenceSnapshot({ fixture, dataPicks, poisson, teamGoals,
       poisson: poisson || { status: "not_available", suggestedMarkets: [] },
       teamGoals: teamGoals || { status: "not_available", picks: [] },
       corners: corners || { status: "not_available", picks: [] }
+    },
+    auditMetadata: {
+      dataPicksModelVersion: dataPicks?.modelVersion || null,
+      adjustmentsVersion: dataPicks?.adjustmentsVersion || null,
+      probabilityScale: "percent_0_100",
+      calibrationEligible: true
     },
     currentFixtureStatisticsUsed: false,
     openAiUsed: false
@@ -90,10 +96,12 @@ export function evidenceSnapshotToText(snapshot, { includeRejected = true } = {}
     `Marcadores probables: ${textValue(poisson.likelyScores?.map((row) => `${row.score} (${row.probabilityPct}%)`).join(", "))}`, "",
     "PICKS CLASIFICADOS"
   ];
+  lines.push(`Motor de picks: ${textValue(snapshot.auditMetadata?.dataPicksModelVersion || modules.dataPicks?.modelVersion)}`,
+    `Ajustes predictivos: ${textValue(snapshot.auditMetadata?.adjustmentsVersion || modules.dataPicks?.adjustmentsVersion)}`, "");
   picks.forEach((pick, index) => lines.push("", `${index + 1}. ${textValue(pick.market)} - ${textValue(pick.selection)}`,
     `Decisión: ${textValue(pick.decision)}`, `Cuota: ${textValue(pick.decimalOdds)} | Bookmaker: ${textValue(pick.bookmaker)} | Fuente: ${textValue(pick.sourceProvider)}`,
-    `Modelo: ${textValue(pick.modelProbabilityPct)}% | Implícita: ${textValue(pick.impliedProbabilityPct)}% | EV: ${textValue(pick.expectedValuePct)}%`,
-    `Confianza: ${textValue(pick.confidenceScore)}/100 | Calidad: ${textValue(pick.dataQualityScore)}/100`,
+    `Modelo: ${textValue(pick.modelProbabilityPct)}% | Implícita: ${textValue(pick.impliedProbabilityPct)}% | EV: ${textValue(pick.expectedValuePct)}% | EV conservador: ${textValue(pick.conservativeExpectedValuePct)}%`,
+    `Confianza: ${textValue(pick.confidenceScore)}/100 | Estadística: ${textValue(pick.statisticalConfidenceScore)}/100 | Futbolística: ${textValue(pick.footballConfidenceScore)}/100 | Riesgo: ${textValue(pick.riskScore)}/100`,
     `Soporte Poisson: ${textValue(pick.poissonSupportScore)} | Soporte Gol por Equipo: ${textValue(pick.teamGoalSupportScore)} | Contradicción: ${textValue(pick.contradictionLevel)}`,
     `Origen: ${textValue(pickOriginLabel(pick.sourceModule))} | Motivo: ${textValue(pick.explanation)} | Timestamp: ${textValue(pick.generatedAt)}`));
   lines.push("", "RESUMEN FINAL", `Recomendación: ${textValue(modules.dataPicks?.finalDecision || "NO BET")}`, "",

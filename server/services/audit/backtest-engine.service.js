@@ -5,6 +5,12 @@ import { calculateCornersModel } from "../corners-model.service.js";
 import { evaluatePickOutcome } from "./pick-outcome-evaluator.service.js";
 import { auditPickRules } from "./market-rules-audit.service.js";
 
+function validProbability(value) {
+  if (value === null || value === undefined || value === "") return false;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100;
+}
+
 function historicalXg(dataset) {
   const value = dataset.historicalEstimatedXg;
   if (!value || !["available", "partial"].includes(value.status)) return { status: "not_available", type: "historical_estimated", homeXG: null, homeXGA: null, awayXG: null, awayXGA: null };
@@ -36,6 +42,7 @@ export function createPreMatchSnapshot(dataset = {}) {
 
 function metricSummary(records = []) {
   const settled = records.filter((row) => ["HIT", "MISS", "VOID"].includes(row.outcome));
+  const calibrationRows = records.filter((row) => ["HIT", "MISS"].includes(row.outcome) && validProbability(row.modelProbability));
   const bettable = settled.filter((row) => Number(row.odds) > 1);
   const hits = settled.filter((row) => row.outcome === "HIT").length;
   const misses = settled.filter((row) => row.outcome === "MISS").length;
@@ -45,7 +52,15 @@ function metricSummary(records = []) {
     return values.length ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)) : null;
   };
   const profitLoss = bettable.reduce((sum, row) => row.outcome === "HIT" ? sum + Number(row.odds) - 1 : row.outcome === "MISS" ? sum - 1 : sum, 0);
-  const calibration = settled.map((row) => Math.abs((Number(row.modelProbability) || 0) - (row.outcome === "HIT" ? 100 : 0)));
+  const calibration = calibrationRows.map((row) => {
+    const probability = Number(row.modelProbability) / 100;
+    const observed = row.outcome === "HIT" ? 1 : 0;
+    return {
+      absoluteErrorPct: Math.abs(probability - observed) * 100,
+      squaredError: (probability - observed) ** 2,
+      logLoss: -(observed * Math.log(Math.max(0.001, probability)) + (1 - observed) * Math.log(Math.max(0.001, 1 - probability)))
+    };
+  });
   return {
     totalPicks: records.length, eligiblePicks: bettable.length, hits, misses, voids,
     noBets: records.filter((row) => row.outcome === "NO_BET").length,
@@ -53,9 +68,27 @@ function metricSummary(records = []) {
     avgConfidence: mean("confidence"), avgOdds: mean("odds"), impliedProbability: mean("impliedProbability"),
     modelProbability: mean("modelProbability"), expectedValue: mean("expectedValue"),
     profitLossFlatStake: Number(profitLoss.toFixed(2)), ROI: bettable.length ? Number((profitLoss / bettable.length * 100).toFixed(2)) : null,
-    calibrationError: calibration.length ? Number((calibration.reduce((a, b) => a + b, 0) / calibration.length).toFixed(2)) : null,
+    calibrationSampleSize: calibration.length,
+    calibrationError: calibration.length ? Number((calibration.reduce((sum, row) => sum + row.absoluteErrorPct, 0) / calibration.length).toFixed(2)) : null,
+    brierScore: calibration.length ? Number((calibration.reduce((sum, row) => sum + row.squaredError, 0) / calibration.length).toFixed(4)) : null,
+    logLoss: calibration.length ? Number((calibration.reduce((sum, row) => sum + row.logLoss, 0) / calibration.length).toFixed(4)) : null,
     falseConfidenceRate: Number((records.filter((row) => row.outcome === "MISS" && row.confidence >= 70).length / Math.max(1, misses) * 100).toFixed(2))
   };
+}
+
+function calibrationBands(records = []) {
+  const valid = records.filter((row) => ["HIT", "MISS"].includes(row.outcome) && validProbability(row.modelProbability));
+  return [[0, 39], [40, 49], [50, 59], [60, 69], [70, 79], [80, 100]].map(([minimum, maximum]) => {
+    const rows = valid.filter((row) => Number(row.modelProbability) >= minimum && Number(row.modelProbability) <= maximum);
+    const predicted = rows.length ? rows.reduce((sum, row) => sum + Number(row.modelProbability), 0) / rows.length : null;
+    const observed = rows.length ? rows.filter((row) => row.outcome === "HIT").length / rows.length * 100 : null;
+    return {
+      band: `${minimum}-${maximum}%`, count: rows.length,
+      predictedPct: predicted === null ? null : Number(predicted.toFixed(2)),
+      observedPct: observed === null ? null : Number(observed.toFixed(2)),
+      gapPct: predicted === null ? null : Number(Math.abs(predicted - observed).toFixed(2))
+    };
+  });
 }
 
 function groupedMetrics(records, key) {
@@ -67,7 +100,9 @@ export function calculateAuditMetrics(records = []) {
     ...metricSummary(records),
     byMarket: groupedMetrics(records, "market"),
     byConfidence: groupedMetrics(records.map((row) => ({ ...row, confidenceBand: row.confidence >= 70 ? "Alta" : row.confidence >= 50 ? "Media" : "Baja" })), "confidenceBand"),
-    byColor: groupedMetrics(records, "color")
+    byColor: groupedMetrics(records, "color"),
+    byModelVersion: groupedMetrics(records, "modelVersion"),
+    calibrationBands: calibrationBands(records)
   };
 }
 
@@ -80,10 +115,16 @@ function buildBacktestResult(dataset, fixtureResult, generated, metadata = {}) {
       fixtureId: String(dataset.fixture?.id || ""), date: dataset.fixture?.date || "", match: `${dataset.fixture?.home || "Local"} vs ${dataset.fixture?.away || "Visitante"}`,
       league: dataset.fixture?.leagueName || "", market: pick.market, pick: pick.selection, selectionKey: pick.selectionKey,
       odds: pick.decimalOdds, impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
-      expectedValue: pick.expectedValuePct, confidence: pick.confidenceScore, dataQuality: generated.quality?.label || dataset.dataQuality?.level || "No disponible",
+      expectedValue: pick.expectedValuePct, conservativeExpectedValue: pick.conservativeExpectedValuePct ?? null,
+      confidence: pick.confidenceScore, statisticalConfidence: pick.statisticalConfidenceScore ?? null,
+      footballConfidence: pick.footballConfidenceScore ?? null, riskScore: pick.riskScore ?? null,
+      dataQuality: generated.quality?.label || dataset.dataQuality?.level || "No disponible",
       finalScore: fixtureResult?.finished ? `${fixtureResult.goals?.home}-${fixtureResult.goals?.away}` : "Pendiente",
       outcome, decision: candidate.noBet ? "EVITAR" : rules.color === "green" ? "VALOR" : "RIESGO", errorDetected: rules.errors.join(" "), recommendation: rules.recommendation, color: rules.color,
-      source: generated.source, sourceModule: pick.sourceModule, teamIds: { home: dataset.fixture?.homeTeamId ?? null, away: dataset.fixture?.awayTeamId ?? null },
+      source: generated.source, sourceModule: pick.sourceModule,
+      modelVersion: generated.modelVersion || pick.modelVersion || "No disponible",
+      adjustmentsVersion: generated.adjustmentsVersion || pick.adjustmentsVersion || null,
+      teamIds: { home: dataset.fixture?.homeTeamId ?? null, away: dataset.fixture?.awayTeamId ?? null },
       missingFields: generated.warnings || [], warnings: [...(generated.warnings || []), ...(pick.contradictingData || [])],
       supportingData: pick.supportingData, contradictingData: pick.contradictingData,
       explanation: pick.explanation

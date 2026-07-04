@@ -13,6 +13,7 @@ test("crea evidencia compacta prepartido sin OpenAI ni estadísticas actuales", 
   assert.equal(snapshot.fixture.id, 12);
   assert.equal(snapshot.openAiUsed, false);
   assert.equal(snapshot.currentFixtureStatisticsUsed, false);
+  assert.equal(snapshot.version, 2);
   assert.equal("confirmedData" in snapshot.fixture, false);
 });
 
@@ -36,7 +37,7 @@ test("guarda y recupera la evidencia más reciente por fixture", () => {
 test("genera evidencia textual con modelos, picks y campos de auditoría", () => {
   const fixture = { id: 9, status: "scheduled", home: "México", away: "Japón", leagueName: "Mundial" };
   const snapshot = createEvidenceSnapshot({ fixture,
-    dataPicks: { finalDecision: "PRECAUCIÓN", picks: [{ market: "Total", selection: "Over 1.5", decision: "PRECAUCIÓN", decimalOdds: 1.5, expectedValuePct: 5, confidenceScore: 60 }] },
+    dataPicks: { modelVersion: "picks-data-engine-v3", adjustmentsVersion: "predictive-adjustments-v1", finalDecision: "PRECAUCIÓN", picks: [{ market: "Total", selection: "Over 1.5", decision: "PRECAUCIÓN", decimalOdds: 1.5, expectedValuePct: 5, conservativeExpectedValuePct: 1, confidenceScore: 60, statisticalConfidenceScore: 58, footballConfidenceScore: 62, riskScore: 40 }] },
     poisson: { lambdaHome: 1.4, lambdaAway: 1.1, probabilities: { over15: 71 } },
     teamGoals: { homeGoalProbability: 75, awayGoalProbability: 65, btts: { yesProbabilityPct: 54 } }
   });
@@ -44,5 +45,7 @@ test("genera evidencia textual con modelos, picks y campos de auditoría", () =>
   assert.match(text, /EVIDENCIA PREPARTIDO AUDITABLE/);
   assert.match(text, /Lambda local: 1.4/);
   assert.match(text, /Decisión: PRECAUCIÓN/);
+  assert.match(text, /Motor de picks: picks-data-engine-v3/);
+  assert.match(text, /EV conservador: 1%/);
   assert.match(text, /Resultado final del partido: Pendiente/);
 });
