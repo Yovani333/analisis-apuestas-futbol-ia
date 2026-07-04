@@ -11,6 +11,24 @@ function validProbability(value) {
   return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100;
 }
 
+function wilsonInterval(hits, total, z = 1.96) {
+  if (!total) return { lowPct: null, highPct: null };
+  const proportion = hits / total;
+  const denominator = 1 + (z ** 2) / total;
+  const center = (proportion + (z ** 2) / (2 * total)) / denominator;
+  const margin = z * Math.sqrt((proportion * (1 - proportion) + (z ** 2) / (4 * total)) / total) / denominator;
+  return {
+    lowPct: Number((Math.max(0, center - margin) * 100).toFixed(2)),
+    highPct: Number((Math.min(1, center + margin) * 100).toFixed(2))
+  };
+}
+
+function calibrationReadiness(sampleSize) {
+  if (sampleSize >= 100) return { status: "adequate", label: "Muestra adecuada", canRecalibrate: true, minimumRequired: 100 };
+  if (sampleSize >= 30) return { status: "preliminary", label: "Muestra preliminar", canRecalibrate: false, minimumRequired: 100 };
+  return { status: "insufficient", label: "Muestra insuficiente", canRecalibrate: false, minimumRequired: 30 };
+}
+
 function historicalXg(dataset) {
   const value = dataset.historicalEstimatedXg;
   if (!value || !["available", "partial"].includes(value.status)) return { status: "not_available", type: "historical_estimated", homeXG: null, homeXGA: null, awayXG: null, awayXGA: null };
@@ -61,18 +79,24 @@ function metricSummary(records = []) {
       logLoss: -(observed * Math.log(Math.max(0.001, probability)) + (1 - observed) * Math.log(Math.max(0.001, 1 - probability)))
     };
   });
+  const decisiveTotal = hits + misses;
+  const hitRateInterval95 = wilsonInterval(hits, decisiveTotal);
+  const highConfidenceSettled = records.filter((row) => ["HIT", "MISS"].includes(row.outcome) && Number(row.confidence) >= 70);
   return {
     totalPicks: records.length, eligiblePicks: bettable.length, hits, misses, voids,
     noBets: records.filter((row) => row.outcome === "NO_BET").length,
     hitRate: hits + misses ? Number((hits / (hits + misses) * 100).toFixed(2)) : null,
+    hitRateInterval95,
     avgConfidence: mean("confidence"), avgOdds: mean("odds"), impliedProbability: mean("impliedProbability"),
     modelProbability: mean("modelProbability"), expectedValue: mean("expectedValue"),
     profitLossFlatStake: Number(profitLoss.toFixed(2)), ROI: bettable.length ? Number((profitLoss / bettable.length * 100).toFixed(2)) : null,
     calibrationSampleSize: calibration.length,
+    calibrationReadiness: calibrationReadiness(calibration.length),
     calibrationError: calibration.length ? Number((calibration.reduce((sum, row) => sum + row.absoluteErrorPct, 0) / calibration.length).toFixed(2)) : null,
     brierScore: calibration.length ? Number((calibration.reduce((sum, row) => sum + row.squaredError, 0) / calibration.length).toFixed(4)) : null,
     logLoss: calibration.length ? Number((calibration.reduce((sum, row) => sum + row.logLoss, 0) / calibration.length).toFixed(4)) : null,
-    falseConfidenceRate: Number((records.filter((row) => row.outcome === "MISS" && row.confidence >= 70).length / Math.max(1, misses) * 100).toFixed(2))
+    falseConfidenceRate: Number((records.filter((row) => row.outcome === "MISS" && row.confidence >= 70).length / Math.max(1, misses) * 100).toFixed(2)),
+    highConfidenceErrorRate: highConfidenceSettled.length ? Number((highConfidenceSettled.filter((row) => row.outcome === "MISS").length / highConfidenceSettled.length * 100).toFixed(2)) : null
   };
 }
 
@@ -96,13 +120,19 @@ function groupedMetrics(records, key) {
 }
 
 export function calculateAuditMetrics(records = []) {
+  const bands = calibrationBands(records);
+  const calibrationTotal = bands.reduce((sum, band) => sum + band.count, 0);
+  const expectedCalibrationError = calibrationTotal
+    ? Number((bands.reduce((sum, band) => sum + (band.count / calibrationTotal) * band.gapPct, 0)).toFixed(2))
+    : null;
   return {
     ...metricSummary(records),
     byMarket: groupedMetrics(records, "market"),
     byConfidence: groupedMetrics(records.map((row) => ({ ...row, confidenceBand: row.confidence >= 70 ? "Alta" : row.confidence >= 50 ? "Media" : "Baja" })), "confidenceBand"),
     byColor: groupedMetrics(records, "color"),
     byModelVersion: groupedMetrics(records, "modelVersion"),
-    calibrationBands: calibrationBands(records)
+    calibrationBands: bands,
+    expectedCalibrationError
   };
 }
 
