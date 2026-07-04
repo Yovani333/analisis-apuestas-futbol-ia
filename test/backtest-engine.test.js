@@ -60,6 +60,29 @@ test("métricas calculan ROI y falsa confianza", () => {
   assert.equal(metrics.profitLossFlatStake, 0);
   assert.equal(metrics.falseConfidenceRate, 100);
   assert.equal(metrics.byConfidence.Alta.misses, 1);
+  assert.equal(metrics.calibrationSampleSize, 2);
+  assert.equal(metrics.brierScore, 0.325);
+  assert.ok(metrics.logLoss > 0);
+});
+
+test("calibración excluye VOID, NO BET y probabilidades ausentes", () => {
+  const metrics = calculateAuditMetrics([
+    { outcome: "HIT", modelProbability: 70, modelVersion: "v3" },
+    { outcome: "VOID", modelProbability: 80, modelVersion: "v3" },
+    { outcome: "MISS", modelProbability: null, modelVersion: "v2" },
+    { outcome: "NO_BET", modelProbability: 60, modelVersion: "v2" }
+  ]);
+  assert.equal(metrics.calibrationSampleSize, 1);
+  assert.equal(metrics.calibrationError, 30);
+  assert.equal(metrics.brierScore, 0.09);
+  assert.equal(metrics.calibrationBands.find((band) => band.band === "70-79%").count, 1);
+  assert.equal(metrics.byModelVersion.v3.totalPicks, 2);
+});
+
+test("EV conservador no positivo bloquea un supuesto value", () => {
+  const audit = auditPickRules({ expectedValuePct: 18, conservativeExpectedValuePct: -2, riskScore: 40 }, { label: "Alta" });
+  assert.equal(audit.noBet, true);
+  assert.match(audit.errors.join(" "), /EV conservador/);
 });
 
 test("auditoría diaria solo cierra finalizados y conserva live pending", async () => {
@@ -92,10 +115,12 @@ test("audita los picks exactos de una evidencia prepartido guardada", () => {
   const evidence = {
     capturedAt: "2026-07-02T18:00:00.000Z", currentFixtureStatisticsUsed: false, openAiUsed: false,
     fixture: { id: 4, status: "scheduled", home: "A", away: "B", leagueName: "Prueba" }, dataQuality: { level: "Alta" }, researchData: {},
-    modules: { dataPicks: { source: "API-Football + modelo interno", quality: { label: "Alta" }, warnings: [], picks: [{ market: "Total", selection: "Más de 2.5", selectionKey: "over_2_5", decimalOdds: 2, impliedProbabilityPct: 50, modelProbabilityPct: 60, expectedValuePct: 20, confidenceScore: 70, highlightColor: "green", sourceModule: "data_picks", contradictingData: [] }] } }
+    modules: { dataPicks: { source: "API-Football + modelo interno", modelVersion: "picks-data-engine-v3", adjustmentsVersion: "predictive-adjustments-v1", quality: { label: "Alta" }, warnings: [], picks: [{ market: "Total", selection: "Más de 2.5", selectionKey: "over_2_5", decimalOdds: 2, impliedProbabilityPct: 50, modelProbabilityPct: 60, expectedValuePct: 20, conservativeExpectedValuePct: 8, confidenceScore: 70, statisticalConfidenceScore: 68, footballConfidenceScore: 72, riskScore: 25, highlightColor: "green", sourceModule: "data_picks", contradictingData: [] }] } }
   };
   const result = runSavedEvidenceBacktest(evidence, finished(2, 1));
   assert.equal(result.mode, "saved_pre_match_evidence");
   assert.equal(result.records[0].outcome, "HIT");
   assert.equal(result.capturedAt, evidence.capturedAt);
+  assert.equal(result.records[0].modelVersion, "picks-data-engine-v3");
+  assert.equal(result.records[0].conservativeExpectedValue, 8);
 });
