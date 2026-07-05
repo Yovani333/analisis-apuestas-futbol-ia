@@ -94,6 +94,10 @@ export async function getFixtureEvents(fixtureId) {
   return apiRequest("/fixtures/events", { fixture: fixtureId });
 }
 
+export async function getFixturePlayers(fixtureId) {
+  return apiRequest("/fixtures/players", { fixture: fixtureId });
+}
+
 function chooseSeason(seasons, requestedSeason, targetDate) {
   if (requestedSeason !== "auto") return requestedSeason;
   const byDate = seasons.find((season) => season.start <= targetDate && season.end >= targetDate);

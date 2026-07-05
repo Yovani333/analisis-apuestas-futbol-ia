@@ -1,6 +1,7 @@
 import { DATA_STATUS, MODULE_LABELS, MODULE_WEIGHTS } from "../constants/match-research.js";
 import { MODULE_SOURCE_PLAN, SOURCE_DEFINITIONS } from "../constants/source-catalog.js";
 import { calculateMatchConfidenceScore } from "./match-confidence.service.js";
+import { buildTeamPerformancePromptContext } from "./team-performance.service.js";
 
 const SOURCE = "api-football";
 const nowIso = () => new Date().toISOString();
@@ -699,5 +700,9 @@ export function buildOpenAIPromptFromMatchData(matchData) {
       message: "Detalle excluido del análisis prepartido para evitar fuga de información posterior al inicio."
     };
   }
-  return { instructions: `${OPENAI_ANALYSIS_INSTRUCTIONS.trim()}\n${XG_ANALYSIS_RULES.trim()}`, input: JSON.stringify({ matchData: safeData }) };
+  const performanceContext = buildTeamPerformancePromptContext(safeData.teamPerformance);
+  return {
+    instructions: `${performanceContext}\n\n${OPENAI_ANALYSIS_INSTRUCTIONS.trim()}\n${XG_ANALYSIS_RULES.trim()}`,
+    input: JSON.stringify({ matchData: safeData })
+  };
 }

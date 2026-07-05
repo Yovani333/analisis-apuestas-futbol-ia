@@ -4,7 +4,9 @@ import { env, requireLiveConfiguration } from "../config/env.js";
 import { ALLOWED_LEAGUES } from "../config/leagues.js";
 import { AppError } from "../errors.js";
 import { parseFixtureId, parseFixtureQuery } from "../middleware/validate.js";
-import { getFixtureDataset, getFixtureResult, resolveLeague, searchFixtures } from "../services/api-football.service.js";
+import {
+  getFixtureDataset, getFixturePlayers, getFixtureResult, getPreviousFixturesForTeam, resolveLeague, searchFixtures
+} from "../services/api-football.service.js";
 import { generateAnalysis } from "../services/openai.service.js";
 import { generateRuleBasedAnalysis } from "../services/rule-analysis.service.js";
 import { generateDataPicks } from "../services/data-picks.service.js";
@@ -14,6 +16,7 @@ import { calculateCornersModel } from "../services/corners-model.service.js";
 import { buildSpecificMarkets } from "../services/specific-markets.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 import { runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
+import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -81,6 +84,17 @@ apiRouter.get("/fixtures/:fixtureId/research", requireLiveMode, researchLimiter,
 
 apiRouter.get("/fixtures/:fixtureId/result", requireLiveMode, asyncRoute(async (req, res) => {
   res.json({ source: "api-football", result: await getFixtureResult(parseFixtureId(req.params.fixtureId)) });
+}));
+
+apiRouter.get("/fixtures/:fixtureId/team-performance", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh: false });
+  const performance = await getTeamPerformanceForFixture(dataset.fixture, {
+    getPreviousFixtures: getPreviousFixturesForTeam,
+    getFixturePlayers
+  }, { forceRefresh });
+  res.json(performance);
 }));
 
 apiRouter.post("/fixtures/:fixtureId/audit", requireLiveMode, asyncRoute(async (req, res) => {
@@ -159,6 +173,10 @@ apiRouter.post("/fixtures/:fixtureId/markets/specific", requireLiveMode, asyncRo
 apiRouter.post("/fixtures/:fixtureId/analysis", requireLiveMode, analysisLimiter, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const dataset = await getFixtureDataset(fixtureId);
+  dataset.teamPerformance = await getTeamPerformanceForFixture(dataset.fixture, {
+    getPreviousFixtures: getPreviousFixturesForTeam,
+    getFixturePlayers
+  });
   const analysis = await generateAnalysis(dataset);
   res.json({ source: "openai", generatedAt: new Date().toISOString(), analysis });
 }));
