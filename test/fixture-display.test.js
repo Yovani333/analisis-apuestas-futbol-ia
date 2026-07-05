@@ -22,7 +22,8 @@ function providerFixture(status = "NS") {
       home: { id: 10, name: "Equipo Uno", logo: "https://media.api-sports.io/football/teams/10.png" },
       away: { id: 20, name: "Equipo Dos", logo: "https://media.api-sports.io/football/teams/20.png" }
     },
-    goals: { home: 2, away: 1 }
+    goals: { home: 2, away: 1 },
+    score: { penalty: { home: null, away: null } }
   };
 }
 
@@ -42,6 +43,17 @@ test("normaliza marcador y estado en vivo", () => {
   assert.equal(fixture.statusLabel, "En vivo");
   assert.equal(fixture.elapsed, 73);
   assert.deepEqual(fixture.score, { home: 2, away: 1 });
+  assert.deepEqual(fixture.penaltyScore, { home: null, away: null });
+});
+
+test("conserva el resultado de la tanda de penales cuando API-Football lo entrega", () => {
+  const input = providerFixture("PEN");
+  input.goals = { home: 1, away: 1 };
+  input.score.penalty = { home: 4, away: 3 };
+  const fixture = normalizeFixture(input, league);
+  assert.equal(fixture.status, "finished");
+  assert.deepEqual(fixture.score, { home: 1, away: 1 });
+  assert.deepEqual(fixture.penaltyScore, { home: 4, away: 3 });
 });
 
 test("marca como favorito únicamente al equipo identificado por API-Football", () => {

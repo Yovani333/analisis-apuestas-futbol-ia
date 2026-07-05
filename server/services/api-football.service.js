@@ -238,6 +238,7 @@ export function normalizeFixture(item, league) {
     longitude: item.fixture.venue?.longitude ?? item.fixture.venue?.lng ?? item.fixture.venue?.lon ?? null,
     country: league.countryLabel,
     score: { home: item.goals?.home ?? null, away: item.goals?.away ?? null },
+    penaltyScore: { home: item.score?.penalty?.home ?? null, away: item.score?.penalty?.away ?? null },
     dataAvailability: {
       standings: "No disponible", statistics: "No disponible", h2h: "No disponible",
       injuries: "No disponible", lineups: "No disponible", odds: "No disponible",
@@ -459,6 +460,7 @@ export async function getFixtureResult(fixtureId) {
     elapsed: row.fixture.status?.elapsed ?? null,
     finished: ["FT", "AET", "PEN"].includes(shortStatus),
     goals: { home: row.goals?.home ?? null, away: row.goals?.away ?? null },
+    penaltyScore: { home: row.score?.penalty?.home ?? null, away: row.score?.penalty?.away ?? null },
     date: row.fixture.date,
     home: row.teams?.home?.name,
     away: row.teams?.away?.name
