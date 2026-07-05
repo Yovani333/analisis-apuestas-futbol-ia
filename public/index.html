@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260704-guide-reset-tooltip-layer-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260704-futuristic-dashboard-v2" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -14,8 +14,8 @@
       <div class="brand">
         <span class="brand__mark" aria-hidden="true"><span>⚽</span><i>↗</i></span>
         <div>
-          <h1>Análisis de Apuestas de Fútbol</h1>
-          <p>Busca partidos por liga y genera análisis basado en datos</p>
+          <h1>Football Intelligence</h1>
+          <p>Centro de análisis predictivo y control de riesgo</p>
         </div>
       </div>
 
@@ -48,10 +48,13 @@
       </nav>
     </header>
 
-    <div class="demo-strip">
+    <div class="demo-strip control-status" aria-label="Estado del sistema">
       <span id="runtime-mode" class="status-badge status-badge--demo">Modo demostración</span>
-      <span id="runtime-description">Todos los equipos, partidos y datos mostrados son sintéticos.</span>
-      <small id="site-last-update" class="site-last-update">Última actualización del sitio: consultando…</small>
+      <span id="runtime-api" class="control-chip control-chip--data">API · comprobando</span>
+      <span id="runtime-ai" class="control-chip control-chip--ai">IA · comprobando</span>
+      <span id="runtime-version" class="control-chip">Versión · local</span>
+      <span id="runtime-description" class="control-status__description">Todos los equipos, partidos y datos mostrados son sintéticos.</span>
+      <small id="site-last-update" class="site-last-update">Última actualización: consultando…</small>
     </div>
     <div id="app-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
 
@@ -59,8 +62,8 @@
       <aside class="panel filters" aria-labelledby="filters-title">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Filtros</p>
-            <h2 id="filters-title">Encuentra partidos</h2>
+            <p class="eyebrow">Intelligence search</p>
+            <h2 id="filters-title">Centro de búsqueda</h2>
           </div>
           <span id="league-count" class="count-badge" hidden>0 de 7</span>
         </div>
@@ -127,8 +130,8 @@
       <section class="panel matches-panel" aria-labelledby="matches-title">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Calendario</p>
-            <h2 id="matches-title"><span aria-hidden="true">▣</span> Partidos encontrados</h2>
+            <p class="eyebrow">Match center</p>
+            <h2 id="matches-title"><span aria-hidden="true">▣</span> Centro de partidos</h2>
           </div>
           <span id="match-count" class="muted-text">0 partidos</span>
           <label class="auto-refresh-control" title="Actualiza estados y el partido seleccionado cada cinco minutos mientras esta pestaña esté visible">
@@ -226,8 +229,8 @@
         <section id="analysis-panel" class="panel analysis-panel" aria-labelledby="analysis-title">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Evaluación responsable</p>
-              <h2 id="analysis-title">Análisis con datos</h2>
+              <p class="eyebrow">Decision intelligence</p>
+              <h2 id="analysis-title">Evaluación predictiva</h2>
             </div>
             <div class="panel-actions">
               <button id="generate-selected-analysis" class="button button--primary button--compact" type="button" disabled>Analizar con datos</button>
@@ -236,6 +239,7 @@
               <span id="analysis-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
           </div>
+          <div class="intelligence-legend" aria-label="Leyenda de clasificación"><span><i class="legend-signal legend-signal--strong"></i>Fuerte</span><span><i class="legend-signal legend-signal--validate"></i>Validar</span><span><i class="legend-signal legend-signal--avoid"></i>Evitar</span><span><i class="legend-signal legend-signal--info"></i>Informativo</span><span><i class="legend-signal legend-signal--ai"></i>IA / avanzado</span></div>
           <div id="analysis-content" aria-live="polite" hidden>
             <div class="empty-state">
               <span class="empty-state__icon" aria-hidden="true">✦</span>
@@ -366,6 +370,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260704-guide-reset-tooltip-layer-v1"></script>
+    <script type="module" src="app.js?v=20260704-futuristic-dashboard-v1"></script>
   </body>
 </html>
