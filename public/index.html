@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260705-menu-catalog-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260705-data-live-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -23,8 +23,10 @@
         <button class="main-nav__item main-nav__item--active" type="button" data-view="dashboard" aria-current="page">
           <span aria-hidden="true">▦</span> Dashboard
         </button>
+        <button class="main-nav__item" type="button" data-view="transparency">Transparencia de datos</button>
         <button class="main-nav__item" type="button" data-view="guide">Guía de análisis</button>
         <button class="main-nav__item" type="button" data-view="markets">Catálogo de mercados</button>
+        <button class="main-nav__item" type="button" data-view="live">En vivo</button>
         <button id="theme-toggle" class="main-nav__item" type="button" aria-pressed="false" title="Cambiar tema">Modo oscuro</button>
         <button class="main-nav__item" type="button" data-view="saved">
           <span aria-hidden="true">▣</span> Mis apuestas <span id="saved-parlay-count" class="nav-count">0</span>
@@ -135,10 +137,7 @@
             <h2 id="matches-title"><span aria-hidden="true">▣</span> Centro de partidos</h2>
           </div>
           <span id="match-count" class="muted-text">0 partidos</span>
-          <label class="auto-refresh-control" title="Actualiza estados y el partido seleccionado cada cinco minutos mientras esta pestaña esté visible">
-            <input id="auto-refresh" type="checkbox" />
-            <span>Auto · 5 min</span>
-          </label>
+          <span class="auto-refresh-status" title="Se activa automáticamente cuando seleccionas un partido">Actualización automática · 5 min</span>
           <button id="refresh-fixture-statuses" class="button button--secondary button--compact" type="button" disabled>Actualizar estados</button>
         </div>
 
@@ -179,11 +178,10 @@
               <h2 id="research-title">Análisis de fuentes</h2>
             </div>
             <div class="panel-actions">
-              <button id="toggle-research" class="button button--secondary button--compact" type="button" aria-expanded="false">Mostrar</button>
               <button id="refresh-research" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button>
             </div>
           </div>
-          <div id="research-content" hidden>
+          <div id="research-content">
             <div id="research-summary" class="research-empty">
               Selecciona un partido para consultar el nivel de confianza y las fuentes utilizadas.
             </div>
@@ -276,6 +274,15 @@
       </section>
     </main>
 
+    <main id="transparency-content" class="utility-view transparency-view" data-view-panel="transparency" hidden>
+      <section class="utility-heading">
+        <div><p class="eyebrow">Trazabilidad completa</p><h2>Transparencia de datos</h2><p>Cobertura, fuentes activas, datos faltantes y calidad del encuentro seleccionado, siempre visibles y desglosados.</p></div>
+        <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+      </section>
+      <div id="transparency-coverage-slot"></div>
+      <div id="transparency-research-slot"></div>
+    </main>
+
     <main id="analysis-guide-content" class="utility-view guide-view" data-view-panel="guide" hidden>
       <section class="utility-heading intelligence-center__heading">
         <div><p class="eyebrow">Decision intelligence</p><h2>Centro de Inteligencia del Análisis</h2><p>Consulta cómo se interpretan los datos, qué módulos respaldan cada mercado y cuándo un pick debe usarse, revisarse o evitarse.</p></div>
@@ -311,7 +318,7 @@
       <section class="guide-modules" aria-label="Módulos de análisis">
         <details id="guide-coverage-module" class="guide-module guide-module--coverage">
           <summary><b class="guide-module__index">01</b><span>Información base</span><strong>Mapa de Cobertura</strong><small>Calidad, procedencia, disponibilidad e impacto de los datos faltantes.</small><em>Mostrar</em></summary>
-          <div class="guide-module__body"><div id="guide-coverage-summary" class="coverage-executive"><div class="research-empty">Selecciona un partido para construir el mapa de cobertura.</div></div><div id="guide-coverage-slot"></div><div id="guide-research-slot"></div></div>
+          <div class="guide-module__body"><div id="guide-coverage-summary" class="coverage-executive"><div class="research-empty">Selecciona un partido para construir el mapa de cobertura. El desglose completo permanece disponible en Transparencia de datos.</div></div></div>
         </details>
         <details id="guide-team-goals-module" class="guide-module guide-module--attack"><summary><b class="guide-module__index">02</b><span>Apoyo ofensivo</span><strong>Ataque vs Defensa</strong><small>Compara capacidad de marcar, resistencia y confianza de ambos equipos.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-team-goals-slot"></div></div></details>
         <details id="guide-poisson-module" class="guide-module guide-module--poisson">
@@ -334,10 +341,21 @@
         <div><b>3</b><span><strong>Valida en la Guía</strong><small>Confirma cobertura, Poisson, cuotas y decisión final.</small></span></div>
       </section>
       <section id="specific-markets-panel" class="panel advanced-module-panel" aria-labelledby="specific-markets-title">
-        <div class="panel-heading"><div><p class="eyebrow">Picks por intención</p><h2 id="specific-markets-title">Mercados disponibles</h2></div><div class="panel-actions"><button id="show-specific-markets" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="specific-markets-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
-        <div id="specific-markets-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido en Dashboard para revisar mercados específicos.</div></div>
+        <div class="panel-heading"><div><p class="eyebrow">Picks por intención</p><h2 id="specific-markets-title">Mercados disponibles</h2></div><div class="panel-actions"><span id="specific-markets-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+        <button id="show-specific-markets" type="button" hidden aria-hidden="true" tabindex="-1">Cargar</button>
+        <div id="specific-markets-content" aria-live="polite"><div class="research-empty">Selecciona un partido en Dashboard para revisar mercados específicos.</div></div>
       </section>
-      <div id="market-corners-slot"></div>
+    </main>
+
+    <main id="live-content" class="utility-view live-data-view" data-view-panel="live" hidden>
+      <section class="utility-heading">
+        <div><p class="eyebrow">Seguimiento del fixture</p><h2>En vivo</h2><p>Eventos publicados y rendimiento individual del encuentro seleccionado. La información se actualiza automáticamente cada cinco minutos.</p></div>
+        <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+      </section>
+      <section class="live-data-grid">
+        <article class="panel live-data-panel"><div class="panel-heading"><div><p class="eyebrow">Cronología oficial</p><h2>Eventos del partido</h2></div><span id="live-events-status" class="status-badge status-badge--unavailable">No disponible</span></div><div id="live-events-content" class="live-data-content"><div class="research-empty">Selecciona un partido para consultar sus eventos.</div></div></article>
+        <article class="panel live-data-panel"><div class="panel-heading"><div><p class="eyebrow">Desempeño individual</p><h2>Rendimiento de jugadores</h2></div><span id="live-players-status" class="status-badge status-badge--unavailable">No disponible</span></div><div id="live-players-content" class="live-data-content"><div class="research-empty">Selecciona un partido para consultar el rendimiento de jugadores.</div></div></article>
+      </section>
     </main>
 
     <main id="parlays-guardados" class="saved-view" data-view-panel="saved" hidden>
@@ -383,7 +401,7 @@
       <section class="utility-heading"><div><p class="eyebrow">Preferencias locales</p><h2>Mi cuenta</h2><p>Configuración guardada únicamente en este navegador.</p></div><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></section>
       <form id="account-form" class="account-grid">
         <section class="panel"><h3>Perfil</h3><label>Nombre visible<input id="account-name" type="text" maxlength="50" placeholder="Tu nombre" /></label><label>Zona horaria<input type="text" value="Hora del Pacífico (America/Tijuana)" disabled /></label></section>
-        <section class="panel"><h3>Preferencias</h3><label><input id="account-dark-mode" type="checkbox" /> Usar modo oscuro</label><label><input id="account-auto-refresh" type="checkbox" /> Actualizar cada 5 minutos</label><label>Límite responsable diario<select id="account-daily-limit"><option value="none">Sin configurar</option><option value="1">1 análisis</option><option value="3">3 análisis</option><option value="5">5 análisis</option></select></label></section>
+        <section class="panel"><h3>Preferencias</h3><label><input id="account-dark-mode" type="checkbox" /> Usar modo oscuro</label><p class="account-note">Los datos del partido seleccionado se actualizan automáticamente cada cinco minutos.</p><label>Límite responsable diario<select id="account-daily-limit"><option value="none">Sin configurar</option><option value="1">1 análisis</option><option value="3">3 análisis</option><option value="5">5 análisis</option></select></label></section>
         <section class="panel account-responsible"><h3>Juego responsable</h3><p>La cuenta no realiza apuestas ni garantiza resultados. El límite sirve como recordatorio local y no sustituye controles del operador.</p></section>
         <button class="button button--primary" type="submit">Guardar preferencias</button>
       </form>
@@ -429,6 +447,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260705-menu-catalog-v1"></script>
+    <script type="module" src="app.js?v=20260705-data-live-v1"></script>
   </body>
 </html>
