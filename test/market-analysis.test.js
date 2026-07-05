@@ -62,6 +62,7 @@ test("normaliza mercados ampliados desde distintas casas sin asignación ambigua
   const odds = normalizeOdds([{ update: "2026-07-04T15:00:00Z", bookmakers: [
     { id: 10, name: "10Bet", bets: [
       { name: "Match Winner", values: [{ value: "Home", odd: "2.10" }, { value: "Draw", odd: "3.20" }, { value: "Away", odd: "3.50" }] },
+      { name: "Draw No Bet", values: [{ value: "Home", odd: "1.55" }, { value: "Away", odd: "2.25" }] },
       { name: "Goals Over/Under", values: [{ value: "Over 1.5", odd: "1.35" }, { value: "Under 3.5", odd: "1.70" }] }
     ] },
     { id: 20, name: "Playdoit.mx", bets: [
@@ -71,6 +72,8 @@ test("normaliza mercados ampliados desde distintas casas sin asignación ambigua
   ] }], { homeName: "Canada", awayName: "Morocco" });
   const byKey = Object.fromEntries(odds.selections.map((item) => [item.selectionKey, item]));
   assert.equal(byKey.home_win.decimalOdds, 2.1);
+  assert.equal(byKey.home_dnb.decimalOdds, 1.55);
+  assert.equal(byKey.away_dnb.decimalOdds, 2.25);
   assert.equal(byKey.over_1_5.decimalOdds, 1.35);
   assert.equal(byKey.under_3_5.decimalOdds, 1.7);
   assert.equal(byKey["12"].bookmaker, "Playdoit.mx");

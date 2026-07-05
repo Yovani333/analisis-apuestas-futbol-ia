@@ -4,11 +4,11 @@ import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
-} from "./parlay-store.js?v=20260630-common-picks";
+} from "./parlay-store.js?v=20260705-team-performance-picks-v1";
 import { createEvidenceSnapshot, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260702-evidence-v2";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginLabel } from "./pick-origins.js?v=20260703";
+import { pickOriginLabel } from "./pick-origins.js?v=20260705-team-performance-picks-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
@@ -2029,17 +2029,67 @@ function renderTeamPerformance(performance, fixture = selectedFixture()) {
     ["tiros", "Tiros", ""], ["pases_acertados", "Pases acertados", "%"], ["faltas", "Faltas", ""]
   ];
   const sides = [performance.equipo_local, performance.equipo_visitante];
+  const pickGroups = performance.picks || { home: [], away: [] };
   const maxima = Object.fromEntries(metrics.map(([key]) => [key, Math.max(...sides.map((side) => Number(side.metricas?.[key] || 0)), 0)]));
-  const teamColumn = (team, sideLabel) => `<section class="team-performance__team">
+  const renderPerformancePicks = (side) => {
+    const picks = pickGroups[side] || [];
+    if (!picks.length) return '<div class="team-performance-picks__empty">Sin pick recomendado por rendimiento: datos contradictorios o insuficientes.</div>';
+    return picks.map((pick, index) => `<article class="team-performance-pick team-performance-pick--${escapeHtml(pick.color)}">
+      <header><div><small>${escapeHtml(pick.market)}</small><strong>${escapeHtml(pick.selection)}</strong></div><span>${escapeHtml(pick.confidence)}</span></header>
+      <div class="team-performance-pick__meta"><span>Score <b>${displayValue(pick.confidenceScore)}/100</b></span><span>Cuota <b>${pick.odds ? displayValue(pick.odds) : "No disponible"}</b></span><span>Origen <b>${escapeHtml(pickOriginLabel(pick.origin))}</b></span></div>
+      <p>${escapeHtml(pick.explanation)}</p>
+      ${pick.odds ? "" : '<small class="team-performance-pick__odds-note">Pick pendiente de cuota; puede guardarse sin afectar el cálculo del parlay.</small>'}
+      <div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-team-performance-pick="${side}:${index}" ${pick.canAdd ? "" : "disabled"}>Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-team-performance-pick="${side}:${index}" ${pick.canAdd ? "" : "disabled"} ${pick.canAdd ? "" : 'title="No se puede agregar: riesgo alto"'}>Agregar pick</button></div>
+    </article>`).join("");
+  };
+  const teamColumn = (team, sideLabel, side) => `<div class="team-performance__column"><section class="team-performance__team">
     <div class="team-performance__team-heading"><span>${escapeHtml(sideLabel)}</span><strong>${escapeHtml(team.nombre)}</strong><small>${escapeHtml(team.jugadores || 0)} jugadores distintos</small></div>
     ${metrics.map(([key, label, suffix]) => {
       const value = Number(team.metricas?.[key] || 0);
       const width = maxima[key] > 0 ? Math.max(2, (value / maxima[key]) * 100) : 0;
       return `<div class="performance-metric"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value.toFixed(2))}${suffix}</strong></div><div class="performance-bar" aria-label="${escapeHtml(label)}: ${escapeHtml(value.toFixed(2))}${suffix}"><i style="width:${width.toFixed(2)}%"></i></div></div>`;
-    }).join("")}
-  </section>`;
-  elements.teamPerformanceContent.innerHTML = `<div class="team-performance__note">Muestra común: ${k} partidos previos completos por equipo. Cada jugador tiene el mismo peso y las ausencias dentro de la ventana cuentan como cero.</div><div class="team-performance__grid">${teamColumn(sides[0], "Equipo local")}${teamColumn(sides[1], "Equipo visitante")}</div>`;
+    }).join("")}</section>
+    <section class="team-performance-picks"><div class="team-performance-picks__heading"><strong>Picks sugeridos por rendimiento</strong><span><i class="pick-dot pick-dot--green"></i>Fuerte <i class="pick-dot pick-dot--orange"></i>Medio <i class="pick-dot pick-dot--red"></i>Riesgo</span></div>${renderPerformancePicks(side)}</section>
+  </div>`;
+  elements.teamPerformanceContent.innerHTML = `<div class="team-performance__note">Muestra común: ${k} partidos previos completos por equipo. Cada jugador tiene el mismo peso y las ausencias dentro de la ventana cuentan como cero. Los picks priorizan tiros y pases; disciplina y muestra actúan como filtros.</div><div class="team-performance__grid">${teamColumn(sides[0], "Equipo local", "home")}${teamColumn(sides[1], "Equipo visitante", "away")}</div>`;
   applyTeamPerformanceVisibility(teamPerformanceVisible());
+}
+
+function teamPerformancePickLeg(reference) {
+  const [side, indexText] = String(reference || "").split(":");
+  const fixture = selectedFixture();
+  const performance = state.teamPerformanceByFixture.get(fixture?.id);
+  const pick = performance?.picks?.[side]?.[Number(indexText)];
+  if (!fixture || !pick || !pick.canAdd) return null;
+  return {
+    id: `${fixture.id}:team-performance:${pick.selectionKey}`,
+    fixtureId: fixture.id, matchId: fixture.id, league: fixture.leagueName,
+    home: fixture.home, away: fixture.away, date: fixture.date,
+    market: pick.market, selection: pick.selection,
+    marketCode: pick.marketKey, selectionCode: pick.selectionKey,
+    decimalOdds: pick.odds, originalOdds: pick.odds, updatedOdds: null,
+    impliedProbability: pick.odds ? Number((100 / pick.odds).toFixed(1)) : null,
+    modelProbability: null, estimatedProbability: null, expectedValue: null,
+    fixtureStatus: fixture.statusLabel || fixture.status,
+    kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: performance.updatedAt || pick.createdAt,
+    confidence: pick.confidence, confidenceScore: pick.confidenceScore,
+    risk: pick.color === "green" ? "Fuerte" : "Medio",
+    reasoning: pick.explanation, requiresReview: pick.requiresReview,
+    analysisStatus: performance.status, sourceModule: "team_average_performance",
+    source: performance.source || "api-football", sourceLabel: pick.sourceLabel,
+    bookmaker: pick.bookmaker || "", supportingData: pick.supportingData || [],
+    contradictingData: pick.contradictingData || []
+  };
+}
+
+function addTeamPerformancePick(reference) {
+  const leg = teamPerformancePickLeg(reference);
+  if (leg) appendPickToParlay(leg, "Pick de rendimiento agregado a Mi parlay.");
+}
+
+function saveTeamPerformancePick(reference) {
+  const leg = teamPerformancePickLeg(reference);
+  if (leg) saveIndividualLeg({ ...leg, result: "pending" });
 }
 
 async function loadTeamPerformance(fixture) {
@@ -2509,6 +2559,12 @@ elements.matchesList.addEventListener("keydown", async (event) => {
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
 elements.toggleTeamPerformance.addEventListener("click", () => applyTeamPerformanceVisibility(elements.teamPerformanceContent.hidden));
+elements.teamPerformanceContent.addEventListener("click", (event) => {
+  const addButton = event.target.closest("[data-add-team-performance-pick]");
+  const saveButton = event.target.closest("[data-save-team-performance-pick]");
+  if (addButton) addTeamPerformancePick(addButton.dataset.addTeamPerformancePick);
+  if (saveButton) saveTeamPerformancePick(saveButton.dataset.saveTeamPerformancePick);
+});
 elements.savePreMatchEvidence.addEventListener("click", capturePreMatchEvidence);
 elements.auditFixture.addEventListener("change", () => { elements.runAudit.disabled = !elements.auditFixture.value; });
 elements.runAudit.addEventListener("click", runSelectedAudit);

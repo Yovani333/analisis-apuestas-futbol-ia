@@ -65,6 +65,12 @@ test("liquida automáticamente los tres mercados permitidos", () => {
   assert.equal(settleLegResult("home_over_1_5", result), "won");
 });
 
+test("liquida DNB como ganado, perdido o anulado", () => {
+  assert.equal(settleLegResult("home_dnb", { finished: true, goals: { home: 2, away: 1 } }), "won");
+  assert.equal(settleLegResult("home_dnb", { finished: true, goals: { home: 0, away: 1 } }), "lost");
+  assert.equal(settleLegResult("away_dnb", { finished: true, goals: { home: 1, away: 1 } }), "void");
+});
+
 test("detecta duplicados exactos entre módulos por fixture, mercado y selección", () => {
   const odds = { fixtureId: 77, marketCode: "btts", selectionCode: "btts_yes", sourceModule: "odds" };
   const poisson = { ...odds, sourceModule: "poisson" };

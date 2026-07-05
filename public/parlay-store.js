@@ -95,6 +95,8 @@ export function settleLegResult(selectionCode, fixtureResult) {
   const away = Number(fixtureResult.goals?.away);
   if (!Number.isFinite(home) || !Number.isFinite(away)) return "pending";
   const total = home + away;
+  if (selectionCode === "home_dnb") return home === away ? "void" : home > away ? "won" : "lost";
+  if (selectionCode === "away_dnb") return home === away ? "void" : away > home ? "won" : "lost";
   const outcomes = {
     home_win: home > away,
     draw: home === away,

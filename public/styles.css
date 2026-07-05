@@ -1699,6 +1699,7 @@ body {
   border-radius: 6px;
 }
 .team-performance__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.team-performance__column { display: grid; align-content: start; gap: 8px; min-width: 0; }
 .team-performance__team {
   min-width: 0;
   padding: 11px;
@@ -1707,7 +1708,7 @@ body {
   border-radius: 7px;
 }
 .team-performance__team:first-child { border-top: 2px solid #22d3ee; }
-.team-performance__team:last-child { border-top: 2px solid #a78bfa; }
+.team-performance__column:nth-child(2) .team-performance__team { border-top: 2px solid #a78bfa; }
 .team-performance__team-heading { display: grid; gap: 2px; margin-bottom: 10px; }
 .team-performance__team-heading span { color: var(--muted); font-size: .58rem; font-weight: 800; text-transform: uppercase; }
 .team-performance__team-heading strong { overflow-wrap: anywhere; font-size: .8rem; }
@@ -1718,7 +1719,28 @@ body {
 .performance-metric strong { color: var(--text); font-size: .66rem; font-variant-numeric: tabular-nums; }
 .performance-bar { height: 7px; overflow: hidden; background: #26364d; border-radius: 999px; }
 .performance-bar i { display: block; height: 100%; background: linear-gradient(90deg, #0891b2, #22d3ee); border-radius: inherit; }
-.team-performance__team:last-child .performance-bar i { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
+.team-performance__column:nth-child(2) .performance-bar i { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
+.team-performance-picks { display: grid; gap: 7px; padding: 10px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 7px; }
+.team-performance-picks__heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 10px; }
+.team-performance-picks__heading > strong { font-size: .7rem; }
+.team-performance-picks__heading > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); font-size: .55rem; }
+.team-performance-pick { display: grid; gap: 6px; padding: 9px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-left: 4px solid #64748b; border-radius: 6px; }
+.team-performance-pick--green { border-left-color: var(--success); }
+.team-performance-pick--orange { border-left-color: var(--warning); }
+.team-performance-pick--red { border-left-color: var(--danger); }
+.team-performance-pick > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.team-performance-pick > header > div { display: grid; gap: 1px; min-width: 0; }
+.team-performance-pick > header small { color: var(--muted); font-size: .56rem; }
+.team-performance-pick > header strong { font-size: .72rem; overflow-wrap: anywhere; }
+.team-performance-pick > header > span { padding: 3px 6px; color: var(--text); font-size: .56rem; font-weight: 800; background: var(--neutral-soft); border-radius: 999px; }
+.team-performance-pick__meta { display: flex; flex-wrap: wrap; gap: 5px 9px; color: var(--muted); font-size: .57rem; }
+.team-performance-pick__meta b { color: var(--text); }
+.team-performance-pick > p { margin: 0; color: var(--muted); font-size: .62rem; line-height: 1.45; }
+.team-performance-pick__odds-note { color: var(--warning); font-size: .56rem; }
+.team-performance-picks__empty { padding: 9px; color: var(--muted); font-size: .63rem; line-height: 1.45; text-align: center; background: var(--surface); border: 1px dashed var(--border); border-radius: 6px; }
+:root[data-theme="dark"] .team-performance-picks,
+:root[data-theme="dark"] .team-performance-pick,
+:root[data-theme="dark"] .team-performance-picks__empty { border-color: var(--border); }
 .intelligence-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 8px 10px; margin: 0 0 10px; color: var(--muted); font-size: .61rem; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
 .intelligence-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .legend-signal { width: 7px; height: 7px; border-radius: 50%; }

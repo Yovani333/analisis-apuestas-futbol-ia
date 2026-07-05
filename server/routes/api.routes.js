@@ -17,6 +17,7 @@ import { buildSpecificMarkets } from "../services/specific-markets.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 import { runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
 import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
+import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -94,7 +95,10 @@ apiRouter.get("/fixtures/:fixtureId/team-performance", requireLiveMode, asyncRou
     getPreviousFixtures: getPreviousFixturesForTeam,
     getFixturePlayers
   }, { forceRefresh });
-  res.json(performance);
+  const picks = buildTeamPerformancePicks(dataset.fixture, performance.equipo_local, performance.equipo_visitante, {
+    odds: dataset.researchData?.odds?.markets || dataset.preMatch?.odds?.selections || []
+  });
+  res.json({ ...performance, picks });
 }));
 
 apiRouter.post("/fixtures/:fixtureId/audit", requireLiveMode, asyncRoute(async (req, res) => {
