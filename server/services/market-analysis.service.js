@@ -103,6 +103,8 @@ export function normalizeOdds(rows = [], teams = {}) {
     ["match_winner", "home_win", "Resultado 1X2", teams.homeName || "Equipo 1 gana", /^(match winner|1x2)$/, [/^home$/, /^1$/, homeNamePattern].filter(Boolean)],
     ["match_winner", "draw", "Resultado 1X2", "Empate", /^(match winner|1x2)$/, [/^draw$/, /^x$/]],
     ["match_winner", "away_win", "Resultado 1X2", teams.awayName || "Equipo 2 gana", /^(match winner|1x2)$/, [/^away$/, /^2$/, awayNamePattern].filter(Boolean)],
+    ["draw_no_bet", "home_dnb", "Empate no apuesta (DNB)", `${teams.homeName || "Equipo 1"} DNB`, /^(draw no bet|dnb)$/, [/^home$/, /^1$/, homeNamePattern].filter(Boolean)],
+    ["draw_no_bet", "away_dnb", "Empate no apuesta (DNB)", `${teams.awayName || "Equipo 2"} DNB`, /^(draw no bet|dnb)$/, [/^away$/, /^2$/, awayNamePattern].filter(Boolean)],
     ["double_chance", "1X", "Doble oportunidad", homeLabel, /^double chance$/, [/home draw/, /^1x$/, /local empate/]],
     ["double_chance", "X2", "Doble oportunidad", awayLabel, /^double chance$/, [/draw away/, /^x2$/, /empate visitante/]],
     ["double_chance", "12", "Doble oportunidad", `${teams.homeName || "Equipo 1"} o ${teams.awayName || "Equipo 2"} (12)`, /^double chance$/, [/home away/, /^12$/, /local visitante/]],

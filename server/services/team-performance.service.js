@@ -11,6 +11,12 @@ function numberOrZero(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+function hasNumericValue(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return false;
+  const parsed = Number.parseFloat(String(value).replace("%", ""));
+  return Number.isFinite(parsed) && parsed >= 0;
+}
+
 function fixtureTimestamp(row) {
   const value = Date.parse(row?.fixture?.date || "");
   return Number.isFinite(value) ? value : 0;
@@ -40,12 +46,20 @@ function playerMatchMetrics(playerRow) {
     tarjetas: numberOrZero(stats.cards?.yellow) + (numberOrZero(stats.cards?.red) * 2),
     tiros: numberOrZero(stats.shots?.total),
     pases_acertados: numberOrZero(stats.passes?.accuracy),
-    faltas: numberOrZero(stats.fouls?.committed)
+    faltas: numberOrZero(stats.fouls?.committed),
+    metricAvailability: {
+      entradas: hasNumericValue(stats.tackles?.total),
+      tarjetas: hasNumericValue(stats.cards?.yellow) || hasNumericValue(stats.cards?.red),
+      tiros: hasNumericValue(stats.shots?.total),
+      pases_acertados: hasNumericValue(stats.passes?.accuracy),
+      faltas: hasNumericValue(stats.fouls?.committed)
+    }
   };
 }
 
 export function calculateTeamPerformance({ teamId, teamName, fixturePlayerRows = [], k }) {
   const totalsByPlayer = new Map();
+  const observedMetrics = { entradas: 0, tarjetas: 0, tiros: 0, pases_acertados: 0, faltas: 0 };
   for (const response of fixturePlayerRows.slice(0, k)) {
     for (const playerRow of findTeamPlayers(response, teamId)) {
       const metrics = playerMatchMetrics(playerRow);
@@ -54,6 +68,9 @@ export function calculateTeamPerformance({ teamId, teamName, fixturePlayerRows =
         entradas: 0, tarjetas: 0, tiros: 0, pases_acertados: 0, faltas: 0
       };
       for (const key of Object.keys(current)) current[key] += metrics[key];
+      for (const key of Object.keys(observedMetrics)) {
+        if (metrics.metricAvailability[key]) observedMetrics[key] += 1;
+      }
       totalsByPlayer.set(metrics.playerId, current);
     }
   }
@@ -66,7 +83,12 @@ export function calculateTeamPerformance({ teamId, teamName, fixturePlayerRows =
     }
     for (const key of Object.keys(metricas)) metricas[key] = Number((metricas[key] / playerCount).toFixed(2));
   }
-  return { nombre: teamName, jugadores: playerCount, metricas };
+  return {
+    nombre: teamName,
+    jugadores: playerCount,
+    metricas,
+    metricCoverage: Object.fromEntries(Object.entries(observedMetrics).map(([key, count]) => [key, count > 0]))
+  };
 }
 
 function notAvailable(fixture, reason) {
