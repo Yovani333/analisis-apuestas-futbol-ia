@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260705-moderate-performance-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260705-menu-catalog-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -24,6 +24,7 @@
           <span aria-hidden="true">▦</span> Dashboard
         </button>
         <button class="main-nav__item" type="button" data-view="guide">Guía de análisis</button>
+        <button class="main-nav__item" type="button" data-view="markets">Catálogo de mercados</button>
         <button id="theme-toggle" class="main-nav__item" type="button" aria-pressed="false" title="Cambiar tema">Modo oscuro</button>
         <button class="main-nav__item" type="button" data-view="saved">
           <span aria-hidden="true">▣</span> Mis apuestas <span id="saved-parlay-count" class="nav-count">0</span>
@@ -280,6 +281,7 @@
         <div><p class="eyebrow">Decision intelligence</p><h2>Centro de Inteligencia del Análisis</h2><p>Consulta cómo se interpretan los datos, qué módulos respaldan cada mercado y cuándo un pick debe usarse, revisarse o evitarse.</p></div>
         <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
       </section>
+      <div class="guide-orientation-grid">
       <section class="decision-flow" aria-labelledby="decision-flow-title">
         <header><p class="eyebrow">Ruta de validación</p><h3 id="decision-flow-title">Flujo de decisión</h3><span>De la evidencia al parlay</span></header>
         <ol>
@@ -302,6 +304,7 @@
           <li><b>6</b><span><strong>Aplica el filtro final</strong><small>El Motor de Decisión integra señales y riesgo.</small></span></li>
         </ol>
       </section>
+      </div>
       <aside class="intelligence-color-legend" aria-label="Leyenda global de estados">
         <strong>Leyenda de decisión</strong><span><i class="legend-signal legend-signal--strong"></i>Verde · Fuerte / disponible</span><span><i class="legend-signal legend-signal--validate"></i>Naranja · Revisar / parcial</span><span><i class="legend-signal legend-signal--avoid"></i>Rojo · Evitar / alto riesgo</span><span><i class="legend-signal legend-signal--info"></i>Azul · Informativo</span><span><i class="legend-signal legend-signal--ai"></i>Morado · Modelo avanzado</span><span><i class="legend-signal legend-signal--off"></i>Gris · No disponible</span>
       </aside>
@@ -311,23 +314,30 @@
           <div class="guide-module__body"><div id="guide-coverage-summary" class="coverage-executive"><div class="research-empty">Selecciona un partido para construir el mapa de cobertura.</div></div><div id="guide-coverage-slot"></div><div id="guide-research-slot"></div></div>
         </details>
         <details id="guide-team-goals-module" class="guide-module guide-module--attack"><summary><b class="guide-module__index">02</b><span>Apoyo ofensivo</span><strong>Ataque vs Defensa</strong><small>Compara capacidad de marcar, resistencia y confianza de ambos equipos.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-team-goals-slot"></div></div></details>
-        <details id="guide-specific-markets-module" class="guide-module guide-module--specific">
-          <summary><b class="guide-module__index">03</b><span>Selecciones concretas</span><strong>Catálogo de Mercados</strong><small>Mercados ofensivos, defensivos, de resultado, volumen y riesgo.</small><em>Mostrar</em></summary>
-          <div class="guide-module__body">
-            <section id="specific-markets-panel" class="panel advanced-module-panel" aria-labelledby="specific-markets-title">
-              <div class="panel-heading"><div><p class="eyebrow">Picks por intención</p><h2 id="specific-markets-title">Catálogo de Mercados</h2></div><div class="panel-actions"><button id="show-specific-markets" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="specific-markets-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
-              <div id="specific-markets-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar mercados específicos.</div></div>
-            </section>
-            <div id="guide-corners-slot"></div>
-          </div>
-        </details>
         <details id="guide-poisson-module" class="guide-module guide-module--poisson">
-          <summary><b class="guide-module__index">04</b><span>Modelo avanzado</span><strong>Motor Poisson</strong><small>Escenarios de goles y marcadores condicionados por la calidad de entrada.</small><em>Mostrar</em></summary>
+          <summary><b class="guide-module__index">03</b><span>Modelo avanzado</span><strong>Motor Poisson</strong><small>Escenarios de goles y marcadores condicionados por la calidad de entrada.</small><em>Mostrar</em></summary>
           <div class="guide-module__body"><div id="guide-poisson-slot"></div></div>
         </details>
-        <details id="guide-odds-module" class="guide-module guide-module--market"><summary><b class="guide-module__index">05</b><span>Dato de mercado</span><strong>Panel de Mercado</strong><small>Precio, probabilidad implícita, alertas y valor; una cuota baja no es seguridad.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div></details>
-        <details id="guide-data-picks-module" class="guide-module guide-module--primary"><summary><b class="guide-module__index">06</b><span>Filtro final</span><strong>Motor de Decisión</strong><small>Integra cobertura, goles, Poisson, cuotas, EV, contradicciones y riesgo.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-data-picks-slot"></div></div></details>
+        <details id="guide-odds-module" class="guide-module guide-module--market"><summary><b class="guide-module__index">04</b><span>Dato de mercado</span><strong>Panel de Mercado</strong><small>Precio, probabilidad implícita, alertas y valor; una cuota baja no es seguridad.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div></details>
+        <details id="guide-data-picks-module" class="guide-module guide-module--primary"><summary><b class="guide-module__index">05</b><span>Filtro final</span><strong>Motor de Decisión</strong><small>Integra cobertura, goles, Poisson, cuotas, EV, contradicciones y riesgo.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-data-picks-slot"></div></div></details>
       </section>
+    </main>
+
+    <main id="markets-catalog-content" class="utility-view markets-catalog-view" data-view-panel="markets" hidden>
+      <section class="utility-heading">
+        <div><p class="eyebrow">Selecciones por intención</p><h2>Catálogo de Mercados</h2><p>Explora mercados ofensivos, defensivos, de resultado, volumen y riesgo sin confundir disponibilidad con recomendación.</p></div>
+        <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+      </section>
+      <section class="catalog-reading-path" aria-label="Cómo usar el catálogo">
+        <div><b>1</b><span><strong>Selecciona un partido</strong><small>El catálogo usa únicamente sus datos normalizados.</small></span></div>
+        <div><b>2</b><span><strong>Revisa disponibilidad</strong><small>Parcial o no disponible significa que faltan respaldos.</small></span></div>
+        <div><b>3</b><span><strong>Valida en la Guía</strong><small>Confirma cobertura, Poisson, cuotas y decisión final.</small></span></div>
+      </section>
+      <section id="specific-markets-panel" class="panel advanced-module-panel" aria-labelledby="specific-markets-title">
+        <div class="panel-heading"><div><p class="eyebrow">Picks por intención</p><h2 id="specific-markets-title">Mercados disponibles</h2></div><div class="panel-actions"><button id="show-specific-markets" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="specific-markets-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+        <div id="specific-markets-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido en Dashboard para revisar mercados específicos.</div></div>
+      </section>
+      <div id="market-corners-slot"></div>
     </main>
 
     <main id="parlays-guardados" class="saved-view" data-view-panel="saved" hidden>
@@ -419,6 +429,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260705-moderate-performance-v1"></script>
+    <script type="module" src="app.js?v=20260705-menu-catalog-v1"></script>
   </body>
 </html>
