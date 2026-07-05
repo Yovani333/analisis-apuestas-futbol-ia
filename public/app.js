@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260704-team-performance-v1";
+import { footballDataService } from "./services.js?v=20260705-player-goal-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
@@ -8,7 +8,7 @@ import {
 import { createEvidenceSnapshot, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260702-evidence-v2";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginLabel } from "./pick-origins.js?v=20260705-team-performance-picks-v1";
+import { pickOriginLabel } from "./pick-origins.js?v=20260705-player-goal-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
@@ -32,6 +32,7 @@ const state = {
   cornersByFixture: new Map(),
   specificMarketsByFixture: new Map(),
   teamPerformanceByFixture: new Map(),
+  playerGoalByFixture: new Map(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
@@ -50,6 +51,7 @@ const state = {
   isLoadingCorners: false,
   isLoadingSpecificMarkets: false,
   teamPerformanceLoadingFixtures: new Set(),
+  playerGoalLoadingFixtures: new Set(),
   isRefreshingResearch: false,
   isRefreshingStatuses: false,
   isCapturingEvidence: false,
@@ -107,6 +109,7 @@ const elements = {
   showSpecificMarkets: document.querySelector("#show-specific-markets"), specificMarketsStatus: document.querySelector("#specific-markets-status"), specificMarketsContent: document.querySelector("#specific-markets-content"),
   teamPerformanceTitle: document.querySelector("#team-performance-title"), teamPerformanceStatus: document.querySelector("#team-performance-status"),
   teamPerformanceContent: document.querySelector("#team-performance-content"), toggleTeamPerformance: document.querySelector("#toggle-team-performance"),
+  playerGoalStatus: document.querySelector("#player-goal-status"), playerGoalContent: document.querySelector("#player-goal-content"), togglePlayerGoal: document.querySelector("#toggle-player-goal"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -596,6 +599,17 @@ function renderFixtureData() {
   }
   elements.teamGoalsContent.hidden = true;
   if (savedTeamGoals) { elements.showTeamGoals.textContent = "Mostrar"; elements.showTeamGoals.classList.remove("button--ready"); }
+  const savedPlayerGoals = state.playerGoalByFixture.get(fixture.id);
+  elements.togglePlayerGoal.disabled = state.playerGoalLoadingFixtures.has(fixture.id);
+  if (savedPlayerGoals) renderPlayerGoalCandidates(savedPlayerGoals);
+  else {
+    elements.playerGoalStatus.className = "status-badge status-badge--unavailable";
+    elements.playerGoalStatus.textContent = "No disponible";
+    elements.playerGoalContent.innerHTML = '<div class="research-empty">Analizando jugadores con mayor amenaza de gol…</div>';
+  }
+  elements.playerGoalContent.hidden = false;
+  elements.togglePlayerGoal.textContent = "Ocultar";
+  elements.togglePlayerGoal.setAttribute("aria-expanded", "true");
   elements.showCorners.disabled = state.isLoadingCorners;
   const savedCorners = state.cornersByFixture.get(fixture.id);
   if (savedCorners) renderCorners(savedCorners);
@@ -2055,6 +2069,74 @@ function renderTeamPerformance(performance, fixture = selectedFixture()) {
   applyTeamPerformanceVisibility(teamPerformanceVisible());
 }
 
+function renderPlayerGoalCandidates(result) {
+  const candidates = result?.candidates || [];
+  const statusLabels = {
+    available: ["Disponible", "available"], insufficient_data: ["Datos insuficientes", "partial"],
+    no_player_coverage: ["Sin cobertura", "unavailable"], not_available: ["No disponible", "unavailable"], error: ["Error", "unavailable"]
+  };
+  const [label, status] = statusLabels[result?.status] || statusLabels.not_available;
+  elements.playerGoalStatus.className = `status-badge status-badge--${status}`;
+  elements.playerGoalStatus.textContent = label;
+  if (!candidates.length) {
+    elements.playerGoalContent.innerHTML = `<div class="research-empty"><strong>${escapeHtml(label)}</strong><p>${escapeHtml(result?.message || "Datos insuficientes para sugerir jugador con posible gol.")}</p></div>`;
+    return;
+  }
+  elements.playerGoalContent.innerHTML = `<div class="player-goal-note">Modelo interno con datos reales de API-Football. Prioriza minutos, titularidad, tiros y tiros a puerta; un gol reciente por sí solo no genera recomendación.</div><div class="player-goal-grid">${candidates.map((candidate, index) => `<article class="player-goal-card player-goal-card--${escapeHtml(candidate.color)}">
+    <header><span class="player-goal-rank">${index + 1}</span><div><strong>${escapeHtml(candidate.playerName)}</strong><small>${escapeHtml(candidate.teamName)}</small></div><b>${escapeHtml(candidate.confidence)}</b></header>
+    <div class="player-goal-score"><span>GoalThreatScore</span><strong>${displayValue(candidate.goalThreatScore, 0)}/100</strong><div><i style="width:${Math.min(100, Number(candidate.goalThreatScore || 0))}%"></i></div></div>
+    <dl><div><dt>Mercado</dt><dd>${escapeHtml(candidate.market)}</dd></div><div><dt>Cuota</dt><dd>${candidate.odds ? `${displayValue(candidate.odds)} · ${escapeHtml(candidate.bookmaker || "API-Football")}` : "No disponible"}</dd></div><div><dt>Muestra</dt><dd>${displayValue(candidate.stats?.appearancesLast5, 0)} partidos · ${displayValue(candidate.stats?.minutesLast5, 0)} min</dd></div><div><dt>Amenaza</dt><dd>${displayValue(candidate.stats?.shotsPer90)} tiros/90 · ${displayValue(candidate.stats?.shotsOnTargetPer90)} a puerta/90</dd></div></dl>
+    <p>${escapeHtml(candidate.explanation)}</p>${candidate.odds ? "" : '<small class="player-goal-pending">Cuota no disponible · pick pendiente de cuota.</small>'}
+    <div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-player-goal="${index}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-player-goal="${index}">Agregar pick</button></div>
+  </article>`).join("")}</div>`;
+}
+
+function playerGoalPickLeg(index) {
+  const fixture = selectedFixture();
+  const result = state.playerGoalByFixture.get(fixture?.id);
+  const candidate = result?.candidates?.[Number(index)];
+  if (!fixture || !candidate) return null;
+  return {
+    id: `${fixture.id}:player-goal:${candidate.playerId}`, fixtureId: fixture.id, matchId: fixture.id,
+    league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date,
+    teamId: candidate.teamId, teamName: candidate.teamName, playerId: candidate.playerId, playerName: candidate.playerName,
+    market: candidate.market, selection: candidate.selection, marketCode: candidate.marketKey, selectionCode: candidate.selectionKey,
+    decimalOdds: candidate.odds, originalOdds: candidate.odds, updatedOdds: null,
+    impliedProbability: candidate.odds ? Number((100 / candidate.odds).toFixed(1)) : null,
+    modelProbability: null, expectedValue: null, fixtureStatus: fixture.statusLabel || fixture.status,
+    kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt,
+    confidence: candidate.confidence, confidenceScore: candidate.goalThreatScore,
+    risk: candidate.color === "green" ? "Fuerte" : "Medio", reasoning: candidate.explanation,
+    requiresReview: candidate.requiresReview, sourceModule: "player_goal_candidate", source: result.source,
+    sourceLabel: candidate.sourceLabel, bookmaker: candidate.bookmaker || "",
+    supportingData: [`${candidate.stats?.minutesLast5 || 0} minutos`, `${candidate.stats?.shotsLast5 || 0} tiros`, `${candidate.stats?.shotsOnTargetLast5 || 0} tiros a puerta`], contradictingData: []
+  };
+}
+
+function addPlayerGoalPick(index) { const leg = playerGoalPickLeg(index); if (leg) appendPickToParlay(leg, "Pick de jugador agregado a Mi parlay."); }
+function savePlayerGoalPick(index) { const leg = playerGoalPickLeg(index); if (leg) saveIndividualLeg({ ...leg, result: "pending" }); }
+
+async function loadPlayerGoalCandidates(fixture) {
+  if (!fixture || state.playerGoalLoadingFixtures.has(fixture.id)) return;
+  const saved = state.playerGoalByFixture.get(fixture.id);
+  if (saved) return renderPlayerGoalCandidates(saved);
+  state.playerGoalLoadingFixtures.add(fixture.id);
+  elements.togglePlayerGoal.disabled = true;
+  elements.playerGoalStatus.className = "status-badge status-badge--processing";
+  elements.playerGoalStatus.textContent = "Analizando";
+  elements.playerGoalContent.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Analizando jugadores con mayor amenaza de gol…</p></div>';
+  try {
+    const result = await footballDataService.getPlayerGoalCandidates(fixture);
+    state.playerGoalByFixture.set(fixture.id, result);
+    if (String(state.selectedFixtureId) === String(fixture.id)) renderPlayerGoalCandidates(result);
+  } catch (error) {
+    if (String(state.selectedFixtureId) === String(fixture.id)) renderPlayerGoalCandidates({ status: "error", candidates: [], message: error.message });
+  } finally {
+    state.playerGoalLoadingFixtures.delete(fixture.id);
+    if (String(state.selectedFixtureId) === String(fixture.id)) elements.togglePlayerGoal.disabled = false;
+  }
+}
+
 function teamPerformancePickLeg(reference) {
   const [side, indexText] = String(reference || "").split(":");
   const fixture = selectedFixture();
@@ -2125,7 +2207,7 @@ async function selectFixture(fixtureId, analysisMode = null) {
     if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
     renderMatches();
     renderFixtureData();
-    void loadTeamPerformance(detailedFixture);
+    void loadTeamPerformance(detailedFixture).then(() => loadPlayerGoalCandidates(detailedFixture));
   } catch (error) {
     elements.filterError.hidden = false;
     elements.filterError.textContent = error.message;
@@ -2559,6 +2641,13 @@ elements.matchesList.addEventListener("keydown", async (event) => {
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
 elements.toggleTeamPerformance.addEventListener("click", () => applyTeamPerformanceVisibility(elements.teamPerformanceContent.hidden));
+elements.togglePlayerGoal.addEventListener("click", () => toggleReadyModule(elements.togglePlayerGoal, elements.playerGoalContent));
+elements.playerGoalContent.addEventListener("click", (event) => {
+  const add = event.target.closest("[data-add-player-goal]");
+  const save = event.target.closest("[data-save-player-goal]");
+  if (add) addPlayerGoalPick(add.dataset.addPlayerGoal);
+  if (save) savePlayerGoalPick(save.dataset.savePlayerGoal);
+});
 elements.teamPerformanceContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-team-performance-pick]");
   const saveButton = event.target.closest("[data-save-team-performance-pick]");

@@ -13,7 +13,7 @@ function normalizeCandidate(pick = {}) {
     selectionKey: pick.selectionKey || "",
     market: pick.market || "Mercado no identificado",
     selection: pick.selection || "Selección no identificada",
-    decimalOdds: number(pick.decimalOdds),
+    decimalOdds: number(pick.decimalOdds ?? pick.odds),
     impliedProbabilityPct: number(pick.impliedProbabilityPct),
     modelProbabilityPct: number(pick.modelProbabilityPct ?? pick.estimatedProbabilityPct),
     expectedValuePct: number(pick.expectedValuePct),
@@ -28,6 +28,9 @@ function normalizeCandidate(pick = {}) {
 }
 
 function actionable(pick) {
+  if (pick.sourceModule === "player_goal_candidate") {
+    return pick.confidenceScore >= 45 && !["red", "gray"].includes(pick.highlightColor);
+  }
   return pick.decimalOdds > 1 && pick.modelProbabilityPct !== null && pick.confidenceScore >= 45
     && !["red", "gray"].includes(pick.highlightColor) && !pick.requiresReview;
 }
@@ -53,6 +56,7 @@ export function buildSpecificMarkets(dataset = {}) {
   dataset.cornersModel ||= calculateCornersModel(dataset);
   const dataPicks = generateDataPicks(dataset);
   const all = [
+    ...(dataset.playerGoalCandidates?.candidates || []),
     ...(dataPicks.picks || []),
     ...(dataset.poissonModel.suggestedMarkets || []),
     ...(dataset.teamGoalProbability.picks || []),
@@ -69,7 +73,7 @@ export function buildSpecificMarkets(dataset = {}) {
   const groups = [
     group({ key: "corners", label: "Corners", candidates: dataset.cornersModel.picks || [], missingData: ["Muestra histórica de corners", "Cuota de corners verificable"], alternativeData: cornerAlternative }),
     group({ key: "asian_handicap", label: "Hándicap asiático", candidates: matches(/asian|asi[aá]tic|handicap|h[aá]ndicap/), missingData: ["Línea de hándicap asiático verificable", "Probabilidad del modelo para esa línea"], alternativeData: quality >= 60 ? "Se conserva la evaluación general del favorito, pero no se convierte en hándicap." : "" }),
-    group({ key: "player_goal", label: "Jugador con posible gol", candidates: matches(/player.*goal|goleador|anotar[aá]|marca.*jugador/), missingData: ["Alineación confirmada", "Minutos y tiros recientes del jugador", "Cuota de goleador verificable"], alternativeData: playerData?.status === "available" ? "Hay rendimiento individual, pero no una cuota y probabilidad prepartido completas." : "" }),
+    group({ key: "player_goal", label: "Jugador con posible gol", candidates: dataset.playerGoalCandidates?.candidates || matches(/player.*goal|goleador|anotar[aá]|marca.*jugador/), missingData: ["Minutos y tiros recientes del jugador", "Cobertura individual de API-Football"], alternativeData: dataset.playerGoalCandidates?.message || (playerData?.status === "available" ? "Hay rendimiento individual, pero no una cuota y probabilidad prepartido completas." : "") }),
     group({ key: "btts", label: "Ambos equipos anotan", candidates: matches(/btts|ambos.*anotan|both teams.*score/), missingData: ["Probabilidad de gol de ambos equipos", "Cuota BTTS verificable"] }),
     group({ key: "team_scores_over", label: "Equipo marca más de X goles", candidates: matches(/team_goals|goles de .*m[aá]s|over_[01]_5/), missingData: ["Expectativa ofensiva por equipo", "Cuota de goles del equipo"] }),
     group({ key: "team_concedes_under", label: "Equipo recibe menos de X goles", candidates: matches(/recibe.*menos|concede.*under|team.*conced/), missingData: ["Expectativa ofensiva del rival", "Línea de goles recibidos", "Cuota verificable"], alternativeData: dataset.researchData?.xgXga?.status ? "xGA se usa como contexto defensivo, no como pick sin mercado compatible." : "" }),

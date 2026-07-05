@@ -55,6 +55,16 @@ test("pick individual y parlay conservan fuente y evidencias", () => {
   assert.equal(parlay.legs.every((leg) => Boolean(leg.addedAt)), true);
 });
 
+test("un candidato de jugador sin cuota conserva su origen y no rompe el parlay", () => {
+  const input = { fixtureId: 1567307, market: "Jugador anota en cualquier momento", selection: "Harry Kane anota", decimalOdds: null, sourceModule: "player_goal_candidate" };
+  const pick = createSavedPick(input, new Date("2026-07-05T12:00:00Z"));
+  const parlay = createSavedParlay("Goleador pendiente", [input], new Date("2026-07-05T12:00:00Z"));
+  assert.equal(pick.originalOdds, null);
+  assert.equal(pick.sourceModule, "player_goal_candidate");
+  assert.equal(parlay.legs[0].decimalOdds, null);
+  assert.equal(calculateParlayResult(parlay.legs), "pending");
+});
+
 test("liquida automáticamente los tres mercados permitidos", () => {
   const result = { finished: true, goals: { home: 2, away: 1 } };
   assert.equal(settleLegResult("1X", result), "won");
