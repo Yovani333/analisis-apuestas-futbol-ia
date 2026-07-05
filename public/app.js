@@ -37,7 +37,7 @@ const state = {
   savedTab: "individual",
   expandedParlays: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
-  preferences: readLocalJson(PREFERENCES_KEY, { theme: "light", autoRefresh: false, dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
+  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", autoRefresh: false, dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
   currentView: "dashboard",
   hasSearched: false,
   isSearching: false,
@@ -1460,12 +1460,16 @@ function renderAnalysis(analysis) {
   };
   const strengthLabels = { strong: "Fuerte", medium: "Medio", slight: "Ligero", none: "Sin favorito claro" };
   const gapLabels = { very_high: "Muy alta", high: "Alta", medium: "Media", low: "Baja" };
+  const recommendedQualityScore = Number(pickReview?.recommendedPick?.confidenceScore);
+  const qualityScoreHtml = Number.isFinite(recommendedQualityScore)
+    ? `<div class="pick-quality" aria-label="Pick Quality Score ${recommendedQualityScore} de 100"><span>Pick Quality Score</span><div><i style="width:${Math.max(0, Math.min(100, recommendedQualityScore))}%"></i></div><strong>${recommendedQualityScore}/100</strong></div>`
+    : '<div class="pick-quality pick-quality--empty"><span>Pick Quality Score</span><strong>No disponible</strong></div>';
   const pickReviewHtml = pickReview ? `
     <section class="pick-review">
       <div><span>Favorito real</span><strong>${escapeHtml(pickReview.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(strengthLabels[pickReview.favoriteStrength] || pickReview.favoriteStrength)}</small></div>
       <div><span>Brecha de calidad</span><strong>${escapeHtml(gapLabels[pickReview.qualityGap] || pickReview.qualityGap)}</strong></div>
       <div><span>Mayor EV</span><strong>${escapeHtml(pickReview.highestEvPick?.selection || "Sin cálculo")}</strong><small>${displayValue(pickReview.highestEvPick?.expectedValuePct)}% · ${escapeHtml(categoryLabels[pickReview.highestEvPick?.pickCategory] || "Sin categoría")}</small></div>
-      <div><span>Pick lógico recomendado</span><strong>${escapeHtml(pickReview.recommendedPick?.selection || "Sin pick principal")}</strong><small>${escapeHtml(categoryLabels[pickReview.recommendedPick?.pickCategory] || "Sin pick")} · Confianza ${displayValue(pickReview.recommendedPick?.confidenceScore, 0)}/100</small></div>
+      <div><span>Pick lógico recomendado</span><strong>${escapeHtml(pickReview.recommendedPick?.selection || "Sin pick principal")}</strong><small>${escapeHtml(categoryLabels[pickReview.recommendedPick?.pickCategory] || "Sin pick")} · Confianza ${displayValue(pickReview.recommendedPick?.confidenceScore, 0)}/100</small>${qualityScoreHtml}</div>
       <p>${escapeHtml(pickReview.warning || "Sin advertencias adicionales.")}</p>
     </section>` : "";
   const confidenceColor = (pick) => {
@@ -1476,7 +1480,7 @@ function renderAnalysis(analysis) {
   };
   const confidencePicksHtml = pickReview?.confidencePicks?.length ? `
     <section class="confidence-picks">
-      <div class="confidence-picks__heading"><h3>Posibles picks por confianza</h3><small>Ordenados por confianza evaluada, no únicamente por EV.</small></div>
+      <div class="confidence-picks__heading"><h3>Matriz de oportunidades</h3><small>Ordenada por confianza evaluada, no únicamente por EV.</small></div>
       <div class="confidence-picks__table" role="table" aria-label="Posibles picks ordenados por confianza">
         ${pickReview.confidencePicks.map((pick) => `<div class="confidence-pick confidence-pick--${confidenceColor(pick)} ${pickSignalClass(pick)}" role="row">
           <span role="cell">${pick.rank}</span>
@@ -1486,6 +1490,12 @@ function renderAnalysis(analysis) {
       </div>
       <p>Verde: opción lógica con respaldo suficiente. Naranja: riesgo o validación parcial. Rojo: evitar o sin valor confirmado.</p>
     </section>` : "";
+  const suggestedMarketsHtml = analysis.mercados_sugeridos.length
+    ? analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Cuota ${displayValue(market.cuota_decimal)} · Prob. ${displayValue(market.probabilidad_modelo)}% · EV ${displayValue(market.valor_esperado)}%</small><small>${escapeHtml(categoryLabels[market.pickCategory] || "Sin categoría")} · Confianza lógica ${displayValue(market.confidenceScore, 0)}/100${market.requiere_revision ? " · Requiere revisión" : ""}</small>${market.warning ? `<small>${escapeHtml(market.warning)}</small>` : ""}</div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-market="${index}" ${analysis._source === "mock" ? "disabled" : ""}>Guardar pick</button><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || market.requiere_revision || !quality?.canSuggest ? "disabled" : ""}>Agregar al parlay</button></div></div>`).join("")
+    : '<p>No se identificó un mercado con cobertura y valor suficiente.</p>';
+  const avoidMarketsHtml = analysis.mercados_a_evitar?.length
+    ? analysis.mercados_a_evitar.map((market) => `<div class="avoid-market"><strong>${escapeHtml(market.mercado || "Mercado")}</strong><span>${escapeHtml(market.razonamiento || "No cumple los controles de riesgo.")}</span></div>`).join("")
+    : '<p>No se identificaron mercados adicionales para evitar.</p>';
 
   elements.analysisContent.innerHTML = `
     <div class="analysis-hero">
@@ -1494,6 +1504,12 @@ function renderAnalysis(analysis) {
     </div>
     ${pickReviewHtml}
     ${confidencePicksHtml}
+    <section class="analysis-card analysis-card--opportunities">
+      <h3>Picks secundarios y acciones</h3>
+      ${suggestedMarketsHtml}
+      <p class="market-disclaimer">Agregar conserva la sugerencia para seguimiento; no realiza una apuesta.</p>
+    </section>
+    <section class="analysis-card analysis-card--avoid"><h3>Mercados a evitar</h3>${avoidMarketsHtml}</section>
     ${context ? `<section class="analysis-context"><div class="form-summary">${formCard(context.preMatch?.home)}${formCard(context.preMatch?.away)}</div>${calculationRows ? `<div class="calculation-table"><h3>Cálculos verificados antes de la IA</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Selección</th><th>Cuota</th><th>Prob. estimada</th><th>EV</th></tr></thead><tbody>${calculationRows}</tbody></table></div></div>` : '<p class="analysis-context__empty">No hubo cuotas suficientes para calcular valor esperado.</p>'}</section>` : ""}
     <div class="analysis-grid">
       <section class="analysis-card">
@@ -1508,13 +1524,8 @@ function renderAnalysis(analysis) {
         <h3>Riesgos principales</h3>
         ${list(analysis.riesgos_principales, "Sin riesgos adicionales identificados.")}
       </section>
-      <section class="analysis-card">
-        <h3>Mercados sugeridos</h3>
-        ${analysis.mercados_sugeridos.length ? analysis.mercados_sugeridos.map((market, index) => `<div class="market-row market-row--actionable"><div><span>${escapeHtml(market.seleccion)}</span><small>${escapeHtml(market.mercado)} · Cuota ${displayValue(market.cuota_decimal)} · Prob. ${displayValue(market.probabilidad_modelo)}% · EV ${displayValue(market.valor_esperado)}%</small><small>${escapeHtml(categoryLabels[market.pickCategory] || "Sin categoría")} · Confianza lógica ${displayValue(market.confidenceScore, 0)}/100${market.requiere_revision ? " · Requiere revisión" : ""}</small>${market.warning ? `<small>${escapeHtml(market.warning)}</small>` : ""}</div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-market="${index}" ${analysis._source === "mock" ? "disabled" : ""}>Guardar pick</button><button class="button button--add" type="button" data-add-market="${index}" ${analysis._source === "mock" || market.requiere_revision || !quality?.canSuggest ? "disabled" : ""}>Agregar al parlay</button></div></div>`).join("") : '<p>No se identificó un mercado con cobertura y valor suficiente.</p>'}
-        <p class="market-disclaimer">Agregar conserva la sugerencia para seguimiento; no realiza una apuesta.</p>
-      </section>
       <section class="analysis-card analysis-card--wide">
-        <h3>Predicción prudente · ${escapeHtml(analysis.prediccion_prudente.confianza)}</h3>
+        <h3>Decisión responsable para parlay · ${escapeHtml(analysis.prediccion_prudente.confianza)}</h3>
         <p><strong>${escapeHtml(analysis.prediccion_prudente.seleccion)}</strong></p>
         <p>${escapeHtml(analysis.prediccion_prudente.razonamiento)}</p>
         <p><strong>Parlay:</strong> ${escapeHtml(analysis.apto_para_parlay.respuesta)}. ${escapeHtml(analysis.apto_para_parlay.razonamiento)}</p>
@@ -2423,7 +2434,7 @@ async function initializeApp() {
   elements.alertData.checked = state.preferences.alertData !== false;
   elements.autoRefresh.checked = Boolean(state.preferences.autoRefresh);
   elements.accountAutoRefresh.checked = Boolean(state.preferences.autoRefresh);
-  applyTheme(state.preferences.theme || "light");
+  applyTheme(state.preferences.theme || "dark");
   configureAutomaticRefresh();
   renderAlerts();
   renderParlayDraft();
@@ -2433,7 +2444,10 @@ async function initializeApp() {
   const releaseElement = document.querySelector("#site-last-update");
   const releaseDate = runtime.release?.deployedAt || document.lastModified;
   const releaseCommit = runtime.release?.commit ? ` · versión ${runtime.release.commit}` : "";
-  releaseElement.textContent = `Última actualización del sitio: ${formatSiteRelease(releaseDate)} PT${releaseCommit}`;
+  releaseElement.textContent = `Última actualización: ${formatSiteRelease(releaseDate)} PT${releaseCommit}`;
+  document.querySelector("#runtime-api").textContent = `API · ${runtime.providers?.apiFootball?.configured ? "activa" : "no disponible"}`;
+  document.querySelector("#runtime-ai").textContent = `IA · ${runtime.providers?.openai?.configured ? "disponible" : "no configurada"}`;
+  document.querySelector("#runtime-version").textContent = `Versión · ${runtime.release?.commit || "local"}`;
   if (runtime.mode === "live") {
     document.querySelector("#runtime-mode").textContent = runtime.liveReady ? "Datos reales" : "Configuración pendiente";
     document.querySelector("#runtime-description").textContent = runtime.liveReady
