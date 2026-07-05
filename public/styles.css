@@ -980,6 +980,16 @@ body {
 .match-card__meta time { margin: 0; }
 .match-card__meta > span:not(.status-badge, .data-quality) { color: var(--muted); font-size: .64rem; }
 .match-card__actions { justify-content: flex-end; }
+.match-score .penalty-score,
+.selected-match__score .penalty-score {
+  display: inline-block;
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: .58rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.selected-match__score .penalty-score { font-size: .65rem; vertical-align: middle; }
 .data-quality {
   display: inline-flex;
   width: fit-content;

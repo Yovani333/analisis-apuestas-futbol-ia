@@ -370,10 +370,19 @@ function markAlertsRead() {
   renderAlerts();
 }
 
+function penaltyShootoutText(fixture) {
+  const home = fixture?.penaltyScore?.home;
+  const away = fixture?.penaltyScore?.away;
+  return home !== null && home !== undefined && away !== null && away !== undefined
+    ? `(${home}–${away} pen.)`
+    : "";
+}
+
 function fixtureProgressBanner(fixture) {
   if (!fixture) return "";
   const hasScore = fixture.score?.home !== null && fixture.score?.away !== null;
-  const score = hasScore ? `${fixture.score.home} - ${fixture.score.away}` : "VS";
+  const penalties = penaltyShootoutText(fixture);
+  const score = hasScore ? `${fixture.score.home} - ${fixture.score.away}${penalties ? ` ${penalties}` : ""}` : "VS";
   const clock = fixture.status === "live" && fixture.elapsed !== null ? `${fixture.elapsed}'` : fixture.statusLabel;
   return `<div class="fixture-progress fixture-progress--${escapeHtml(fixture.status)}"><span>${teamCrest(fixture.home, fixture.homeLogo)}</span><strong>${escapeHtml(fixture.home)} <b>${escapeHtml(score)}</b> ${escapeHtml(fixture.away)}</strong><span>${teamCrest(fixture.away, fixture.awayLogo)}</span><em>${escapeHtml(clock)} · Hora del Pacífico</em></div>`;
 }
@@ -493,7 +502,7 @@ function renderMatches() {
             </div>
             <div class="match-card__teams">
               ${teamName(fixture.home, fixture.homeLogo, homeFavorite)}
-              <span class="match-card__versus">${showScore ? `<strong class="match-score">${escapeHtml(fixture.score.home)} – ${escapeHtml(fixture.score.away)}</strong>` : "<strong>VS</strong>"}</span>
+              <span class="match-card__versus">${showScore ? `<strong class="match-score">${escapeHtml(fixture.score.home)} – ${escapeHtml(fixture.score.away)}${penaltyShootoutText(fixture) ? `<small class="penalty-score">${escapeHtml(penaltyShootoutText(fixture))}</small>` : ""}</strong>` : "<strong>VS</strong>"}</span>
               ${teamName(fixture.away, fixture.awayLogo, awayFavorite)}
             </div>
             <div class="match-card__meta">
@@ -538,7 +547,7 @@ function renderFixtureData() {
     ? `<small>1X2: ${escapeHtml(fixture.home)} ${escapeHtml(probabilities.home)}% · Empate ${escapeHtml(probabilities.draw)}% · ${escapeHtml(fixture.away)} ${escapeHtml(probabilities.away)}%</small>`
     : "";
   const score = ["finished", "live"].includes(fixture.status) && fixture.score?.home !== null && fixture.score?.away !== null
-    ? `${escapeHtml(fixture.score.home)} <i>–</i> ${escapeHtml(fixture.score.away)}`
+    ? `${escapeHtml(fixture.score.home)} <i>–</i> ${escapeHtml(fixture.score.away)}${penaltyShootoutText(fixture) ? `<small class="penalty-score">${escapeHtml(penaltyShootoutText(fixture))}</small>` : ""}`
     : `<span>VS</span>`;
   elements.selectedSummary.innerHTML = `
     <div class="selected-match__meta">
@@ -2151,7 +2160,10 @@ async function refreshFixtureStatuses() {
         statusLabel: result.statusLabel || fixture.statusLabel,
         statusShort: result.status || fixture.statusShort,
         elapsed: result.elapsed ?? fixture.elapsed,
-        score: nextScore
+        score: nextScore,
+        penaltyScore: result.penaltyScore?.home !== null && result.penaltyScore?.home !== undefined
+          && result.penaltyScore?.away !== null && result.penaltyScore?.away !== undefined
+          ? result.penaltyScore : fixture.penaltyScore
       };
     });
     renderMatches();
