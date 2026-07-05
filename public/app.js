@@ -148,7 +148,7 @@ Object.assign(elements, {
 document.querySelector("#guide-data-picks-slot")?.append(document.querySelector("#data-picks-panel"));
 document.querySelector("#guide-poisson-slot")?.append(document.querySelector("#poisson-panel"));
 document.querySelector("#guide-team-goals-slot")?.append(document.querySelector("#team-goals-panel"));
-document.querySelector("#guide-corners-slot")?.append(document.querySelector("#corners-panel"));
+document.querySelector("#market-corners-slot")?.append(document.querySelector("#corners-panel"));
 document.querySelector("#guide-coverage-slot")?.append(document.querySelector("#coverage-panel"));
 document.querySelector("#guide-research-slot")?.append(document.querySelector("#research-panel"));
 
@@ -272,7 +272,6 @@ function toggleReadyModule(button, content) {
 const guideModuleParts = {
   "guide-coverage-module": { contents: () => [elements.researchContent], buttons: () => [elements.toggleResearch] },
   "guide-team-goals-module": { contents: () => [elements.teamGoalsContent], buttons: () => [elements.showTeamGoals], load: () => loadTeamGoals() },
-  "guide-specific-markets-module": { contents: () => [elements.specificMarketsContent, elements.cornersContent], buttons: () => [elements.showSpecificMarkets, elements.showCorners], load: () => Promise.all([loadSpecificMarkets(), loadCorners()]) },
   "guide-poisson-module": { contents: () => [elements.poissonContent], buttons: () => [elements.showPoisson], load: () => loadPoisson() },
   "guide-odds-module": { contents: () => [], buttons: () => [] },
   "guide-data-picks-module": { contents: () => [elements.dataPicksContent], buttons: () => [elements.showDataPicks], load: () => loadDataPicks() }
