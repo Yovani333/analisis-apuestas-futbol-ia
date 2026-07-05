@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260701-corners";
+import { footballDataService } from "./services.js?v=20260704-team-performance-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
@@ -14,6 +14,7 @@ import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
 const ANALYSIS_USAGE_KEY = "football-ai.analysis-usage.v1";
+const TEAM_PERFORMANCE_VISIBILITY_KEY = "football-ai.team-performance-visible.v1";
 const readLocalJson = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 };
@@ -30,6 +31,7 @@ const state = {
   teamGoalsByFixture: new Map(),
   cornersByFixture: new Map(),
   specificMarketsByFixture: new Map(),
+  teamPerformanceByFixture: new Map(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
@@ -47,6 +49,7 @@ const state = {
   isLoadingTeamGoals: false,
   isLoadingCorners: false,
   isLoadingSpecificMarkets: false,
+  teamPerformanceLoadingFixtures: new Set(),
   isRefreshingResearch: false,
   isRefreshingStatuses: false,
   isCapturingEvidence: false,
@@ -102,6 +105,8 @@ const elements = {
   teamGoalsContent: document.querySelector("#team-goals-content"),
   showCorners: document.querySelector("#show-corners"), cornersStatus: document.querySelector("#corners-status"), cornersContent: document.querySelector("#corners-content"),
   showSpecificMarkets: document.querySelector("#show-specific-markets"), specificMarketsStatus: document.querySelector("#specific-markets-status"), specificMarketsContent: document.querySelector("#specific-markets-content"),
+  teamPerformanceTitle: document.querySelector("#team-performance-title"), teamPerformanceStatus: document.querySelector("#team-performance-status"),
+  teamPerformanceContent: document.querySelector("#team-performance-content"), toggleTeamPerformance: document.querySelector("#toggle-team-performance"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -1938,6 +1943,68 @@ function specificMarketLeg(reference) {
 function addSpecificMarketPick(reference) { const leg = specificMarketLeg(reference); if (leg) appendPickToParlay(leg, "Pick de mercado específico agregado a Mi parlay."); }
 function saveSpecificMarketPick(reference) { const leg = specificMarketLeg(reference); if (leg) saveIndividualLeg({ ...leg, result: "pending" }); }
 
+const teamPerformanceVisible = () => readLocalJson(TEAM_PERFORMANCE_VISIBILITY_KEY, true) !== false;
+
+function applyTeamPerformanceVisibility(visible) {
+  elements.teamPerformanceContent.hidden = !visible;
+  elements.toggleTeamPerformance.textContent = visible ? "Ocultar" : "Mostrar";
+  elements.toggleTeamPerformance.setAttribute("aria-expanded", String(visible));
+  writeLocalJson(TEAM_PERFORMANCE_VISIBILITY_KEY, visible);
+}
+
+function renderTeamPerformance(performance, fixture = selectedFixture()) {
+  const k = Number(performance?.k || 0);
+  elements.teamPerformanceTitle.textContent = k
+    ? `Rendimiento promedio por equipo · últimos ${k} partidos`
+    : "Rendimiento promedio por equipo";
+  if (!performance || performance.status !== "available" || k === 0) {
+    elements.teamPerformanceStatus.className = "status-badge status-badge--unavailable";
+    elements.teamPerformanceStatus.textContent = "Sin historial";
+    elements.teamPerformanceContent.innerHTML = `<div class="research-empty"><strong>Sin historial comparable</strong><p>${escapeHtml(performance?.message || "No hay suficientes partidos previos con estadísticas individuales completas para ambos equipos.")}</p></div>`;
+    applyTeamPerformanceVisibility(teamPerformanceVisible());
+    return;
+  }
+  elements.teamPerformanceStatus.className = "status-badge status-badge--available";
+  elements.teamPerformanceStatus.textContent = `k = ${k}`;
+  const metrics = [
+    ["entradas", "Entradas", ""], ["tarjetas", "Tarjetas ponderadas", ""],
+    ["tiros", "Tiros", ""], ["pases_acertados", "Pases acertados", "%"], ["faltas", "Faltas", ""]
+  ];
+  const sides = [performance.equipo_local, performance.equipo_visitante];
+  const maxima = Object.fromEntries(metrics.map(([key]) => [key, Math.max(...sides.map((side) => Number(side.metricas?.[key] || 0)), 0)]));
+  const teamColumn = (team, sideLabel) => `<section class="team-performance__team">
+    <div class="team-performance__team-heading"><span>${escapeHtml(sideLabel)}</span><strong>${escapeHtml(team.nombre)}</strong><small>${escapeHtml(team.jugadores || 0)} jugadores distintos</small></div>
+    ${metrics.map(([key, label, suffix]) => {
+      const value = Number(team.metricas?.[key] || 0);
+      const width = maxima[key] > 0 ? Math.max(2, (value / maxima[key]) * 100) : 0;
+      return `<div class="performance-metric"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value.toFixed(2))}${suffix}</strong></div><div class="performance-bar" aria-label="${escapeHtml(label)}: ${escapeHtml(value.toFixed(2))}${suffix}"><i style="width:${width.toFixed(2)}%"></i></div></div>`;
+    }).join("")}
+  </section>`;
+  elements.teamPerformanceContent.innerHTML = `<div class="team-performance__note">Muestra común: ${k} partidos previos completos por equipo. Cada jugador tiene el mismo peso y las ausencias dentro de la ventana cuentan como cero.</div><div class="team-performance__grid">${teamColumn(sides[0], "Equipo local")}${teamColumn(sides[1], "Equipo visitante")}</div>`;
+  applyTeamPerformanceVisibility(teamPerformanceVisible());
+}
+
+async function loadTeamPerformance(fixture) {
+  if (!fixture || state.teamPerformanceLoadingFixtures.has(fixture.id)) return;
+  const saved = state.teamPerformanceByFixture.get(fixture.id);
+  if (saved) return renderTeamPerformance(saved, fixture);
+  state.teamPerformanceLoadingFixtures.add(fixture.id);
+  elements.teamPerformanceTitle.textContent = "Rendimiento promedio por equipo";
+  elements.teamPerformanceStatus.className = "status-badge status-badge--processing";
+  elements.teamPerformanceStatus.textContent = "Calculando";
+  elements.teamPerformanceContent.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Comparando la misma ventana histórica para ambos equipos…</p></div>';
+  applyTeamPerformanceVisibility(teamPerformanceVisible());
+  try {
+    const result = await footballDataService.getTeamPerformance(fixture);
+    state.teamPerformanceByFixture.set(fixture.id, result);
+    if (String(state.selectedFixtureId) === String(fixture.id)) renderTeamPerformance(result, fixture);
+  } catch (error) {
+    if (String(state.selectedFixtureId) === String(fixture.id)) renderTeamPerformance({ status: "not_available", k: 0, message: error.message }, fixture);
+  } finally {
+    state.teamPerformanceLoadingFixtures.delete(fixture.id);
+  }
+}
+
 async function selectFixture(fixtureId, analysisMode = null) {
   if (state.isAnalyzing) return;
   if (state.selectedFixtureId !== fixtureId) resetAnalysisGuide();
@@ -1950,6 +2017,7 @@ async function selectFixture(fixtureId, analysisMode = null) {
     if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
     renderMatches();
     renderFixtureData();
+    void loadTeamPerformance(detailedFixture);
   } catch (error) {
     elements.filterError.hidden = false;
     elements.filterError.textContent = error.message;
@@ -2379,6 +2447,7 @@ elements.matchesList.addEventListener("keydown", async (event) => {
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
+elements.toggleTeamPerformance.addEventListener("click", () => applyTeamPerformanceVisibility(elements.teamPerformanceContent.hidden));
 elements.savePreMatchEvidence.addEventListener("click", capturePreMatchEvidence);
 elements.auditFixture.addEventListener("change", () => { elements.runAudit.disabled = !elements.auditFixture.value; });
 elements.runAudit.addEventListener("click", runSelectedAudit);
@@ -2440,6 +2509,7 @@ async function initializeApp() {
   renderParlayDraft();
   renderSavedPicks();
   renderSavedParlays();
+  applyTeamPerformanceVisibility(teamPerformanceVisible());
   const runtime = await footballDataService.getRuntime();
   const releaseElement = document.querySelector("#site-last-update");
   const releaseDate = runtime.release?.deployedAt || document.lastModified;

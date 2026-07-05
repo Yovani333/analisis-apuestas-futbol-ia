@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260704-futuristic-dashboard-v2" />
+    <link rel="stylesheet" href="styles.css?v=20260704-team-performance-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -226,6 +226,22 @@
           <div id="corners-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar corners oficiales históricos.</div></div>
         </section>
 
+        <section id="team-performance-panel" class="panel team-performance-panel" aria-labelledby="team-performance-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Forma individual agregada</p>
+              <h2 id="team-performance-title">Rendimiento promedio por equipo</h2>
+            </div>
+            <div class="panel-actions">
+              <button id="toggle-team-performance" class="button button--secondary button--compact" type="button" aria-expanded="true">Ocultar</button>
+              <span id="team-performance-status" class="status-badge status-badge--unavailable">No disponible</span>
+            </div>
+          </div>
+          <div id="team-performance-content" aria-live="polite">
+            <div class="research-empty">Selecciona un partido para comparar el rendimiento previo de ambos equipos.</div>
+          </div>
+        </section>
+
         <section id="analysis-panel" class="panel analysis-panel" aria-labelledby="analysis-title">
           <div class="panel-heading">
             <div>
@@ -370,6 +386,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260704-futuristic-dashboard-v1"></script>
+    <script type="module" src="app.js?v=20260704-team-performance-v1"></script>
   </body>
 </html>

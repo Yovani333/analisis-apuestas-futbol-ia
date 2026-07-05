@@ -164,6 +164,19 @@ export const footballDataService = {
     return payload.researchData || null;
   },
 
+  async getTeamPerformance(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") {
+      return {
+        status: "not_available", k: 0,
+        equipo_local: { nombre: fixture.home, metricas: null },
+        equipo_visitante: { nombre: fixture.away, metricas: null },
+        message: "El rendimiento promedio requiere estadisticas reales de API-Football."
+      };
+    }
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/team-performance`);
+  },
+
   async getFixtureResult(fixtureId) {
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`);
     return payload.result;

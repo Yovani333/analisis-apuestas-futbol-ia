@@ -180,6 +180,7 @@ export function buildCompactAiMatchData(dataset = {}) {
       sampleSize: research.xgXga.sampleSize,
       warning: research.xgXga.warning
     } : null,
+    teamPerformance: dataset.teamPerformance || null,
     analysisStatus: signals.missingCriticalData.length ? "needs_review" : research.analysisStatus || "needs_review",
     dataCompleteness: signals.dataCompleteness,
     risks: [
