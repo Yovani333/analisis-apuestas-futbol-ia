@@ -1759,6 +1759,10 @@ body {
 .team-performance-pick__meta { display: flex; flex-wrap: wrap; gap: 5px 9px; color: var(--muted); font-size: .57rem; }
 .team-performance-pick__meta b { color: var(--text); }
 .team-performance-pick > p { margin: 0; color: var(--muted); font-size: .62rem; line-height: 1.45; }
+.performance-diagnostics { padding: 7px; color: var(--muted); font-size: .56rem; background: var(--surface-subtle); border: 1px dashed var(--border); border-radius: 5px; }
+.performance-diagnostics summary { color: var(--text); font-weight: 800; cursor: pointer; }
+.performance-diagnostics[open] { display: grid; gap: 3px; }
+.performance-diagnostics strong { color: var(--warning); }
 .team-performance-pick__odds-note { color: var(--warning); font-size: .56rem; }
 .team-performance-picks__empty { padding: 9px; color: var(--muted); font-size: .63rem; line-height: 1.45; text-align: center; background: var(--surface); border: 1px dashed var(--border); border-radius: 6px; }
 :root[data-theme="dark"] .team-performance-picks,

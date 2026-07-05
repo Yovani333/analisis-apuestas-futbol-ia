@@ -91,3 +91,26 @@ test("el riesgo disciplinario degrada la recomendacion y bloquea rojo", () => {
   assert.equal(result.home.length > 0, true);
   assert.equal(result.home.every((pick) => pick.color === "red" && pick.canAdd === false), true);
 });
+
+test("Argentina vs Egypt genera dos picks naranjas por ventaja compuesta moderada", () => {
+  const argentinaMatch = { id: "901", home: "Argentina", away: "Egypt" };
+  const argentina = { nombre: "Argentina", jugadores: 30, metricas: { entradas: 0.64, tarjetas: 0.05, tiros: 0.40, pases_acertados: 21.73, faltas: 0.41 } };
+  const egypt = { nombre: "Egypt", jugadores: 22, metricas: { entradas: 0.82, tarjetas: 0.08, tiros: 0.35, pases_acertados: 20.55, faltas: 0.52 } };
+  const result = buildTeamPerformancePicks(argentinaMatch, argentina, egypt);
+  assert.deepEqual(result.home.map((pick) => pick.selectionKey), ["1X", "home_over_0_5"]);
+  assert.deepEqual(result.home.map((pick) => pick.confidence), ["Media-alta", "Media"]);
+  assert.equal(result.home.every((pick) => pick.color === "orange" && pick.canAdd), true);
+  assert.equal(result.home[0].diagnostics.mode, "moderate_composite_advantage");
+  assert.equal(result.home[0].diagnostics.shotsDiff, 0.05);
+  assert.equal(result.home[0].diagnostics.passesDiff, 1.18);
+  assert.match(result.home[0].diagnostics.result, /ventaja compuesta moderada/);
+  assert.equal(result.away.length, 0);
+});
+
+test("tres señales moderadas no bastan para recomendar", () => {
+  const result = buildTeamPerformancePicks(match,
+    team("Brazil", { tiros: 0.34, pases_acertados: 15.95, faltas: 0.50, tarjetas: 0.02 }),
+    team("Norway", { tiros: 0.30, pases_acertados: 15.15, faltas: 0.43, tarjetas: 0.02 })
+  );
+  assert.equal(result.home.length, 0);
+});
