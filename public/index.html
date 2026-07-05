@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260704-team-performance-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260704-intelligence-center-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -193,7 +193,7 @@
 
         <section id="data-picks-panel" class="panel data-picks-panel" aria-labelledby="data-picks-title">
           <div class="panel-heading">
-            <div><p class="eyebrow">Motor estadístico</p><h2 id="data-picks-title">Picks basados en datos <button class="info-tooltip" type="button" data-tooltip-key="picks" aria-label="Información sobre Picks" aria-expanded="false">?</button></h2></div>
+            <div><p class="eyebrow">Filtro estadístico final</p><h2 id="data-picks-title">Motor de Decisión <button class="info-tooltip" type="button" data-tooltip-key="picks" aria-label="Información sobre Picks" aria-expanded="false">?</button></h2></div>
             <div class="panel-actions">
               <button id="show-data-picks" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button>
               <span id="data-picks-status" class="status-badge status-badge--unavailable">No disponible</span>
@@ -204,7 +204,7 @@
 
         <section id="poisson-panel" class="panel poisson-panel advanced-module-panel" aria-labelledby="poisson-title">
           <div class="panel-heading">
-            <div><p class="eyebrow">Estadísticas avanzadas</p><h2 id="poisson-title">Modelo Poisson <button class="info-tooltip" type="button" data-tooltip-key="poisson" aria-label="Información sobre Modelo Poisson" aria-expanded="false">?</button></h2></div>
+            <div><p class="eyebrow">Estadísticas avanzadas</p><h2 id="poisson-title">Motor Poisson <button class="info-tooltip" type="button" data-tooltip-key="poisson" aria-label="Información sobre Modelo Poisson" aria-expanded="false">?</button></h2></div>
             <div class="panel-actions">
               <button id="show-poisson" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button>
               <span id="poisson-status" class="status-badge status-badge--unavailable">No disponible</span>
@@ -215,7 +215,7 @@
 
         <section id="team-goals-panel" class="panel team-goals-panel advanced-module-panel" aria-labelledby="team-goals-title">
           <div class="panel-heading">
-            <div><p class="eyebrow">Ataque vs defensa</p><h2 id="team-goals-title">Probabilidad de Gol por Equipo <button class="info-tooltip" type="button" data-tooltip-key="model_probability" aria-label="Información sobre Probabilidad del modelo" aria-expanded="false">?</button></h2></div>
+            <div><p class="eyebrow">Probabilidad de gol por equipo</p><h2 id="team-goals-title">Ataque vs Defensa <button class="info-tooltip" type="button" data-tooltip-key="model_probability" aria-label="Información sobre Probabilidad del modelo" aria-expanded="false">?</button></h2></div>
             <div class="panel-actions"><button id="show-team-goals" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="team-goals-status" class="status-badge status-badge--unavailable">No disponible</span></div>
           </div>
           <div id="team-goals-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para evaluar la posibilidad de gol de cada equipo.</div></div>
@@ -268,32 +268,57 @@
     </main>
 
     <main id="analysis-guide-content" class="utility-view guide-view" data-view-panel="guide" hidden>
-      <section class="utility-heading">
-        <div><p class="eyebrow">Apoyo para decidir</p><h2>Guía de análisis</h2><p>Consulta qué aporta cada módulo y cómo interpretar sus señales.</p></div>
+      <section class="utility-heading intelligence-center__heading">
+        <div><p class="eyebrow">Decision intelligence</p><h2>Centro de Inteligencia del Análisis</h2><p>Consulta cómo se interpretan los datos, qué módulos respaldan cada mercado y cuándo un pick debe usarse, revisarse o evitarse.</p></div>
         <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
       </section>
+      <section class="decision-flow" aria-labelledby="decision-flow-title">
+        <header><p class="eyebrow">Ruta de validación</p><h3 id="decision-flow-title">Flujo de decisión</h3><span>De la evidencia al parlay</span></header>
+        <ol>
+          <li><b>01</b><div><strong>Cobertura</strong><small>Valida calidad y faltantes.</small></div></li>
+          <li><b>02</b><div><strong>Ataque / Defensa</strong><small>Contrasta capacidad de gol.</small></div></li>
+          <li><b>03</b><div><strong>Poisson</strong><small>Modela goles y escenarios.</small></div></li>
+          <li><b>04</b><div><strong>Cuotas / EV</strong><small>Compara precio y probabilidad.</small></div></li>
+          <li><b>05</b><div><strong>Picks</strong><small>Filtra coherencia y riesgo.</small></div></li>
+          <li><b>06</b><div><strong>Parlay</strong><small>Decisión final responsable.</small></div></li>
+        </ol>
+      </section>
+      <section class="guide-onboarding" aria-labelledby="guide-onboarding-title">
+        <div class="guide-onboarding__intro"><p class="eyebrow">Lectura recomendada</p><h3 id="guide-onboarding-title">Cómo interpretar esta guía</h3><p>Ningún módulo debe decidir una apuesta de forma aislada. Avanza por estas seis comprobaciones antes de guardar un pick.</p></div>
+        <ol>
+          <li><b>1</b><span><strong>Revisa cobertura</strong><small>Confirma que la muestra y las fuentes sean suficientes.</small></span></li>
+          <li><b>2</b><span><strong>Valida ataque y defensa</strong><small>Compara producción ofensiva y resistencia rival.</small></span></li>
+          <li><b>3</b><span><strong>Consulta Poisson</strong><small>Úsalo como apoyo matemático, no como veredicto.</small></span></li>
+          <li><b>4</b><span><strong>Compara cuotas</strong><small>Contrasta probabilidad implícita, modelo y EV.</small></span></li>
+          <li><b>5</b><span><strong>Detecta contradicciones</strong><small>Jerarquía, forma y faltantes pueden bloquear valor aparente.</small></span></li>
+          <li><b>6</b><span><strong>Aplica el filtro final</strong><small>El Motor de Decisión integra señales y riesgo.</small></span></li>
+        </ol>
+      </section>
+      <aside class="intelligence-color-legend" aria-label="Leyenda global de estados">
+        <strong>Leyenda de decisión</strong><span><i class="legend-signal legend-signal--strong"></i>Verde · Fuerte / disponible</span><span><i class="legend-signal legend-signal--validate"></i>Naranja · Revisar / parcial</span><span><i class="legend-signal legend-signal--avoid"></i>Rojo · Evitar / alto riesgo</span><span><i class="legend-signal legend-signal--info"></i>Azul · Informativo</span><span><i class="legend-signal legend-signal--ai"></i>Morado · Modelo avanzado</span><span><i class="legend-signal legend-signal--off"></i>Gris · No disponible</span>
+      </aside>
       <section class="guide-modules" aria-label="Módulos de análisis">
-        <details id="guide-coverage-module" class="guide-module guide-module--market">
-          <summary><span>Información base</span><strong>Cobertura y fuentes</strong><small>Datos del partido, disponibilidad, calidad y procedencia.</small><em>Mostrar</em></summary>
-          <div class="guide-module__body"><div id="guide-coverage-slot"></div><div id="guide-research-slot"></div></div>
+        <details id="guide-coverage-module" class="guide-module guide-module--coverage">
+          <summary><b class="guide-module__index">01</b><span>Información base</span><strong>Mapa de Cobertura</strong><small>Calidad, procedencia, disponibilidad e impacto de los datos faltantes.</small><em>Mostrar</em></summary>
+          <div class="guide-module__body"><div id="guide-coverage-summary" class="coverage-executive"><div class="research-empty">Selecciona un partido para construir el mapa de cobertura.</div></div><div id="guide-coverage-slot"></div><div id="guide-research-slot"></div></div>
         </details>
-        <details id="guide-team-goals-module" class="guide-module guide-module--support"><summary><span>Apoyo ofensivo</span><strong>Probabilidad de Gol por Equipo</strong><small>Cruza ataque, defensa, forma y calidad de muestra.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-team-goals-slot"></div></div></details>
+        <details id="guide-team-goals-module" class="guide-module guide-module--attack"><summary><b class="guide-module__index">02</b><span>Apoyo ofensivo</span><strong>Ataque vs Defensa</strong><small>Compara capacidad de marcar, resistencia y confianza de ambos equipos.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-team-goals-slot"></div></div></details>
         <details id="guide-specific-markets-module" class="guide-module guide-module--specific">
-          <summary><span>Selecciones concretas</span><strong>Mercados específicos</strong><small>Corners, BTTS, hándicap, goles de equipo y mercados combinados, solo con datos suficientes.</small><em>Mostrar</em></summary>
+          <summary><b class="guide-module__index">03</b><span>Selecciones concretas</span><strong>Catálogo de Mercados</strong><small>Mercados ofensivos, defensivos, de resultado, volumen y riesgo.</small><em>Mostrar</em></summary>
           <div class="guide-module__body">
             <section id="specific-markets-panel" class="panel advanced-module-panel" aria-labelledby="specific-markets-title">
-              <div class="panel-heading"><div><p class="eyebrow">Picks por mercado</p><h2 id="specific-markets-title">Apuestas específicas</h2></div><div class="panel-actions"><button id="show-specific-markets" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="specific-markets-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+              <div class="panel-heading"><div><p class="eyebrow">Picks por intención</p><h2 id="specific-markets-title">Catálogo de Mercados</h2></div><div class="panel-actions"><button id="show-specific-markets" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="specific-markets-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
               <div id="specific-markets-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar mercados específicos.</div></div>
             </section>
             <div id="guide-corners-slot"></div>
           </div>
         </details>
-        <details id="guide-poisson-module" class="guide-module guide-module--support">
-          <summary><span>Apoyo medio</span><strong>Modelo Poisson</strong><small>Apoyo para goles y marcadores; depende de buenos datos de entrada.</small><em>Mostrar</em></summary>
+        <details id="guide-poisson-module" class="guide-module guide-module--poisson">
+          <summary><b class="guide-module__index">04</b><span>Modelo avanzado</span><strong>Motor Poisson</strong><small>Escenarios de goles y marcadores condicionados por la calidad de entrada.</small><em>Mostrar</em></summary>
           <div class="guide-module__body"><div id="guide-poisson-slot"></div></div>
         </details>
-        <details id="guide-odds-module" class="guide-module guide-module--market"><summary><span>Dato de mercado</span><strong>Ver cuotas</strong><small>Compara cuota e implícita contra el modelo; no crea la predicción.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div></details>
-        <details id="guide-data-picks-module" class="guide-module guide-module--primary"><summary><span>Decisión final</span><strong>Picks basados en datos</strong><small>Integra cobertura, goles, Poisson, cuotas, EV y contradicciones.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-data-picks-slot"></div></div></details>
+        <details id="guide-odds-module" class="guide-module guide-module--market"><summary><b class="guide-module__index">05</b><span>Dato de mercado</span><strong>Panel de Mercado</strong><small>Precio, probabilidad implícita, alertas y valor; una cuota baja no es seguridad.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-odds-content" class="guide-inline-data"><div class="research-empty">Selecciona un partido en Dashboard para consultar sus cuotas aquí.</div></div></div></details>
+        <details id="guide-data-picks-module" class="guide-module guide-module--primary"><summary><b class="guide-module__index">06</b><span>Filtro final</span><strong>Motor de Decisión</strong><small>Integra cobertura, goles, Poisson, cuotas, EV, contradicciones y riesgo.</small><em>Mostrar</em></summary><div class="guide-module__body"><div id="guide-data-picks-slot"></div></div></details>
       </section>
     </main>
 
@@ -386,6 +411,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260704-team-performance-v1"></script>
+    <script type="module" src="app.js?v=20260704-intelligence-center-v1"></script>
   </body>
 </html>

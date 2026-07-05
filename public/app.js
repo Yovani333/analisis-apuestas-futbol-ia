@@ -138,7 +138,8 @@ Object.assign(elements, {
   auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results")
 });
 Object.assign(elements, {
-  analysisGuideContent: document.querySelector("#analysis-guide-content"), guideOddsContent: document.querySelector("#guide-odds-content")
+  analysisGuideContent: document.querySelector("#analysis-guide-content"), guideOddsContent: document.querySelector("#guide-odds-content"),
+  guideCoverageSummary: document.querySelector("#guide-coverage-summary")
 });
 
 document.querySelector("#guide-data-picks-slot")?.append(document.querySelector("#data-picks-panel"));
@@ -612,8 +613,32 @@ function renderFixtureData() {
     ? `Evidencia guardada: ${formatUpdatedAt(evidence.capturedAt)} · Lista para auditoría después del resultado final.`
     : fixture.status === "scheduled" ? "Sin evidencia prepartido guardada." : "La evidencia solo puede guardarse antes del inicio.";
   elements.guideOddsContent.innerHTML = renderOddsDetail(fixture.confirmedData?.odds || []);
+  renderGuideCoverageSummary(fixture);
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
+}
+
+function renderGuideCoverageSummary(fixture) {
+  const research = fixture?.researchData;
+  if (!research) {
+    elements.guideCoverageSummary.innerHTML = '<div class="research-empty">No hay investigación normalizada para construir el resumen de cobertura.</div>';
+    return;
+  }
+  const score = Number(research.totalConfidenceScore ?? fixture.dataQuality?.score ?? 0);
+  const status = research.analysisStatus === "complete" ? "Completo" : research.analysisStatus === "partial" ? "Parcial" : score > 0 ? "Parcial" : "No disponible";
+  const activeSources = [...new Set((research.sourceCoverage || []).flatMap((item) => item.activeSources || []))];
+  const criticalKeys = ["statsForm", "odds", "injuriesSuspensions", "lineups", "xgXga"];
+  const criticalLabels = { statsForm: "Forma", odds: "Cuotas", injuriesSuspensions: "Bajas", lineups: "Alineaciones", xgXga: "xG / xGA" };
+  const availableCritical = criticalKeys.filter((key) => ["available", "partial"].includes(research[key]?.status));
+  const missing = research.missingData || [];
+  const highImpact = new Set((research.criticalMissingData || []).map((item) => item.module || item.key || item));
+  const impact = (item) => highImpact.has(item.module) || criticalKeys.includes(item.module)
+    ? "high" : ["standings", "contextCalendar"].includes(item.module) ? "medium" : "low";
+  const impactLabel = { high: "Alto impacto", medium: "Impacto medio", low: "Bajo impacto" };
+  elements.guideCoverageSummary.innerHTML = `
+    <div class="coverage-executive__score" style="--coverage-score:${Math.max(0, Math.min(100, score))}"><strong>${escapeHtml(score)}</strong><span>Confianza / 100</span></div>
+    <div class="coverage-executive__kpis"><article><span>Estado</span>${statusBadge(status)}</article><article><span>Fuentes activas</span><strong>${activeSources.length}</strong><small>${escapeHtml(activeSources.slice(0, 3).join(" · ") || "Sin fuente activa")}</small></article><article><span>Críticos disponibles</span><strong>${availableCritical.length}/${criticalKeys.length}</strong><small>${escapeHtml(availableCritical.map((key) => criticalLabels[key]).join(" · ") || "Ninguno")}</small></article><article><span>Críticos faltantes</span><strong>${criticalKeys.length - availableCritical.length}</strong><small>Revisar antes de decidir</small></article></div>
+    <div class="coverage-impact"><strong>Impacto de datos faltantes</strong>${missing.length ? missing.map((item) => { const level = impact(item); return `<span class="impact-chip impact-chip--${level}"><b>${impactLabel[level]}</b>${escapeHtml(item.label || item.module || "Dato")}</span>`; }).join("") : '<span class="impact-chip impact-chip--ok"><b>Sin bloqueo</b>No se reportan faltantes en la matriz.</span>'}</div>`;
 }
 
 function renderCoverageTable(fixture) {
@@ -1015,7 +1040,10 @@ function renderOddsDetail(data) {
   const bets = bookmaker.bets || [];
   const markets = bets.filter((bet) => preferred.test(bet.name)).slice(0, 6);
   const visibleMarkets = markets.length ? markets : bets.slice(0, 4);
-  return `${renderOddsMonitor(data)}<div class="detail-note"><strong>Casa mostrada: ${displayValue(bookmaker.name)}</strong><span>Cuotas informativas; pueden cambiar y no garantizan resultados.</span></div><div class="odds-grid">${visibleMarkets.map((bet) => `<section class="odds-market"><h3>${displayValue(bet.name)}</h3>${(bet.values || []).slice(0, 12).map((value) => `<div class="odd-row"><span>${displayValue(value.value)}</span><strong>${displayValue(value.odd)}</strong></div>`).join("")}</section>`).join("")}</div>`;
+  const lowest = findLowestOdds(data, 2);
+  const relevant = lowest[0];
+  const marketOverview = `<div class="market-panel-summary"><article><span>Casa mostrada</span><strong>${displayValue(bookmaker.name)}</strong><small>Fuente disponible</small></article><article><span>Alertas detectadas</span><strong>${lowest.length}</strong><small>Cuotas bajas observadas</small></article><article><span>Cuota más baja</span><strong>${displayValue(relevant?.odd)}</strong><small>${displayValue(relevant?.selection)}</small></article><article><span>Señal relevante</span><strong>${displayValue(relevant?.market)}</strong><small>Dato de mercado, no recomendación</small></article></div>`;
+  return `${marketOverview}${renderOddsMonitor(data)}<div class="detail-note detail-note--warning"><strong>Precio no equivale a seguridad</strong><span>Una cuota baja paga menos y refleja mayor probabilidad implícita de la casa; no convierte la selección en un pick seguro.</span></div><div class="odds-grid">${visibleMarkets.map((bet) => `<section class="odds-market"><h3>${displayValue(bet.name)}</h3>${(bet.values || []).slice(0, 12).map((value) => `<div class="odd-row"><span>${displayValue(value.value)}</span><strong>${displayValue(value.odd)}</strong></div>`).join("")}</section>`).join("")}</div>`;
 }
 
 function renderPreMatchDetail(fixture) {
@@ -1650,21 +1678,24 @@ function renderDataPicks(result) {
   }
   const fixture = selectedFixture();
   const timing = resolveAnalysisTiming({ kickoffAt: fixture?.utcDateTime, lastUpdatedAt: result.generatedAt });
+  const picks = result.picks || [];
+  const strongPicks = picks.filter((pick) => pick.highlightColor === "green" && pick.canAdd);
+  const avoidedPicks = picks.filter((pick) => pick.highlightColor === "red" || /evitar/i.test(pick.decision || pick.level || ""));
+  const reviewPicks = picks.filter((pick) => !strongPicks.includes(pick) && !avoidedPicks.includes(pick));
+  const pickCard = (pick, compact = false) => `
+    <article class="data-pick data-pick--${escapeHtml(pick.highlightColor)} ${pickSignalClass(pick)}${compact ? " data-pick--compact" : ""}">
+      <div class="data-pick__heading"><div><small>${labelWithTooltip(pick.market)}</small><strong>${escapeHtml(pick.selection)}</strong></div><span>${escapeHtml(pick.decision || pick.level)}</span></div>
+      <div class="data-pick__metrics"><span>${labelWithTooltip("Modelo")} <b>${displayValue(pick.modelProbabilityPct)}%</b></span><span>${labelWithTooltip("Cuota")} <b>${displayValue(pick.decimalOdds)}</b></span><span>${labelWithTooltip("EV")} <b>${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</b></span><span>EV conservador <b>${pick.conservativeExpectedValuePct === null ? "Sin muestra" : `${escapeHtml(pick.conservativeExpectedValuePct)}%`}</b></span><span>Conf. estadística <b>${displayValue(pick.statisticalConfidenceScore)}/100</b></span><span>Conf. futbolística <b>${displayValue(pick.footballConfidenceScore)}/100</b></span><span>Riesgo <b>${displayValue(pick.riskScore)}/100</b></span><span>${labelWithTooltip("Poisson")} <b>${displayValue(pick.poissonSupportScore)}/100</b></span></div>
+      <p>${escapeHtml(pick.explanation)}</p>
+      <small>Bookmaker: ${escapeHtml(pick.bookmaker || "No disponible")} · Contradicción: ${escapeHtml(pick.contradictionLevel || "No disponible")} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule || "data_picks"))} ${infoTooltip("pick_origin")}</small>
+      <div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.canAdd ? "" : "disabled"}>Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.canAdd ? "" : "disabled"}>Agregar pick</button></div>
+    </article>`;
+  const pickSection = (title, type, group, compact = false) => `<section class="decision-pick-group decision-pick-group--${type}"><header><h3>${escapeHtml(title)}</h3><span>${group.length}</span></header>${group.length ? `<div class="data-picks-grid">${group.map((pick) => pickCard(pick, compact)).join("")}</div>` : '<p class="muted-text">No hay selecciones en esta categoría.</p>'}</section>`;
   elements.dataPicksContent.innerHTML = `
-    <div class="data-picks-summary"><strong>${escapeHtml(result.finalDecision || "NO BET")} · ${result.picks.length} selecciones evaluadas</strong><span>Motor ${escapeHtml(result.modelVersion || "v1")} · Calidad ${escapeHtml(result.quality?.label || "No disponible")} · ${displayValue(result.dataQualityScore)}/100</span></div>
+    <div class="decision-engine-summary"><article><span>Decisión final</span><strong>${escapeHtml(result.finalDecision || "NO BET")}</strong><small>Motor ${escapeHtml(result.modelVersion || "v1")}</small></article><article><span>Evaluadas</span><strong>${picks.length}</strong><small>Calidad ${escapeHtml(result.quality?.label || "No disponible")} · ${displayValue(result.dataQualityScore)}/100</small></article><article class="decision-engine-summary__strong"><span>Picks fuertes</span><strong>${strongPicks.length}</strong><small>Con acción disponible</small></article><article class="decision-engine-summary__review"><span>En revisión</span><strong>${reviewPicks.length}</strong><small>Requieren contraste</small></article><article class="decision-engine-summary__avoid"><span>Evitados</span><strong>${avoidedPicks.length}</strong><small>Bloqueados por riesgo</small></article></div>
     <div class="analysis-timing analysis-timing--${escapeHtml(timing.window)}"><strong>${escapeHtml(timing.label)}</strong><span>${timing.minutesToKickoff === null ? "Hora del partido no disponible" : `${escapeHtml(timing.minutesToKickoff)} minutos para el inicio`}${timing.isConfirmed ? " · Confirmado por frescura" : ""}</span>${timing.warning ? `<small>${escapeHtml(timing.warning)}</small>` : ""}</div>
     ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
-    <div class="data-picks-grid">${result.picks.map((pick) => `
-      <article class="data-pick data-pick--${escapeHtml(pick.highlightColor)} ${pickSignalClass(pick)}">
-        <div class="data-pick__heading"><div><small>${labelWithTooltip(pick.market)}</small><strong>${escapeHtml(pick.selection)}</strong></div><span>${escapeHtml(pick.decision || pick.level)}</span></div>
-        <div class="data-pick__metrics"><span>${labelWithTooltip("Modelo")} <b>${displayValue(pick.modelProbabilityPct)}%</b></span><span>${labelWithTooltip("Cuota")} <b>${displayValue(pick.decimalOdds)}</b></span><span>${labelWithTooltip("EV")} <b>${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</b></span><span>EV conservador <b>${pick.conservativeExpectedValuePct === null ? "Sin muestra" : `${escapeHtml(pick.conservativeExpectedValuePct)}%`}</b></span><span>Conf. estadística <b>${displayValue(pick.statisticalConfidenceScore)}/100</b></span><span>Conf. futbolística <b>${displayValue(pick.footballConfidenceScore)}/100</b></span><span>Riesgo <b>${displayValue(pick.riskScore)}/100</b></span><span>${labelWithTooltip("Poisson")} <b>${displayValue(pick.poissonSupportScore)}/100</b></span></div>
-        <p>${escapeHtml(pick.explanation)}</p>
-        <small>Bookmaker: ${escapeHtml(pick.bookmaker || "No disponible")} · Contradicción: ${escapeHtml(pick.contradictionLevel || "No disponible")} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule || "data_picks"))} ${infoTooltip("pick_origin")}</small>
-        <div class="pick-actions">
-          <button class="button button--secondary button--compact" type="button" data-save-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.canAdd ? "" : "disabled"}>Guardar individual</button>
-          <button class="button button--primary button--compact" type="button" data-add-data-pick="${escapeHtml(pick.selectionKey)}" ${pick.canAdd ? "" : "disabled"}>Agregar pick</button>
-        </div>
-      </article>`).join("")}</div>`;
+    ${pickSection("Recomendables", "strong", strongPicks)}${pickSection("En revisión", "review", reviewPicks)}${pickSection("Evitados", "avoid", avoidedPicks, true)}`;
 }
 
 async function loadDataPicks() {
@@ -1737,6 +1768,8 @@ function renderPoisson(result) {
     return;
   }
   const fixture = selectedFixture();
+  const expectedTotal = Number.isFinite(Number(result.lambdaHome)) && Number.isFinite(Number(result.lambdaAway))
+    ? Number((Number(result.lambdaHome) + Number(result.lambdaAway)).toFixed(2)) : null;
   const probabilityRows = [
     ["Local gana", result.probabilities.homeWin], ["Empate", result.probabilities.draw], ["Visitante gana", result.probabilities.awayWin],
     ["Doble oportunidad 1X", result.probabilities.doubleChance1X], ["Doble oportunidad X2", result.probabilities.doubleChanceX2],
@@ -1745,7 +1778,7 @@ function renderPoisson(result) {
     ["BTTS Sí", result.probabilities.bttsYes], ["BTTS No", result.probabilities.bttsNo]
   ];
   elements.poissonContent.innerHTML = `
-    <div class="poisson-summary"><article><span>λ ${escapeHtml(fixture?.home || "Local")}</span><strong>${displayValue(result.lambdaHome)}</strong></article><article><span>λ ${escapeHtml(fixture?.away || "Visitante")}</span><strong>${displayValue(result.lambdaAway)}</strong></article><article><span>Calidad</span><strong>${escapeHtml(result.quality?.label || "No disponible")} · ${displayValue(result.dataQualityScore)}/100</strong></article><article><span>Modelo</span><strong>${escapeHtml(result.modelVersion)}</strong></article></div>
+    <div class="poisson-summary poisson-summary--intelligence"><article><span>λ ${escapeHtml(fixture?.home || "Local")}</span><strong>${displayValue(result.lambdaHome)}</strong><small>Intensidad esperada</small></article><article><span>λ ${escapeHtml(fixture?.away || "Visitante")}</span><strong>${displayValue(result.lambdaAway)}</strong><small>Intensidad esperada</small></article><article><span>Total esperado</span><strong>${displayValue(expectedTotal)}</strong><small>λ local + λ visitante</small></article><article><span>Calidad</span><strong>${escapeHtml(result.quality?.label || "No disponible")} · ${displayValue(result.dataQualityScore)}/100</strong><small>Calidad de entrada</small></article><article><span>Versión</span><strong>${escapeHtml(result.modelVersion)}</strong><small>Motor estadístico</small></article></div>
     ${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
     <div class="poisson-layout">
       <section><h3>Probabilidades</h3><div class="poisson-probabilities">${probabilityRows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${displayValue(value)}%</strong></div>`).join("")}</div></section>
@@ -1819,8 +1852,12 @@ function renderTeamGoals(result) {
     elements.teamGoalsContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warning || "Datos ofensivos insuficientes.")}</div>`;
     return;
   }
-  const teamCard = (team) => `<article class="team-goal-card"><div class="team-goal-card__heading"><div><small>${escapeHtml(team.side === "home" ? "Equipo 1 / local" : "Equipo 2 / visitante")}</small><h3>${escapeHtml(team.team)}</h3></div>${statusBadge(team.status === "available" ? "Disponible" : "Parcial")}</div><div class="team-goal-kpis"><span>Marca 0.5+<strong>${escapeHtml(team.over05Pct)}%</strong></span><span>No marca<strong>${escapeHtml(team.noGoalPct)}%</strong></span><span>Marca 1.5+<strong>${escapeHtml(team.over15Pct)}%</strong></span><span>Confianza<strong>${escapeHtml(team.confidenceScore)}/100</strong></span></div><div class="team-goal-evidence"><div><strong>Apoya</strong>${team.supportingData.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div><div><strong>Contradice</strong>${team.contradictingData.length ? team.contradictingData.map((item) => `<span>${escapeHtml(item)}</span>`).join("") : "<span>Sin contradicción fuerte detectada.</span>"}</div></div></article>`;
-  elements.teamGoalsContent.innerHTML = `<div class="team-goal-summary"><strong>BTTS: ${escapeHtml(result.btts.support)}</strong><span>Sí ${escapeHtml(result.btts.yesProbabilityPct)}% · No ${escapeHtml(result.btts.noProbabilityPct)}% · Confianza ${escapeHtml(result.confidenceScore)}/100</span></div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="team-goal-grid">${teamCard(result.teams.home)}${teamCard(result.teams.away)}</div><section class="poisson-markets"><h3>Mercados derivados</h3>${result.picks.length ? result.picks.map((pick) => `<article class="poisson-market poisson-market--${escapeHtml(pick.highlightColor)}"><div><strong>${escapeHtml(pick.selection)}</strong><small>Modelo ${escapeHtml(pick.modelProbabilityPct)}% · Cuota ${displayValue(pick.decimalOdds)} · EV ${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</small><small>Confianza ${escapeHtml(pick.confidenceScore)}/100 · ${escapeHtml(pick.level)}</small></div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-team-goal="${escapeHtml(pick.selectionKey)}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-team-goal="${escapeHtml(pick.selectionKey)}">Agregar al parlay</button></div></article>`).join("") : '<p class="muted-text">No hay mercado con respaldo mínimo.</p>'}</section><p class="market-disclaimer">La probabilidad combina varias señales. Posesión aislada no implica peligro real ni alta confianza.</p>`;
+  const progress = (label, value, suffix = "%") => { const numeric = Math.max(0, Math.min(100, Number(value) || 0)); return `<div class="goal-progress"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}${suffix}</strong></div><div><i style="width:${numeric}%"></i></div></div>`; };
+  const teamCard = (team) => `<article class="team-goal-card team-goal-card--intelligence"><div class="team-goal-card__heading"><div><small>${escapeHtml(team.side === "home" ? "Equipo 1 / local" : "Equipo 2 / visitante")}</small><h3>${escapeHtml(team.team)}</h3></div>${statusBadge(team.status === "available" ? "Disponible" : "Parcial")}</div><div class="goal-progress-list">${progress("Marca 0.5+", team.over05Pct)}${progress("No marca", team.noGoalPct)}${progress("Marca 1.5+", team.over15Pct)}${progress("Confianza", team.confidenceScore, "/100")}</div><div class="team-goal-evidence"><div><strong>Señales a favor</strong>${team.supportingData.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div><div><strong>Contradicciones</strong>${team.contradictingData.length ? team.contradictingData.map((item) => `<span>${escapeHtml(item)}</span>`).join("") : "<span>Sin contradicción fuerte detectada.</span>"}</div></div></article>`;
+  const picks = result.picks || [];
+  const renderMarket = (pick) => `<article class="poisson-market poisson-market--${escapeHtml(pick.highlightColor)}"><div><strong>${escapeHtml(pick.selection)}</strong><small>Modelo ${escapeHtml(pick.modelProbabilityPct)}% · Cuota ${displayValue(pick.decimalOdds)} · EV ${pick.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(pick.expectedValuePct)}%`}</small><small>Confianza ${escapeHtml(pick.confidenceScore)}/100 · ${escapeHtml(pick.level)}</small></div><div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-team-goal="${escapeHtml(pick.selectionKey)}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-team-goal="${escapeHtml(pick.selectionKey)}">Agregar al parlay</button></div></article>`;
+  const marketGroup = (title, className, filtered) => filtered.length ? `<section class="derived-market-group derived-market-group--${className}"><h4>${escapeHtml(title)} <span>${filtered.length}</span></h4>${filtered.map(renderMarket).join("")}</section>` : "";
+  elements.teamGoalsContent.innerHTML = `<div class="team-goal-summary"><strong>BTTS: ${escapeHtml(result.btts.support)}</strong><span>Sí ${escapeHtml(result.btts.yesProbabilityPct)}% · No ${escapeHtml(result.btts.noProbabilityPct)}% · Confianza ${escapeHtml(result.confidenceScore)}/100</span></div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="team-goal-grid">${teamCard(result.teams.home)}${teamCard(result.teams.away)}</div><div class="derived-markets">${marketGroup("Recomendables", "recommended", picks.filter((pick) => pick.highlightColor === "green"))}${marketGroup("Conservadores", "conservative", picks.filter((pick) => pick.highlightColor === "blue"))}${marketGroup("Revisar / Evitar", "review", picks.filter((pick) => !["green", "blue"].includes(pick.highlightColor)))}</div>${!picks.length ? '<p class="muted-text">No hay mercado con respaldo mínimo.</p>' : ""}<p class="market-disclaimer">La probabilidad combina varias señales. Posesión aislada no implica peligro real ni alta confianza.</p>`;
   decoratePickSignals(elements.teamGoalsContent, ".poisson-market", result.picks);
 }
 
@@ -1880,10 +1917,17 @@ function renderSpecificMarkets(result) {
     elements.specificMarketsContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warnings?.[0] || "Datos insuficientes para recomendar mercados específicos.")}</div>`;
     return;
   }
-  const groupHtml = result.groups.map((group) => {
+  const intentDefinitions = [
+    { key: "offensive", label: "Mercados ofensivos", groups: ["player_goal", "btts", "team_scores_over"] },
+    { key: "defensive", label: "Mercados defensivos", groups: ["team_concedes_under"] },
+    { key: "result", label: "Mercados de resultado", groups: ["asian_handicap", "result_goals", "double_chance_goals"] },
+    { key: "volume", label: "Mercados de volumen", groups: ["corners"] },
+    { key: "risk", label: "Mercados por nivel de riesgo", groups: ["conservative", "medium_risk", "high_value_risk"] }
+  ];
+  const renderGroup = (group) => {
     const groupStatus = group.status === "available" ? "Disponible" : group.status === "partial" ? "Parcial" : "No disponible";
     const picks = (group.picks || []).map((pick, index) => `<article class="specific-pick specific-pick--${escapeHtml(pick.highlightColor)}">
-      <div><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)} · Cuota ${displayValue(pick.decimalOdds)} · Modelo ${displayValue(pick.modelProbabilityPct)}% · EV ${displayValue(pick.expectedValuePct)}%</small><small>Confianza ${displayValue(pick.confidenceScore, 0)}/100 · ${escapeHtml(pick.explanation || pick.decision)}</small></div>
+      <div><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)} · Cuota ${displayValue(pick.decimalOdds)} · Modelo ${displayValue(pick.modelProbabilityPct)}% · EV ${displayValue(pick.expectedValuePct)}%</small><small>Confianza ${displayValue(pick.confidenceScore, 0)}/100 · Origen ${escapeHtml(pickOriginLabel(pick.sourceModule))}</small><small>${escapeHtml(pick.explanation || pick.decision)}</small></div>
       <div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-specific="${escapeHtml(group.key)}:${index}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-specific="${escapeHtml(group.key)}:${index}">Agregar al parlay</button></div>
     </article>`).join("");
     const missing = group.missingData?.length ? `<div class="specific-market__missing"><strong>Datos faltantes</strong><span>${group.missingData.map(escapeHtml).join(" · ")}</span></div>` : "";
@@ -1892,10 +1936,15 @@ function renderSpecificMarkets(result) {
       <header><h3>${labelWithTooltip(group.label, SPECIFIC_MARKET_TOOLTIPS[group.key])}</h3>${statusBadge(groupStatus)}</header>
       ${picks || `<p>${escapeHtml(group.warning || "Datos insuficientes para recomendar este mercado.")}</p>`}
       ${missing}${group.alternativeData ? `<div class="specific-market__alternative"><strong>Dato alternativo</strong><span>${escapeHtml(group.alternativeData)}</span></div>` : ""}${observed}
-      <footer>Confianza ${displayValue(group.confidenceScore, 0)}/100</footer>
+      <footer><span>Confianza ${displayValue(group.confidenceScore, 0)}/100</span><span>Fuente: ${escapeHtml(result.source || "Datos normalizados")}</span></footer>
     </article>`;
+  };
+  const groupedHtml = intentDefinitions.map((intent) => {
+    const groups = result.groups.filter((group) => intent.groups.includes(group.key));
+    if (!groups.length) return "";
+    return `<section class="market-intent market-intent--${intent.key}"><header><h3>${intent.label}</h3><span>${groups.length} categorías</span></header><div class="specific-markets-grid">${groups.map(renderGroup).join("")}</div></section>`;
   }).join("");
-  elements.specificMarketsContent.innerHTML = `${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}<div class="specific-markets-grid">${groupHtml}</div>`;
+  elements.specificMarketsContent.innerHTML = `${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}<div class="market-intents">${groupedHtml}</div>`;
 }
 
 async function loadSpecificMarkets() {
