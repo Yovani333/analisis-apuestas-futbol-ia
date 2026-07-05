@@ -73,7 +73,6 @@ const elements = {
   searchFeedback: document.querySelector("#search-feedback"),
   matchCount: document.querySelector("#match-count"),
   refreshFixtureStatuses: document.querySelector("#refresh-fixture-statuses"),
-  autoRefresh: document.querySelector("#auto-refresh"),
   matchesList: document.querySelector("#matches-list"),
   selectedSummary: document.querySelector("#selected-match-summary"),
   dataStatus: document.querySelector("#data-overall-status"),
@@ -82,7 +81,6 @@ const elements = {
   evidenceToolbar: document.querySelector("#evidence-toolbar"), savePreMatchEvidence: document.querySelector("#save-pre-match-evidence"), downloadEvidenceTxt: document.querySelector("#download-evidence-txt"), evidenceStatus: document.querySelector("#evidence-status"),
   refreshCoverage: document.querySelector("#refresh-coverage"),
   researchContent: document.querySelector("#research-content"),
-  toggleResearch: document.querySelector("#toggle-research"),
   researchSummary: document.querySelector("#research-summary"),
   sourceCoverage: document.querySelector("#source-coverage"),
   researchGrid: document.querySelector("#research-grid"),
@@ -134,7 +132,7 @@ Object.assign(elements, {
   markAllAlertsRead: document.querySelector("#mark-all-alerts-read"), clearAlerts: document.querySelector("#clear-alerts"),
   alertLive: document.querySelector("#alert-live"), alertScore: document.querySelector("#alert-score"), alertData: document.querySelector("#alert-data"),
   accountForm: document.querySelector("#account-form"), accountName: document.querySelector("#account-name"),
-  accountDarkMode: document.querySelector("#account-dark-mode"), accountAutoRefresh: document.querySelector("#account-auto-refresh"),
+  accountDarkMode: document.querySelector("#account-dark-mode"),
   accountDailyLimit: document.querySelector("#account-daily-limit")
 });
 Object.assign(elements, {
@@ -144,13 +142,16 @@ Object.assign(elements, {
   analysisGuideContent: document.querySelector("#analysis-guide-content"), guideOddsContent: document.querySelector("#guide-odds-content"),
   guideCoverageSummary: document.querySelector("#guide-coverage-summary")
 });
+Object.assign(elements, {
+  liveEventsStatus: document.querySelector("#live-events-status"), liveEventsContent: document.querySelector("#live-events-content"),
+  livePlayersStatus: document.querySelector("#live-players-status"), livePlayersContent: document.querySelector("#live-players-content")
+});
 
 document.querySelector("#guide-data-picks-slot")?.append(document.querySelector("#data-picks-panel"));
 document.querySelector("#guide-poisson-slot")?.append(document.querySelector("#poisson-panel"));
 document.querySelector("#guide-team-goals-slot")?.append(document.querySelector("#team-goals-panel"));
-document.querySelector("#market-corners-slot")?.append(document.querySelector("#corners-panel"));
-document.querySelector("#guide-coverage-slot")?.append(document.querySelector("#coverage-panel"));
-document.querySelector("#guide-research-slot")?.append(document.querySelector("#research-panel"));
+document.querySelector("#transparency-coverage-slot")?.append(document.querySelector("#coverage-panel"));
+document.querySelector("#transparency-research-slot")?.append(document.querySelector("#research-panel"));
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, (character) => ({
@@ -270,7 +271,7 @@ function toggleReadyModule(button, content) {
 }
 
 const guideModuleParts = {
-  "guide-coverage-module": { contents: () => [elements.researchContent], buttons: () => [elements.toggleResearch] },
+  "guide-coverage-module": { contents: () => [], buttons: () => [] },
   "guide-team-goals-module": { contents: () => [elements.teamGoalsContent], buttons: () => [elements.showTeamGoals], load: () => loadTeamGoals() },
   "guide-poisson-module": { contents: () => [elements.poissonContent], buttons: () => [elements.showPoisson], load: () => loadPoisson() },
   "guide-odds-module": { contents: () => [], buttons: () => [] },
@@ -295,12 +296,6 @@ function handleGuideModuleToggle(details) {
     return;
   }
   if (!selectedFixture()) return;
-  if (details.id === "guide-coverage-module") {
-    elements.researchContent.hidden = false;
-    elements.toggleResearch.setAttribute("aria-expanded", "true");
-    elements.toggleResearch.textContent = "Ocultar";
-    return;
-  }
   part.load?.();
 }
 
@@ -421,6 +416,7 @@ function clearSelectedFixtureData() {
   elements.dataStatus.className = "status-badge status-badge--unavailable";
   elements.dataStatus.textContent = "No disponible";
   renderResearchData(null);
+  renderLiveData(null, null);
   showAnalysisEmpty();
 }
 
@@ -514,7 +510,7 @@ function renderMatches() {
               ${fixture.status === "live" && fixture.elapsed !== null ? `<small>${escapeHtml(fixture.elapsed)} minutos</small>` : ""}
             </div>
             <div class="match-card__actions">
-              <button class="button button--secondary" type="button" data-action="view">Ver datos</button>
+              <button class="button button--secondary" type="button" data-action="season">Ver temporada</button>
               <button class="button button--primary" type="button" data-action="data">Analizar datos</button>
             </div>
           </article>`;
@@ -623,8 +619,7 @@ function renderFixtureData() {
     elements.specificMarketsStatus.textContent = "No disponible";
     elements.specificMarketsContent.innerHTML = '<div class="research-empty">Pulsa “Mostrar” para evaluar mercados específicos sin inventar datos.</div>';
   }
-  elements.specificMarketsContent.hidden = true;
-  if (savedSpecificMarkets) elements.showSpecificMarkets.textContent = "Mostrar";
+  elements.specificMarketsContent.hidden = false;
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
   elements.openOddsDetail.disabled = false;
   const evidence = latestEvidenceForFixture(state.evidenceSnapshots, fixture.id);
@@ -638,6 +633,8 @@ function renderFixtureData() {
   renderGuideCoverageSummary(fixture);
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
+  elements.researchContent.hidden = false;
+  renderLiveData(fixture.researchData, fixture);
 }
 
 function renderGuideCoverageSummary(fixture) {
@@ -766,15 +763,7 @@ function renderResearchData(research) {
     </div>`;
   renderSourceCoverage(research);
 
-  const supportingCards = SUPPORTING_MODULES.map(({ key, label, use }) => {
-    const module = research.supportingData?.[key] || { status: "not_available", source: "api-football" };
-    return `<article class="supporting-card">
-      <div><h4>${escapeHtml(label)}</h4><span>${escapeHtml(use)}</span></div>
-      ${statusBadge(researchStatusLabel(module.status))}
-      <button class="button button--secondary button--compact" type="button" data-supporting-module="${escapeHtml(key)}">Ver detalle</button>
-    </article>`;
-  }).join("");
-  elements.researchGrid.innerHTML = `<section class="research-supporting"><div class="research-supporting__heading"><div><h3>Datos complementarios</h3><p>Los módulos principales se consultan desde la tabla de cobertura para evitar información duplicada.</p></div></div><div class="supporting-grid">${supportingCards}</div></section>`;
+  elements.researchGrid.innerHTML = "";
 }
 
 function renderSourceCoverage(research) {
@@ -957,6 +946,22 @@ function renderSupportingDetail(moduleKey, research) {
     content = `<div class="team-stat-grid">${seasonCard(research.homeTeam.name, module.home)}${seasonCard(research.awayTeam.name, module.away)}</div>`;
   }
   return `${researchMeta(moduleKey, module)}${caution}${content || emptyDetail("No hay detalle complementario disponible.")}`;
+}
+
+function renderLiveData(research, fixture = selectedFixture()) {
+  const entries = [
+    ["fixtureEvents", elements.liveEventsStatus, elements.liveEventsContent, "La API todavía no publica eventos para este encuentro."],
+    ["playerPerformance", elements.livePlayersStatus, elements.livePlayersContent, "La API todavía no publica rendimiento individual para este encuentro."]
+  ];
+  for (const [key, statusElement, contentElement, emptyMessage] of entries) {
+    const module = research?.supportingData?.[key];
+    const label = module ? researchStatusLabel(module.status) : "No disponible";
+    statusElement.className = `status-badge status-badge--${statusClass(label)}`;
+    statusElement.textContent = label;
+    contentElement.innerHTML = fixture && research
+      ? `${fixtureProgressBanner(fixture)}${renderSupportingDetail(key, research)}`
+      : `<div class="research-empty">${escapeHtml(fixture ? emptyMessage : "Selecciona un partido para consultar esta información.")}</div>`;
+  }
 }
 
 function openSupportingDetail(moduleKey) {
@@ -1972,7 +1977,11 @@ function renderSpecificMarkets(result) {
 async function loadSpecificMarkets() {
   const fixture = selectedFixture();
   if (!fixture || state.isLoadingSpecificMarkets) return;
-  if (state.specificMarketsByFixture.has(fixture.id)) return toggleReadyModule(elements.showSpecificMarkets, elements.specificMarketsContent);
+  if (state.specificMarketsByFixture.has(fixture.id)) {
+    renderSpecificMarkets(state.specificMarketsByFixture.get(fixture.id));
+    elements.specificMarketsContent.hidden = false;
+    return;
+  }
   state.isLoadingSpecificMarkets = true;
   elements.showSpecificMarkets.disabled = true;
   elements.showSpecificMarkets.textContent = "Evaluando…";
@@ -1980,14 +1989,14 @@ async function loadSpecificMarkets() {
     const result = await footballDataService.getSpecificMarkets(fixture);
     state.specificMarketsByFixture.set(fixture.id, result);
     renderSpecificMarkets(result);
-    showModuleReady(elements.showSpecificMarkets, elements.specificMarketsContent);
+    elements.specificMarketsContent.hidden = false;
   } catch (error) {
     renderSpecificMarkets({ status: "not_available", groups: [], warnings: [error.message] });
     elements.specificMarketsContent.hidden = false;
   } finally {
     state.isLoadingSpecificMarkets = false;
     elements.showSpecificMarkets.disabled = !selectedFixture();
-    if (!state.specificMarketsByFixture.has(fixture.id)) elements.showSpecificMarkets.textContent = "Mostrar";
+    elements.specificMarketsContent.hidden = false;
   }
 }
 
@@ -2207,6 +2216,7 @@ async function selectFixture(fixtureId, analysisMode = null) {
     if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
     renderMatches();
     renderFixtureData();
+    void loadSpecificMarkets();
     void loadTeamPerformance(detailedFixture).then(() => loadPlayerGoalCandidates(detailedFixture));
   } catch (error) {
     elements.filterError.hidden = false;
@@ -2347,20 +2357,14 @@ async function refreshResearchData() {
 }
 
 async function runAutomaticRefresh() {
-  if (!elements.autoRefresh.checked || document.visibilityState !== "visible" || !state.fixtures.length) return;
+  if (document.visibilityState !== "visible" || !selectedFixture()) return;
   await refreshFixtureStatuses();
   if (selectedFixture()) await refreshResearchData();
 }
 
 function configureAutomaticRefresh() {
   if (state.autoRefreshTimer) window.clearInterval(state.autoRefreshTimer);
-  state.autoRefreshTimer = null;
-  state.preferences.autoRefresh = elements.autoRefresh.checked;
-  elements.accountAutoRefresh.checked = elements.autoRefresh.checked;
-  writeLocalJson(PREFERENCES_KEY, state.preferences);
-  if (!elements.autoRefresh.checked) return;
   state.autoRefreshTimer = window.setInterval(runAutomaticRefresh, 5 * 60 * 1000);
-  showNotice("Actualización automática activada cada cinco minutos mientras la página esté visible.");
 }
 
 function validateFilters() {
@@ -2447,9 +2451,8 @@ elements.setToday.addEventListener("click", () => {
   elements.dateFrom.value = today;
   elements.dateTo.value = today;
 });
-elements.autoRefresh.addEventListener("change", configureAutomaticRefresh);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && elements.autoRefresh.checked && state.fixtures.length) runAutomaticRefresh();
+  if (document.visibilityState === "visible" && selectedFixture()) runAutomaticRefresh();
 });
 elements.dataGrid.addEventListener("click", (event) => {
   const card = event.target.closest("[data-category]");
@@ -2467,12 +2470,6 @@ elements.researchGrid.addEventListener("click", (event) => {
 });
 elements.refreshResearch.addEventListener("click", refreshResearchData);
 elements.refreshCoverage.addEventListener("click", refreshResearchData);
-elements.toggleResearch.addEventListener("click", () => {
-  const expanded = elements.toggleResearch.getAttribute("aria-expanded") === "true";
-  elements.toggleResearch.setAttribute("aria-expanded", String(!expanded));
-  elements.toggleResearch.textContent = expanded ? "Mostrar" : "Ocultar";
-  elements.researchContent.hidden = expanded;
-});
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.toggleAnalysis.addEventListener("click", () => toggleReadyModule(elements.toggleAnalysis, elements.analysisContent));
@@ -2628,7 +2625,18 @@ elements.matchesList.addEventListener("click", async (event) => {
   const card = event.target.closest("[data-fixture-id]");
   if (!card) return;
   await selectFixture(card.dataset.fixtureId, button?.dataset.action === "data" ? "data" : null);
-  openGuideCoverage();
+  if (button?.dataset.action === "season") {
+    openSupportingDetail("teamSeasonStatistics");
+    return;
+  }
+  if (button?.dataset.action === "data") {
+    switchView("guide");
+    const decision = document.querySelector("#guide-data-picks-module");
+    if (decision) decision.open = true;
+    window.requestAnimationFrame(() => decision?.scrollIntoView({ behavior: "auto", block: "start" }));
+    return;
+  }
+  switchView("transparency");
 });
 elements.matchesList.addEventListener("keydown", async (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
@@ -2636,7 +2644,7 @@ elements.matchesList.addEventListener("keydown", async (event) => {
   if (!card || event.target.closest("button")) return;
   event.preventDefault();
   await selectFixture(card.dataset.fixtureId, false);
-  openGuideCoverage();
+  switchView("transparency");
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
@@ -2679,9 +2687,7 @@ elements.accountForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.preferences.name = elements.accountName.value.trim();
   state.preferences.dailyLimit = elements.accountDailyLimit.value;
-  elements.autoRefresh.checked = elements.accountAutoRefresh.checked;
   applyTheme(elements.accountDarkMode.checked ? "dark" : "light");
-  configureAutomaticRefresh();
   writeLocalJson(PREFERENCES_KEY, state.preferences);
   showNotice("Preferencias guardadas en este navegador.");
 });
@@ -2707,8 +2713,6 @@ async function initializeApp() {
   elements.alertLive.checked = state.preferences.alertLive !== false;
   elements.alertScore.checked = state.preferences.alertScore !== false;
   elements.alertData.checked = state.preferences.alertData !== false;
-  elements.autoRefresh.checked = Boolean(state.preferences.autoRefresh);
-  elements.accountAutoRefresh.checked = Boolean(state.preferences.autoRefresh);
   applyTheme(state.preferences.theme || "dark");
   configureAutomaticRefresh();
   renderAlerts();

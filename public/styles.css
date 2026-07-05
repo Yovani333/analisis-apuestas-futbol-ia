@@ -303,8 +303,8 @@ button { touch-action: manipulation; }
 .evidence-toolbar .evidence-status { margin: 3px 0 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
 .evidence-toolbar .button { flex: 0 0 auto; }
 .evidence-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-.auto-refresh-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .7rem; font-weight: 800; white-space: nowrap; }
-.auto-refresh-control input { width: 16px; height: 16px; accent-color: var(--primary); }
+.auto-refresh-status { display: inline-flex; align-items: center; gap: 6px; color: var(--success); font-size: .66rem; font-weight: 800; white-space: nowrap; }
+.auto-refresh-status::before { content: ""; width: 7px; height: 7px; background: var(--success); border-radius: 50%; }
 .research-empty { padding: 28px 16px; color: var(--muted); font-size: .8rem; text-align: center; background: var(--surface-subtle); border: 1px dashed #bdc9d7; border-radius: 11px; }
 .research-summary { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 13px; align-items: center; padding: 13px; margin-bottom: 12px; background: linear-gradient(135deg, #f3f8ff, #f2fbf7); border: 1px solid #d7e7f4; border-radius: 12px; }
 .confidence-score { display: grid; width: 64px; height: 64px; place-content: center; color: var(--primary-dark); text-align: center; background: white; border: 5px solid #bfdbfe; border-radius: 50%; }
@@ -671,6 +671,15 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .guide-orientation-grid .decision-flow li:nth-child(even)::after { display: none; }
 .markets-catalog-view { display: grid; align-content: start; gap: 10px; }
 .markets-catalog-view[hidden] { display: none; }
+.transparency-view, .live-data-view { display: grid; align-content: start; gap: 10px; }
+.transparency-view[hidden], .live-data-view[hidden] { display: none; }
+.transparency-view #coverage-panel, .transparency-view #research-panel { margin: 0; }
+.transparency-view #research-content { display: block !important; }
+.live-data-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.live-data-panel { min-width: 0; }
+.live-data-content { min-width: 0; overflow-x: auto; overscroll-behavior: contain; }
+.live-data-content .detail-table-wrap { max-height: 65vh; overflow: auto; }
+.account-note { margin: 0; color: var(--muted); font-size: .7rem; line-height: 1.45; }
 .catalog-reading-path { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 11px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .catalog-reading-path > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: center; padding: 9px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
 .catalog-reading-path b { display: grid; width: 28px; height: 28px; place-items: center; color: var(--primary); background: var(--primary-soft); border-radius: 50%; }
@@ -704,7 +713,8 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 :root[data-theme="dark"] .guide-module { background: var(--surface); border-color: var(--border); }
 @media (max-width: 900px) { .guide-orientation-grid { grid-template-columns: 1fr; } }
 @media (max-width: 820px) { .guide-module summary { grid-template-columns: minmax(0, 1fr) auto; } .guide-module summary span, .guide-module summary small { grid-column: 1 / -1; } }
-@media (max-width: 520px) { .guide-module summary { gap: 5px 10px; } .guide-module .panel-actions .button { width: auto; } .catalog-reading-path { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .live-data-grid { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .guide-module summary { gap: 5px 10px; } .guide-module .panel-actions .button { width: auto; } .catalog-reading-path { grid-template-columns: 1fr; } .auto-refresh-status { width: 100%; } }
 @media (max-width: 520px) { .evidence-toolbar { align-items: stretch; flex-direction: column; } .evidence-toolbar .button { width: 100%; } .evidence-actions { display: grid; grid-template-columns: 1fr; } .guide-module__body, .research-panel, .research-content { min-width: 0; max-width: 100%; } }
 
 @keyframes pickPulsePass {
@@ -1353,7 +1363,7 @@ body {
 
 /* Keep expanded guide modules inside the viewport. */
 .guide-view, .guide-modules, .guide-module, .guide-module__body,
-#guide-coverage-slot, #guide-research-slot, #coverage-panel, #research-panel,
+#coverage-panel, #research-panel,
 #research-content, .source-coverage, .source-registry, .source-matrix,
 .research-grid, .research-card, .research-supporting, .supporting-grid {
   width: 100%;
