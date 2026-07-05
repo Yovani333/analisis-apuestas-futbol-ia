@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260705-team-performance-picks-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260705-player-goal-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -221,6 +221,14 @@
           <div id="team-goals-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para evaluar la posibilidad de gol de cada equipo.</div></div>
         </section>
 
+        <section id="player-goal-panel" class="panel player-goal-panel advanced-module-panel" aria-labelledby="player-goal-title">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Amenaza ofensiva individual</p><h2 id="player-goal-title">Jugador con posible gol</h2></div>
+            <div class="panel-actions"><button id="toggle-player-goal" class="button button--secondary button--compact" type="button" aria-expanded="true" disabled>Ocultar</button><span id="player-goal-status" class="status-badge status-badge--unavailable">No disponible</span></div>
+          </div>
+          <div id="player-goal-content" aria-live="polite"><div class="research-empty">Selecciona un partido para analizar jugadores con mayor amenaza de gol.</div></div>
+        </section>
+
         <section id="corners-panel" class="panel corners-panel advanced-module-panel" aria-labelledby="corners-title">
           <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners <button class="info-tooltip" type="button" data-tooltip-key="corners" aria-label="Información sobre Corners" aria-expanded="false">?</button></h2></div><div class="panel-actions"><button id="show-corners" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
           <div id="corners-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar corners oficiales históricos.</div></div>
@@ -411,6 +419,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260705-team-performance-picks-v1"></script>
+    <script type="module" src="app.js?v=20260705-player-goal-v1"></script>
   </body>
 </html>

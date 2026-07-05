@@ -5,7 +5,7 @@ import { ALLOWED_LEAGUES } from "../config/leagues.js";
 import { AppError } from "../errors.js";
 import { parseFixtureId, parseFixtureQuery } from "../middleware/validate.js";
 import {
-  getFixtureDataset, getFixturePlayers, getFixtureResult, getPreviousFixturesForTeam, resolveLeague, searchFixtures
+  getFixtureDataset, getFixtureEvents, getFixtureLineups, getFixturePlayers, getFixtureResult, getPlayerGoalFixtureDataset, getPreviousFixturesForTeam, resolveLeague, searchFixtures
 } from "../services/api-football.service.js";
 import { generateAnalysis } from "../services/openai.service.js";
 import { generateRuleBasedAnalysis } from "../services/rule-analysis.service.js";
@@ -18,6 +18,7 @@ import { getApiFootballObservability } from "../services/api-football-observabil
 import { runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
 import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
+import { getPlayerGoalCandidates } from "../services/player-goal-candidates.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -101,6 +102,22 @@ apiRouter.get("/fixtures/:fixtureId/team-performance", requireLiveMode, asyncRou
   res.json({ ...performance, picks });
 }));
 
+const playerGoalDependencies = {
+  getPreviousFixtures: getPreviousFixturesForTeam,
+  getFixturePlayers,
+  getFixtureLineups,
+  getFixtureEvents
+};
+
+apiRouter.get("/fixtures/:fixtureId/player-goal-candidates", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
+  const dataset = await getPlayerGoalFixtureDataset(fixtureId);
+  dataset.poissonModel ||= calculatePoissonModel(dataset);
+  dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
+  res.json(await getPlayerGoalCandidates(dataset, playerGoalDependencies, { forceRefresh }));
+}));
+
 apiRouter.post("/fixtures/:fixtureId/audit", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const result = await getFixtureResult(fixtureId);
@@ -171,6 +188,9 @@ apiRouter.post("/fixtures/:fixtureId/models/corners", requireLiveMode, asyncRout
 apiRouter.post("/fixtures/:fixtureId/markets/specific", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const dataset = await getFixtureDataset(fixtureId);
+  dataset.poissonModel ||= calculatePoissonModel(dataset);
+  dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
+  dataset.playerGoalCandidates = await getPlayerGoalCandidates(dataset, playerGoalDependencies);
   res.json(buildSpecificMarkets(dataset));
 }));
 

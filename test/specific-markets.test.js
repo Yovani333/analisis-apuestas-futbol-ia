@@ -29,7 +29,15 @@ test("no inventa hándicap asiático ni goleador cuando faltan datos críticos",
   assert.notEqual(handicap.status, "available");
   assert.notEqual(player.status, "available");
   assert.ok(handicap.missingData.includes("Línea de hándicap asiático verificable"));
-  assert.ok(player.missingData.includes("Alineación confirmada"));
+  assert.ok(player.missingData.includes("Cobertura individual de API-Football"));
+});
+
+test("conecta candidatos reales de jugador con Mercados ofensivos sin duplicar lógica", () => {
+  const candidate = { marketKey: "anytime_goalscorer", selectionKey: "player_goal_9", market: "Jugador anota en cualquier momento", selection: "Delantero A anota", confidenceScore: 76, highlightColor: "green", sourceModule: "player_goal_candidate", explanation: "Minutos y tiros suficientes." };
+  const result = buildSpecificMarkets(dataset({ playerGoalCandidates: { status: "available", candidates: [candidate] } }));
+  const player = result.groups.find((group) => group.key === "player_goal");
+  assert.equal(player.status, "available");
+  assert.equal(player.picks[0].sourceModule, "player_goal_candidate");
 });
 
 test("corners queda parcial si existe modelo pero falta cuota compatible", () => {

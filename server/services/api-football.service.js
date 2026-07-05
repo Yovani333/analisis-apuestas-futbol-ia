@@ -98,6 +98,10 @@ export async function getFixturePlayers(fixtureId) {
   return apiRequest("/fixtures/players", { fixture: fixtureId });
 }
 
+export async function getFixtureLineups(fixtureId) {
+  return apiRequest("/fixtures/lineups", { fixture: fixtureId });
+}
+
 function chooseSeason(seasons, requestedSeason, targetDate) {
   if (requestedSeason !== "auto") return requestedSeason;
   const byDate = seasons.find((season) => season.start <= targetDate && season.end >= targetDate);
@@ -281,6 +285,29 @@ export function invalidateFixtureCache(fixtureId) {
     const sameTeam = relatedTeamIds.has(url.searchParams.get("team"));
     if (sameFixture || sameTeam) requestCache.delete(cacheKey);
   }
+}
+
+export function getCachedFixtureDataset(fixtureId) {
+  const cached = datasetCache.get(String(fixtureId)) || datasetCache.get(Number(fixtureId));
+  return cached?.expiresAt > Date.now() ? cached.value : null;
+}
+
+export async function getPlayerGoalFixtureDataset(fixtureId) {
+  const cached = getCachedFixtureDataset(fixtureId);
+  if (cached) return cached;
+  const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
+  const base = fixtureRows[0];
+  if (!base) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
+  const leagueConfig = ALLOWED_LEAGUES.find((league) => league.apiId === base.league?.id || league.apiNames.some((name) => name.toLowerCase() === base.league?.name?.toLowerCase()));
+  if (!leagueConfig) throw new AppError("El fixture no pertenece a una liga permitida.", 403, "FIXTURE_LEAGUE_NOT_ALLOWED");
+  const [injuries, odds] = await Promise.all([
+    apiRequest("/injuries", { fixture: fixtureId }).catch(() => []),
+    apiRequest("/odds", { fixture: fixtureId }).catch(() => [])
+  ]);
+  return {
+    fixture: normalizeFixture(base, { ...leagueConfig, name: base.league.name, countryLabel: base.league.country || leagueConfig.countryLabel }),
+    confirmed: { injuries, odds }
+  };
 }
 
 export async function getFixtureDataset(fixtureId, { forceRefresh = false, includeHistorical = false } = {}) {

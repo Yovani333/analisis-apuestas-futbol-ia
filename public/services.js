@@ -177,6 +177,12 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/team-performance`);
   },
 
+  async getPlayerGoalCandidates(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", candidates: [], message: "El análisis de jugadores requiere estadísticas reales de API-Football." };
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/player-goal-candidates`);
+  },
+
   async getFixtureResult(fixtureId) {
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`);
     return payload.result;
