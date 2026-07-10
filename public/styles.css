@@ -1075,7 +1075,9 @@ body {
 }
 .selected-match__team { display: flex; align-items: center; gap: 12px; }
 .selected-match__team:last-child { flex-direction: row-reverse; text-align: right; }
+.selected-match__team span { display: grid; gap: 2px; min-width: 0; }
 .selected-match__team strong { margin: 0; font-size: .95rem; }
+.selected-match__team small { color: #a9bed5; font-size: .62rem; font-weight: 800; }
 .selected-match__score { display: grid; gap: 5px; text-align: center; }
 .selected-match__score b { font-size: 1.4rem; }
 .selected-match__score b span { color: #aebbd0; font-size: .72rem; }

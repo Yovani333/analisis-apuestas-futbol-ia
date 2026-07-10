@@ -578,9 +578,9 @@ function renderFixtureData() {
       ${statusBadge(fixture.statusLabel)}
     </div>
     <div class="selected-match__scoreboard">
-      <div class="selected-match__team">${teamCrest(fixture.home, fixture.homeLogo, "large")}<strong>${escapeHtml(fixture.home)}</strong></div>
+      <div class="selected-match__team">${teamCrest(fixture.home, fixture.homeLogo, "large")}<span><strong>${escapeHtml(fixture.home)}</strong><small>ID API-Football: ${escapeHtml(fixture.homeTeamId || "No disponible")}</small></span></div>
       <div class="selected-match__score"><b>${score}</b><time>${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT</time></div>
-      <div class="selected-match__team">${teamCrest(fixture.away, fixture.awayLogo, "large")}<strong>${escapeHtml(fixture.away)}</strong></div>
+      <div class="selected-match__team">${teamCrest(fixture.away, fixture.awayLogo, "large")}<span><strong>${escapeHtml(fixture.away)}</strong><small>ID API-Football: ${escapeHtml(fixture.awayTeamId || "No disponible")}</small></span></div>
     </div>
     <div class="selected-match__details">
       <span>${escapeHtml(fixture.stadium || "Sede por confirmar")}${escapeHtml(venueLabel)}</span>
