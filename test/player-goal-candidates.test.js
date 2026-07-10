@@ -9,7 +9,7 @@ const match = { id: 100, home: "England", away: "Norway", homeTeamId: 1, awayTea
 const fixture = (id, date, status = "FT") => ({ fixture: { id, date, status: { short: status } } });
 const lineup = (teamId, players = []) => [{ team: { id: teamId }, startXI: players.map((player) => ({ player: { id: player.id, name: player.name, pos: player.pos || "F" } })), substitutes: [] }];
 const playerResponse = (teamId, players) => [{ team: { id: teamId }, players: players.map((item) => ({
-  player: { id: item.id, name: item.name }, statistics: [{ games: { minutes: item.minutes, position: item.position || "F" }, goals: { total: item.goals || 0, assists: item.assists || 0 }, shots: { total: item.shots ?? 3, on: item.on ?? 2 }, penalty: { scored: item.penalties || 0, missed: 0 }, cards: { red: item.red || 0 } }]
+  player: { id: item.id, name: item.name }, statistics: [{ games: { minutes: item.minutes, position: item.position || "F" }, goals: { total: item.goals || 0, assists: item.assists || 0, expected: item.xg }, shots: { total: item.shots ?? 3, on: item.on ?? 2 }, penalty: { scored: item.penalties || 0, missed: 0 }, cards: { red: item.red || 0 } }]
 })) }];
 const historyRows = (teamId, playerSets) => playerSets.map((players) => ({ players: playerResponse(teamId, players), lineups: lineup(teamId, players), events: [] }));
 const attacker = (id, name, overrides = {}) => ({ id, name, minutes: 80, shots: 4, on: 2, goals: 1, ...overrides });
@@ -22,8 +22,11 @@ test("filtra solo los cinco partidos finalizados anteriores", () => {
 });
 
 test("normaliza strings y calcula amenaza sin NaN", () => {
-  const players = normalizeTeamPlayerHistory({ teamId: 1, teamName: "England", fixtureRows: historyRows(1, [[attacker(9, "Kane", { minutes: "90", shots: "4", on: "2" })]]), teamContext: { lambda: "1.8" } });
+  const players = normalizeTeamPlayerHistory({ teamId: 1, teamName: "England", fixtureRows: historyRows(1, [[attacker(9, "Kane", { minutes: "90", shots: "4", on: "2", xg: "0.42" })]]), teamContext: { lambda: "1.8" } });
   assert.equal(players[0].minutesLast5, 90);
+  assert.equal(players[0].matchesEvaluated, 1);
+  assert.equal(players[0].xgLast5, 0.42);
+  assert.ok(players[0].conservativeGoalProbability > 0);
   assert.ok(Number.isFinite(calculateGoalThreatScore(players[0], { goalProbability: "65%" })));
 });
 
@@ -58,6 +61,26 @@ test("una cuota ausente conserva el pick pendiente sin romperlo", () => {
   const candidate = buildPlayerGoalCandidates(match, players, [], { "1": { lambda: 1.8 } }).candidates[0];
   assert.equal(candidate.odds, null);
   assert.equal(candidate.canAdd, true);
+  assert.equal(candidate.sampleQuality, "Aceptable");
+  assert.equal(candidate.stats.matchesEvaluated, 5);
+  assert.ok(candidate.conservativeGoalProbability > 0);
+});
+
+test("muestra calidad de muestra sin inferir ausencia como lesion", () => {
+  const rows = historyRows(1, [
+    [attacker(9, "Kane", { minutes: 90 })],
+    [attacker(9, "Kane", { minutes: 80 })],
+    [attacker(9, "Kane", { minutes: 75 })],
+    [attacker(10, "Saka", { minutes: 90 })],
+    [attacker(10, "Saka", { minutes: 90 })]
+  ]);
+  const players = normalizeTeamPlayerHistory({ teamId: 1, teamName: "England", fixtureRows: rows, teamContext: { lambda: 1.8 } });
+  const kane = players.find((player) => player.playerName === "Kane");
+  assert.equal(kane.appearancesLast5, 3);
+  assert.equal(kane.matchesEvaluated, 5);
+  assert.equal(kane.isInjuredOrSuspended, false);
+  assert.equal(kane.sampleQuality, "Media");
+  assert.match(kane.warnings.join(" "), /Muestra media/);
 });
 
 test("devuelve estado controlado cuando API-Football no cubre jugadores", async () => {
