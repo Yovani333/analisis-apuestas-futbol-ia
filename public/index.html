@@ -23,6 +23,7 @@
         <button class="main-nav__item main-nav__item--active" type="button" data-view="dashboard" aria-current="page">
           <span aria-hidden="true">▦</span> Dashboard
         </button>
+        <button class="main-nav__item" type="button" data-view="simulation">Simulación</button>
         <button class="main-nav__item" type="button" data-view="transparency">Transparencia de datos</button>
         <button class="main-nav__item" type="button" data-view="guide">Guía de análisis</button>
         <button class="main-nav__item" type="button" data-view="markets">Catálogo de mercados</button>
@@ -281,6 +282,34 @@
             </div>
           </div>
         </section>
+      </section>
+    </main>
+
+    <main id="simulation-content" class="utility-view simulation-view" data-view-panel="simulation" hidden>
+      <section class="utility-heading">
+        <div><p class="eyebrow">Laboratorio de escenarios</p><h2>Simulación</h2><p>Compara equipos con datos reales disponibles de API-Football o caché antes de ejecutar motores avanzados.</p></div>
+        <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+      </section>
+      <section class="panel simulation-panel" aria-labelledby="team-comparator-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Datos históricos oficiales</p><h2 id="team-comparator-title">Comparador de equipos con datos reales</h2></div>
+          <span id="simulation-status" class="status-badge status-badge--unavailable">No disponible</span>
+        </div>
+        <div class="simulation-form">
+          <label>Competición / torneo<input id="simulation-competition" type="text" placeholder="Ej. Copa Mundial FIFA" /></label>
+          <label>Ventana<select id="simulation-window"><option value="5">Últimos 5 partidos</option><option value="10">Últimos 10 partidos</option></select></label>
+          <label>Equipo A ID<input id="simulation-team-a-id" inputmode="numeric" placeholder="ID API-Football" /></label>
+          <label>Equipo A nombre<input id="simulation-team-a-name" placeholder="Equipo A" /></label>
+          <label>Equipo B ID<input id="simulation-team-b-id" inputmode="numeric" placeholder="ID API-Football" /></label>
+          <label>Equipo B nombre<input id="simulation-team-b-name" placeholder="Equipo B" /></label>
+          <label>Fecha de corte<input id="simulation-fixture-date" type="datetime-local" /></label>
+        </div>
+        <div class="simulation-actions">
+          <button id="simulation-use-selected" class="button button--secondary" type="button">Usar encuentro seleccionado</button>
+          <button id="simulation-compare" class="button button--primary" type="button">Comparar</button>
+          <button class="button button--secondary" type="button" disabled title="Disponible en Fase 6">Ejecutar simulación avanzada</button>
+        </div>
+        <div id="simulation-results" class="simulation-results" aria-live="polite"><div class="research-empty">Selecciona equipos o usa el encuentro seleccionado para comparar datos históricos.</div></div>
       </section>
     </main>
 

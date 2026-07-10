@@ -669,8 +669,18 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .guide-orientation-grid .decision-flow, .guide-orientation-grid .guide-onboarding { height: 100%; margin: 0; }
 .guide-orientation-grid .decision-flow ol, .guide-orientation-grid .guide-onboarding ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .guide-orientation-grid .decision-flow li:nth-child(even)::after { display: none; }
-.markets-catalog-view { display: grid; align-content: start; gap: 10px; }
-.markets-catalog-view[hidden] { display: none; }
+.markets-catalog-view, .simulation-view { display: grid; align-content: start; gap: 10px; }
+.markets-catalog-view[hidden], .simulation-view[hidden] { display: none; }
+.simulation-panel { border-top: 2px solid #8b5cf6; }
+.simulation-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.simulation-form label { display: grid; gap: 5px; color: var(--muted); font-size: .66rem; font-weight: 800; text-transform: uppercase; }
+.simulation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.simulation-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.simulation-summary article, .simulation-fixtures article { display: grid; gap: 3px; min-width: 0; padding: 9px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 7px; }
+.simulation-summary span { color: var(--muted); font-size: .58rem; font-weight: 800; text-transform: uppercase; }
+.simulation-summary strong, .simulation-fixtures strong { overflow-wrap: anywhere; font-size: .78rem; }
+.simulation-summary small, .simulation-fixtures span, .simulation-fixtures small { color: var(--muted); font-size: .6rem; line-height: 1.35; }
+.simulation-fixtures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .transparency-view, .live-data-view { display: grid; align-content: start; gap: 10px; }
 .transparency-view[hidden], .live-data-view[hidden] { display: none; }
 .transparency-view #coverage-panel, .transparency-view #research-panel { margin: 0; }
@@ -1882,6 +1892,7 @@ body {
 }
 
 @media (max-width: 720px) {
+  .simulation-form, .simulation-summary, .simulation-fixtures { grid-template-columns: 1fr; }
   .player-goal-grid { grid-template-columns: 1fr; }
   .app-header { position: static; min-height: auto; padding: 12px; }
   .brand__mark { width: 42px; height: 42px; }
