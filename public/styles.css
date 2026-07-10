@@ -1739,6 +1739,12 @@ body {
 .player-goal-card dd { color: var(--text); text-align: right; }
 .player-goal-card > p { margin: 0; color: var(--muted); font-size: .61rem; line-height: 1.45; }
 .player-goal-pending { color: var(--warning); font-size: .56rem; }
+.player-goal-warnings { color: var(--warning); font-size: .56rem; line-height: 1.35; }
+.player-goal-table-wrap { margin-top: 10px; border: 1px solid var(--border); border-radius: 7px; }
+.player-goal-table { min-width: 920px; }
+.player-goal-table th,
+.player-goal-table td { font-size: .58rem; vertical-align: top; }
+.player-goal-table td:last-child { min-width: 180px; color: var(--muted); line-height: 1.35; }
 .team-performance__note {
   padding: 8px 10px;
   margin-bottom: 10px;

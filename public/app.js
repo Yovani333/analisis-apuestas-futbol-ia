@@ -2081,7 +2081,7 @@ function renderTeamPerformance(performance, fixture = selectedFixture()) {
   applyTeamPerformanceVisibility(teamPerformanceVisible());
 }
 
-function renderPlayerGoalCandidates(result) {
+function renderPlayerGoalCandidatesLegacy(result) {
   const candidates = result?.candidates || [];
   const statusLabels = {
     available: ["Disponible", "available"], insufficient_data: ["Datos insuficientes", "partial"],
@@ -2101,6 +2101,39 @@ function renderPlayerGoalCandidates(result) {
     <p>${escapeHtml(candidate.explanation)}</p>${candidate.odds ? "" : '<small class="player-goal-pending">Cuota no disponible · pick pendiente de cuota.</small>'}
     <div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-player-goal="${index}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-player-goal="${index}">Agregar pick</button></div>
   </article>`).join("")}</div>`;
+}
+
+function renderPlayerGoalCandidates(result) {
+  const candidates = result?.candidates || [];
+  const statusLabels = {
+    available: ["Disponible", "available"], insufficient_data: ["Datos insuficientes", "partial"],
+    no_player_coverage: ["Sin cobertura", "unavailable"], not_available: ["No disponible", "unavailable"], error: ["Error", "unavailable"]
+  };
+  const [label, status] = statusLabels[result?.status] || statusLabels.not_available;
+  elements.playerGoalStatus.className = `status-badge status-badge--${status}`;
+  elements.playerGoalStatus.textContent = label;
+  if (!candidates.length) {
+    const coverage = result?.coverage ? ` Jugadores evaluados: ${displayValue(result.playersEvaluated, 0)}. Fixtures con jugadores: local ${displayValue(result.coverage.homePlayerFixtures, 0)}, visitante ${displayValue(result.coverage.awayPlayerFixtures, 0)}.` : "";
+    elements.playerGoalContent.innerHTML = `<div class="research-empty"><strong>${escapeHtml(label)}</strong><p>${escapeHtml(result?.message || "Datos insuficientes para sugerir jugador con posible gol.")}${escapeHtml(coverage)}</p></div>`;
+    return;
+  }
+  const warningText = (candidate) => (candidate.warnings?.length ? candidate.warnings.join(" ") : "Sin advertencias criticas.");
+  const candidateRows = candidates.map((candidate) => `<tr>
+    <td>${escapeHtml(candidate.playerName)}</td><td>${escapeHtml(candidate.teamName)}</td>
+    <td>${displayValue(candidate.stats?.appearancesLast5, 0)}/${displayValue(candidate.stats?.matchesEvaluated, 0)}</td>
+    <td>${displayValue(candidate.stats?.minutesLast5, 0)}</td><td>${displayValue(candidate.stats?.goalsLast5, 0)}</td>
+    <td>${displayValue(candidate.stats?.shotsLast5, 0)}</td><td>${displayValue(candidate.stats?.shotsOnTargetLast5, 0)}</td>
+    <td>${candidate.stats?.xgLast5 ? displayValue(candidate.stats.xgLast5) : "No disp."}</td>
+    <td>${displayValue(candidate.conservativeGoalProbability, 1)}%</td><td>${escapeHtml(candidate.confidence)}</td>
+    <td>${escapeHtml(warningText(candidate))}</td>
+  </tr>`).join("");
+  elements.playerGoalContent.innerHTML = `<div class="player-goal-note">Modelo interno con datos reales de API-Football. Prioriza minutos, titularidad, tiros y tiros a puerta; un gol reciente por si solo no genera recomendacion. Motivo de actualizacion: ${escapeHtml(result?.updateReason || "cache_or_api_snapshot")}.</div><div class="player-goal-grid">${candidates.map((candidate, index) => `<article class="player-goal-card player-goal-card--${escapeHtml(candidate.color)}">
+    <header><span class="player-goal-rank">${index + 1}</span><div><strong>${escapeHtml(candidate.playerName)}</strong><small>${escapeHtml(candidate.teamName)}</small></div><b>${escapeHtml(candidate.confidence)}</b></header>
+    <div class="player-goal-score"><span>GoalThreatScore</span><strong>${displayValue(candidate.goalThreatScore, 0)}/100</strong><div><i style="width:${Math.min(100, Number(candidate.goalThreatScore || 0))}%"></i></div></div>
+    <dl><div><dt>Mercado</dt><dd>${escapeHtml(candidate.market)}</dd></div><div><dt>Cuota</dt><dd>${candidate.odds ? `${displayValue(candidate.odds)} - ${escapeHtml(candidate.bookmaker || "API-Football")}` : "No disponible"}</dd></div><div><dt>Muestra</dt><dd>${displayValue(candidate.stats?.appearancesLast5, 0)}/${displayValue(candidate.stats?.matchesEvaluated, 0)} partidos - ${displayValue(candidate.stats?.minutesLast5, 0)} min</dd></div><div><dt>Amenaza</dt><dd>${displayValue(candidate.stats?.shotsPer90)} tiros/90 - ${displayValue(candidate.stats?.shotsOnTargetPer90)} a puerta/90</dd></div><div><dt>Prob. estimada</dt><dd>${displayValue(candidate.conservativeGoalProbability, 1)}%</dd></div><div><dt>Calidad muestra</dt><dd>${escapeHtml(candidate.sampleQuality || "No disponible")}</dd></div></dl>
+    <p>${escapeHtml(candidate.explanation)}</p><small class="player-goal-warnings">${escapeHtml(warningText(candidate))}</small>${candidate.odds ? "" : '<small class="player-goal-pending">Cuota no disponible - pick pendiente de cuota.</small>'}
+    <div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-player-goal="${index}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-player-goal="${index}">Agregar pick</button></div>
+  </article>`).join("")}</div><div class="table-scroll player-goal-table-wrap"><table class="compact-table player-goal-table"><thead><tr><th>Jugador</th><th>Equipo</th><th>Partidos</th><th>Min.</th><th>Goles</th><th>Tiros</th><th>Arco</th><th>xG</th><th>Prob.</th><th>Conf.</th><th>Advertencias</th></tr></thead><tbody>${candidateRows}</tbody></table></div>`;
 }
 
 function playerGoalPickLeg(index) {

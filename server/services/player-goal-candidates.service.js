@@ -12,6 +12,7 @@ const safeNumber = (value) => {
 const round = (value, digits = 2) => Number(Number(value || 0).toFixed(digits));
 const normalizedText = (value = "") => String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const fixtureTime = (row) => Date.parse(row?.fixture?.date || "") || 0;
+const ratioPct = (part, total) => total > 0 ? round((part / total) * 100, 1) : 0;
 
 export function selectPlayerHistoryFixtures(rows = [], currentMatchDate, limit = MAX_MATCHES) {
   const cutoff = Date.parse(currentMatchDate || "");
@@ -80,6 +81,36 @@ function offensiveExpectation(teamContext = {}) {
   return 40;
 }
 
+function extractPlayerXg(stats = {}) {
+  return safeNumber(stats.goals?.expected ?? stats.goals?.xg ?? stats.shots?.xg ?? stats.xg ?? stats.expectedGoals);
+}
+
+function sampleQualityLabel(appearances, matchesEvaluated) {
+  const ratio = matchesEvaluated ? appearances / matchesEvaluated : 0;
+  if (appearances >= 4 || ratio >= 0.8) return "Aceptable";
+  if (appearances >= 3 || ratio >= 0.6) return "Media";
+  return "Debil";
+}
+
+function conservativeGoalProbability(player, teamContext = {}) {
+  const teamAttack = offensiveExpectation(teamContext);
+  const shotSignal = Math.min(45, player.shotsOnTargetPer90 * 15 + player.shotsPer90 * 4);
+  const minutesSignal = Math.min(20, player.avgMinutes / 90 * 20);
+  const scoringSignal = Math.min(20, player.goalsLast5 * 5 + player.penaltiesScoredLast5 * 4);
+  const teamSignal = Math.min(15, teamAttack * 0.15);
+  return round(Math.max(3, Math.min(65, shotSignal + minutesSignal + scoringSignal + teamSignal)), 1);
+}
+
+function playerWarnings(player) {
+  const warnings = [];
+  if (player.sampleQuality !== "Aceptable") warnings.push(`Muestra ${player.sampleQuality.toLowerCase()}: jugo ${player.appearancesLast5}/${player.matchesEvaluated} partidos.`);
+  if (!player.shotsOnTargetLast5) warnings.push("Sin tiros a puerta registrados en la muestra.");
+  if (!player.xgLast5) warnings.push("xG individual no disponible en API-Football.");
+  if (player.avgMinutes < 60) warnings.push("Promedio de minutos menor a 60.");
+  if (player.isDefender) warnings.push("Posicion defensiva: requiere cautela.");
+  return warnings;
+}
+
 export function calculateGoalThreatScore(player, teamContext = {}) {
   const availability = Math.min(100, ((player.appearancesLast5 / 5) * 45) + (Math.min(player.avgMinutes, 90) / 90 * 35) + ((player.startsLast5 / 5) * 20));
   const shots = Math.min(100, player.shotsPer90 / 4 * 100);
@@ -101,7 +132,9 @@ function confidenceFor(player, teamContext) {
 
 export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [], injuries = [], teamContext = {}, odds = [] }) {
   const records = new Map();
-  for (const row of fixtureRows.slice(0, MAX_MATCHES)) {
+  const evaluatedRows = fixtureRows.slice(0, MAX_MATCHES);
+  const matchesEvaluated = evaluatedRows.length;
+  for (const row of evaluatedRows) {
     const lineup = lineupsForTeam(row.lineups, teamId);
     const starters = new Set((lineup?.startXI || []).map((item) => String(item?.player?.id || "")));
     const lineupPositions = new Map([...(lineup?.startXI || []), ...(lineup?.substitutes || [])].map((item) => [String(item?.player?.id || ""), item?.player?.pos || ""]));
@@ -115,7 +148,7 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
         playerId, playerName: playerRow?.player?.name || "Jugador", teamId: String(teamId), teamName,
         position: stats.games?.position || lineupPositions.get(playerId) || "", appearancesLast5: 0, startsLast5: 0,
         minutesLast5: 0, goalsLast5: 0, assistsLast5: 0, shotsLast5: 0, shotsOnTargetLast5: 0,
-        penaltiesScoredLast5: 0, penaltiesMissedLast5: 0, redCardsLast5: 0
+        xgLast5: 0, penaltiesScoredLast5: 0, penaltiesMissedLast5: 0, redCardsLast5: 0, fixturesPlayed: []
       };
       const eventStats = eventTotals(row.events, teamId, playerId);
       current.appearancesLast5 += 1;
@@ -125,10 +158,17 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
       current.assistsLast5 += safeNumber(stats.goals?.assists);
       current.shotsLast5 += safeNumber(stats.shots?.total);
       current.shotsOnTargetLast5 += safeNumber(stats.shots?.on);
+      current.xgLast5 += extractPlayerXg(stats);
       current.penaltiesScoredLast5 += Math.max(safeNumber(stats.penalty?.scored), eventStats.penaltiesScored);
       current.penaltiesMissedLast5 += Math.max(safeNumber(stats.penalty?.missed), eventStats.penaltiesMissed);
       current.redCardsLast5 += safeNumber(stats.cards?.red);
       current.position ||= lineupPositions.get(playerId) || "";
+      current.fixturesPlayed.push({
+        fixtureId: String(row.fixture?.id || ""),
+        date: row.fixture?.date || "",
+        minutes,
+        started: starters.has(playerId)
+      });
       records.set(playerId, current);
     }
   }
@@ -142,6 +182,12 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
       avgMinutes: player.appearancesLast5 ? round(totalMinutes / player.appearancesLast5) : 0,
       shotsPer90: totalMinutes ? round(player.shotsLast5 / totalMinutes * 90) : 0,
       shotsOnTargetPer90: totalMinutes ? round(player.shotsOnTargetLast5 / totalMinutes * 90) : 0,
+      avgShots: matchesEvaluated ? round(player.shotsLast5 / matchesEvaluated) : 0,
+      avgShotsOnTarget: matchesEvaluated ? round(player.shotsOnTargetLast5 / matchesEvaluated) : 0,
+      avgXg: matchesEvaluated ? round(player.xgLast5 / matchesEvaluated) : null,
+      matchesEvaluated,
+      participationFrequencyPct: ratioPct(player.appearancesLast5, matchesEvaluated),
+      goalFrequencyPct: ratioPct(player.goalsLast5, Math.max(1, player.appearancesLast5)),
       isInjuredOrSuspended: absences.ids.has(player.playerId) || absences.names.has(normalizedText(player.playerName)),
       positionPriority: position.level, isGoalkeeper: Boolean(position.goalkeeper), isDefender: Boolean(position.defender),
       teamExpectedGoals: safeNumber(teamContext.lambda) || null,
@@ -149,10 +195,13 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
     };
     normalized.goalThreatScore = calculateGoalThreatScore(normalized, teamContext);
     Object.assign(normalized, confidenceFor(normalized, teamContext));
+    normalized.sampleQuality = sampleQualityLabel(normalized.appearancesLast5, matchesEvaluated);
+    normalized.conservativeGoalProbability = conservativeGoalProbability(normalized, teamContext);
+    normalized.warnings = playerWarnings(normalized);
     const odd = findPlayerOdd(odds, normalized.playerName);
     normalized.odds = odd.odds;
     normalized.bookmaker = odd.bookmaker;
-    normalized.explanation = `${normalized.playerName} suma ${normalized.minutesLast5} minutos, ${normalized.shotsLast5} tiros y ${normalized.shotsOnTargetLast5} a puerta en ${normalized.appearancesLast5} partidos útiles.${normalized.penaltiesScoredLast5 ? " Registra participación reciente en penales." : ""}`;
+    normalized.explanation = `${normalized.playerName} suma ${normalized.minutesLast5} minutos, ${normalized.shotsLast5} tiros y ${normalized.shotsOnTargetLast5} a puerta en ${normalized.appearancesLast5}/${normalized.matchesEvaluated} partidos utiles.${normalized.penaltiesScoredLast5 ? " Registra participacion reciente en penales." : ""}`;
     return normalized;
   });
 }
@@ -179,6 +228,7 @@ export function buildPlayerGoalCandidates(match, homeTeamData = [], awayTeamData
       market: "Jugador anota en cualquier momento", marketKey: "anytime_goalscorer", selectionKey: `player_goal_${player.playerId}`,
       selection: `${player.playerName} anota`, confidence: player.confidence, confidenceScore: player.goalThreatScore,
       color: player.color, highlightColor: player.color, goalThreatScore: player.goalThreatScore, explanation: player.explanation,
+      conservativeGoalProbability: player.conservativeGoalProbability, sampleQuality: player.sampleQuality, warnings: player.warnings || [],
       origin: "player_goal_candidate", sourceModule: "player_goal_candidate", sourceLabel: "Jugador con posible gol",
       odds: player.odds, decimalOdds: player.odds, bookmaker: player.bookmaker, canAdd: true, requiresReview: player.color !== "green" || !player.odds,
       stats: player, createdAt: new Date().toISOString()
@@ -222,11 +272,11 @@ export async function getPlayerGoalCandidates(dataset, dependencies, { forceRefr
       ]);
       return [fixtureId, { players, lineups, events }];
     })));
-    const rowsFor = (fixtures) => fixtures.map((row) => loaded.get(String(row.fixture.id))).filter((row) => row?.players?.length);
+    const rowsFor = (fixtures) => fixtures.map((row) => ({ ...(loaded.get(String(row.fixture.id)) || {}), fixture: row.fixture })).filter((row) => row?.players?.length);
     const homeLoaded = rowsFor(homeFixtures);
     const awayLoaded = rowsFor(awayFixtures);
     const coverage = { homeFixtures: homeFixtures.length, awayFixtures: awayFixtures.length, homePlayerFixtures: homeLoaded.length, awayPlayerFixtures: awayLoaded.length, lineupsAvailable: [...loaded.values()].filter((row) => row.lineups.length).length, eventsAvailable: [...loaded.values()].filter((row) => row.events.length).length };
-    if (!homeLoaded.length && !awayLoaded.length) return unavailable(dataset, "no_player_coverage", "La API no tiene cobertura suficiente de estadísticas de jugadores para este partido.", coverage);
+    if (!homeLoaded.length && !awayLoaded.length) return unavailable(dataset, "no_player_coverage", "La API no tiene cobertura suficiente de estadisticas de jugadores para este partido.", coverage);
     const contexts = {
       [String(fixture.homeTeamId)]: teamContextFromDataset(dataset, fixture.homeTeamId, "home"),
       [String(fixture.awayTeamId)]: teamContextFromDataset(dataset, fixture.awayTeamId, "away")
@@ -239,7 +289,9 @@ export async function getPlayerGoalCandidates(dataset, dependencies, { forceRefr
     const value = {
       status: built.candidates.length ? "available" : "insufficient_data", fixtureId: key, candidates: built.candidates,
       coverage, message: built.candidates.length ? "" : "Datos insuficientes para sugerir jugador con posible gol.",
-      playersEvaluated: homePlayers.length + awayPlayers.length, source: "api-football + modelo interno", cached: false, generatedAt: new Date(now).toISOString()
+      playersEvaluated: homePlayers.length + awayPlayers.length, source: "api-football + modelo interno",
+      updateReason: "historical_snapshot_calculated_from_api_football",
+      cached: false, generatedAt: new Date(now).toISOString()
     };
     resultCache.set(key, { value, expiresAt: now + CACHE_TTL_MS });
     return value;
