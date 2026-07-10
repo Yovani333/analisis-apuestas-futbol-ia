@@ -41,8 +41,10 @@ test("temporada se abre desde cada encuentro y la actualización de cinco minuto
   assert.match(app, /data-action="season">Ver temporada/);
   assert.match(app, /openSupportingDetail\("teamSeasonStatistics"\)/);
   assert.doesNotMatch(html, /id="auto-refresh"|id="account-auto-refresh"/);
-  assert.match(app, /setInterval\(runAutomaticRefresh, 5 \* 60 \* 1000\)/);
-  assert.match(app, /document\.visibilityState !== "visible" \|\| !selectedFixture\(\)/);
+  assert.doesNotMatch(app, /setInterval\(runAutomaticRefresh, 5 \* 60 \* 1000\)/);
+  assert.doesNotMatch(app, /visibilitychange[\s\S]*runAutomaticRefresh/);
+  assert.match(html, /id="refresh-live-now"[\s\S]*Actualizar ahora/);
+  assert.match(app, /refreshLiveDataNow/);
 });
 
 test("modo oscuro cubre picks individuales y sus métricas", () => {

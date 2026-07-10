@@ -41,7 +41,7 @@ const state = {
   savedTab: "individual",
   expandedParlays: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
-  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", autoRefresh: false, dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
+  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
   currentView: "dashboard",
   hasSearched: false,
   isSearching: false,
@@ -56,8 +56,9 @@ const state = {
   playerGoalLoadingFixtures: new Set(),
   isRefreshingResearch: false,
   isRefreshingStatuses: false,
+  isRefreshingLive: false,
   isCapturingEvidence: false,
-  autoRefreshTimer: null
+  lastLiveRefreshAt: null
 };
 
 const elements = {
@@ -149,7 +150,8 @@ Object.assign(elements, {
 });
 Object.assign(elements, {
   liveEventsStatus: document.querySelector("#live-events-status"), liveEventsContent: document.querySelector("#live-events-content"),
-  livePlayersStatus: document.querySelector("#live-players-status"), livePlayersContent: document.querySelector("#live-players-content")
+  livePlayersStatus: document.querySelector("#live-players-status"), livePlayersContent: document.querySelector("#live-players-content"),
+  refreshLiveNow: document.querySelector("#refresh-live-now"), liveLastUpdated: document.querySelector("#live-last-updated")
 });
 
 document.querySelector("#guide-data-picks-slot")?.append(document.querySelector("#data-picks-panel"));
@@ -968,6 +970,11 @@ function renderSupportingDetail(moduleKey, research) {
 }
 
 function renderLiveData(research, fixture = selectedFixture()) {
+  if (elements.refreshLiveNow) elements.refreshLiveNow.disabled = !fixture || state.isRefreshingLive;
+  if (elements.liveLastUpdated) {
+    const updatedAt = state.lastLiveRefreshAt || fixture?.fetchedAt || research?.updatedAt || research?.generatedAt || null;
+    elements.liveLastUpdated.textContent = updatedAt ? `Última actualización: ${formatUpdatedAt(updatedAt)}` : "Última actualización: sin datos";
+  }
   const entries = [
     ["fixtureEvents", elements.liveEventsStatus, elements.liveEventsContent, "La API todavía no publica eventos para este encuentro."],
     ["playerPerformance", elements.livePlayersStatus, elements.livePlayersContent, "La API todavía no publica rendimiento individual para este encuentro."]
@@ -2469,15 +2476,24 @@ async function refreshResearchData() {
   }
 }
 
-async function runAutomaticRefresh() {
-  if (document.visibilityState !== "visible" || !selectedFixture()) return;
-  await refreshFixtureStatuses();
-  if (selectedFixture()) await refreshResearchData();
-}
-
-function configureAutomaticRefresh() {
-  if (state.autoRefreshTimer) window.clearInterval(state.autoRefreshTimer);
-  state.autoRefreshTimer = window.setInterval(runAutomaticRefresh, 5 * 60 * 1000);
+async function refreshLiveDataNow() {
+  if (!selectedFixture() || state.isRefreshingLive) return;
+  state.isRefreshingLive = true;
+  elements.refreshLiveNow.disabled = true;
+  elements.refreshLiveNow.textContent = "Actualizando...";
+  try {
+    await refreshResearchData();
+    state.lastLiveRefreshAt = new Date().toISOString();
+    renderLiveData(selectedFixture()?.researchData, selectedFixture());
+    showNotice("Datos En vivo actualizados manualmente.");
+  } catch (error) {
+    showNotice(error.message || "No fue posible actualizar En vivo.");
+  } finally {
+    state.isRefreshingLive = false;
+    elements.refreshLiveNow.disabled = !selectedFixture();
+    elements.refreshLiveNow.textContent = "Actualizar ahora";
+    renderLiveData(selectedFixture()?.researchData, selectedFixture());
+  }
 }
 
 function validateFilters() {
@@ -2564,9 +2580,6 @@ elements.setToday.addEventListener("click", () => {
   elements.dateFrom.value = today;
   elements.dateTo.value = today;
 });
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && selectedFixture()) runAutomaticRefresh();
-});
 elements.dataGrid.addEventListener("click", (event) => {
   const card = event.target.closest("[data-category]");
   if (card) openDataDetail(card.dataset.category);
@@ -2584,6 +2597,7 @@ elements.researchGrid.addEventListener("click", (event) => {
 elements.refreshResearch.addEventListener("click", refreshResearchData);
 elements.refreshCoverage.addEventListener("click", refreshResearchData);
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
+elements.refreshLiveNow.addEventListener("click", refreshLiveDataNow);
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.toggleAnalysis.addEventListener("click", () => toggleReadyModule(elements.toggleAnalysis, elements.analysisContent));
 elements.downloadEvidenceTxt.addEventListener("click", downloadCurrentEvidence);
@@ -2828,7 +2842,6 @@ async function initializeApp() {
   elements.alertScore.checked = state.preferences.alertScore !== false;
   elements.alertData.checked = state.preferences.alertData !== false;
   applyTheme(state.preferences.theme || "dark");
-  configureAutomaticRefresh();
   renderAlerts();
   renderParlayDraft();
   renderSavedPicks();

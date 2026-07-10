@@ -137,7 +137,6 @@
             <h2 id="matches-title"><span aria-hidden="true">▣</span> Centro de partidos</h2>
           </div>
           <span id="match-count" class="muted-text">0 partidos</span>
-          <span class="auto-refresh-status" title="Se activa automáticamente cuando seleccionas un partido">Actualización automática · 5 min</span>
           <button id="refresh-fixture-statuses" class="button button--secondary button--compact" type="button" disabled>Actualizar estados</button>
         </div>
 
@@ -360,8 +359,12 @@
 
     <main id="live-content" class="utility-view live-data-view" data-view-panel="live" hidden>
       <section class="utility-heading">
-        <div><p class="eyebrow">Seguimiento del fixture</p><h2>En vivo</h2><p>Eventos publicados y rendimiento individual del encuentro seleccionado. La información se actualiza automáticamente cada cinco minutos.</p></div>
-        <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+        <div><p class="eyebrow">Seguimiento del fixture</p><h2>En vivo</h2><p>Eventos publicados y rendimiento individual del encuentro seleccionado. Actualiza manualmente para reducir consumo de API.</p></div>
+        <div class="live-refresh-actions">
+          <span id="live-last-updated" class="live-last-updated">Última actualización: sin datos</span>
+          <button id="refresh-live-now" class="button button--primary" type="button" disabled>Actualizar ahora</button>
+          <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+        </div>
       </section>
       <section class="live-data-grid">
         <article class="panel live-data-panel"><div class="panel-heading"><div><p class="eyebrow">Cronología oficial</p><h2>Eventos del partido</h2></div><span id="live-events-status" class="status-badge status-badge--unavailable">No disponible</span></div><div id="live-events-content" class="live-data-content"><div class="research-empty">Selecciona un partido para consultar sus eventos.</div></div></article>
@@ -412,7 +415,7 @@
       <section class="utility-heading"><div><p class="eyebrow">Preferencias locales</p><h2>Mi cuenta</h2><p>Configuración guardada únicamente en este navegador.</p></div><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></section>
       <form id="account-form" class="account-grid">
         <section class="panel"><h3>Perfil</h3><label>Nombre visible<input id="account-name" type="text" maxlength="50" placeholder="Tu nombre" /></label><label>Zona horaria<input type="text" value="Hora del Pacífico (America/Tijuana)" disabled /></label></section>
-        <section class="panel"><h3>Preferencias</h3><label><input id="account-dark-mode" type="checkbox" /> Usar modo oscuro</label><p class="account-note">Los datos del partido seleccionado se actualizan automáticamente cada cinco minutos.</p><label>Límite responsable diario<select id="account-daily-limit"><option value="none">Sin configurar</option><option value="1">1 análisis</option><option value="3">3 análisis</option><option value="5">5 análisis</option></select></label></section>
+        <section class="panel"><h3>Preferencias</h3><label><input id="account-dark-mode" type="checkbox" /> Usar modo oscuro</label><p class="account-note">Los datos en vivo se actualizan manualmente desde el botón "Actualizar ahora" para reducir consumo de API.</p><label>Límite responsable diario<select id="account-daily-limit"><option value="none">Sin configurar</option><option value="1">1 análisis</option><option value="3">3 análisis</option><option value="5">5 análisis</option></select></label></section>
         <section class="panel account-responsible"><h3>Juego responsable</h3><p>La cuenta no realiza apuestas ni garantiza resultados. El límite sirve como recordatorio local y no sustituye controles del operador.</p></section>
         <button class="button button--primary" type="submit">Guardar preferencias</button>
       </form>
