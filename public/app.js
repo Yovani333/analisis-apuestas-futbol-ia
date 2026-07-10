@@ -540,6 +540,8 @@ function renderFixtureData() {
   const sourceLabel = fixture.dataSource === "api-football" ? "API-Football" : "escenario sintético";
   const qualityLabel = fixture.dataQuality ? ` · Calidad ${fixture.dataQuality.level} ${fixture.dataQuality.score}/100` : "";
   const venueLabel = fixture.neutralVenue ? " · Sede neutral; equipo 1 y equipo 2" : "";
+  const cacheStatus = fixture.cacheInfo?.status === "hit" ? "Cache" : fixture.cacheInfo?.status === "miss" ? "API" : "Fuente";
+  const cacheReason = fixture.cacheInfo?.reason ? ` - ${fixture.cacheInfo.reason.replaceAll("_", " ")}` : "";
   const probabilities = fixture.favorite?.probabilities;
   const probabilityLine = probabilities && [probabilities.home, probabilities.draw, probabilities.away].every((value) => value !== null)
     ? `<small>1X2: ${escapeHtml(fixture.home)} ${escapeHtml(probabilities.home)}% · Empate ${escapeHtml(probabilities.draw)}% · ${escapeHtml(fixture.away)} ${escapeHtml(probabilities.away)}%</small>`
@@ -560,6 +562,7 @@ function renderFixtureData() {
     <div class="selected-match__details">
       <span>${escapeHtml(fixture.stadium || "Sede por confirmar")}${escapeHtml(venueLabel)}</span>
       <span class="source-chip source-chip--api">${escapeHtml(sourceLabel)}</span>
+      <span class="source-chip source-chip--model">${escapeHtml(cacheStatus)}${escapeHtml(cacheReason)}</span>
       ${fixture.dataQuality ? `<span class="data-quality data-quality--${escapeHtml(String(fixture.dataQuality.level || "").toLowerCase())}">Confianza de datos ${escapeHtml(fixture.dataQuality.score)}/100</span>` : ""}
     </div>
     ${probabilityLine}`;

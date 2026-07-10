@@ -105,6 +105,7 @@ export const footballDataService = {
       pickRecommendation: payload.pickRecommendation || null,
       dataQuality: payload.dataQuality || null,
       researchData: payload.researchData || null,
+      cacheInfo: payload.cacheInfo || payload.researchData?.cacheInfo || null,
       unavailableData: payload.unavailable || [],
       qualityAlerts: payload.qualityAlerts || [],
       fetchedAt: payload.fetchedAt,

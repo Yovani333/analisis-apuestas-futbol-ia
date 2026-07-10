@@ -2,6 +2,7 @@ const state = {
   networkRequests: 0,
   cacheHits: 0,
   cacheMisses: 0,
+  pendingHits: 0,
   failures: 0,
   lastRequestAt: "",
   lastEndpoint: "",
@@ -41,6 +42,10 @@ export function recordApiFootballCacheMiss() {
   state.cacheMisses += 1;
 }
 
+export function recordApiFootballPendingHit() {
+  state.pendingHits += 1;
+}
+
 export function recordApiFootballResponse({ endpoint, headers }) {
   state.networkRequests += 1;
   state.lastRequestAt = new Date().toISOString();
@@ -63,6 +68,7 @@ export function getApiFootballObservability() {
     networkRequests: state.networkRequests,
     cacheHits: state.cacheHits,
     cacheMisses: state.cacheMisses,
+    pendingHits: state.pendingHits,
     cacheHitRatePct: totalCacheLookups ? Number(((state.cacheHits / totalCacheLookups) * 100).toFixed(1)) : 0,
     failures: state.failures,
     lastRequestAt: state.lastRequestAt,
@@ -76,6 +82,7 @@ export function resetApiFootballObservability() {
   state.networkRequests = 0;
   state.cacheHits = 0;
   state.cacheMisses = 0;
+  state.pendingHits = 0;
   state.failures = 0;
   state.lastRequestAt = "";
   state.lastEndpoint = "";

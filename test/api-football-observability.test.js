@@ -5,6 +5,7 @@ import {
   recordApiFootballCacheHit,
   recordApiFootballCacheMiss,
   recordApiFootballFailure,
+  recordApiFootballPendingHit,
   recordApiFootballResponse,
   resetApiFootballObservability
 } from "../server/services/api-football-observability.service.js";
@@ -19,9 +20,11 @@ test("registra aciertos de caché sin exponer URL ni credenciales", () => {
   recordApiFootballCacheHit();
   recordApiFootballCacheHit();
   recordApiFootballCacheMiss();
+  recordApiFootballPendingHit();
   const metrics = getApiFootballObservability();
   assert.equal(metrics.cacheHits, 2);
   assert.equal(metrics.cacheMisses, 1);
+  assert.equal(metrics.pendingHits, 1);
   assert.equal(metrics.cacheHitRatePct, 66.7);
   assert.doesNotMatch(JSON.stringify(metrics), /api[_-]?key|x-apisports-key/i);
 });

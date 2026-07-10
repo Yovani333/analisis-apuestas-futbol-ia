@@ -13,6 +13,7 @@ import {
   recordApiFootballCacheHit,
   recordApiFootballCacheMiss,
   recordApiFootballFailure,
+  recordApiFootballPendingHit,
   recordApiFootballResponse
 } from "./api-football-observability.service.js";
 import { evaluatePickRecommendations } from "./pick-recommendation.service.js";
@@ -24,15 +25,29 @@ import { resolveModuleQuality } from "./module-quality.service.js";
 const leagueCache = new Map();
 const requestCache = new Map();
 const datasetCache = new Map();
+const pendingDatasetRequests = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 const LIVE_CACHE_TTL = 60 * 1000;
 const PREDICTION_CACHE_TTL = 30 * 60 * 1000;
+const HISTORICAL_CACHE_TTL = 24 * 60 * 60 * 1000;
+const SCHEDULED_DATASET_CACHE_TTL = 30 * 60 * 1000;
+const FINISHED_DATASET_CACHE_TTL = 12 * 60 * 60 * 1000;
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
 function getCached(key) {
   const item = requestCache.get(key);
   if (!item || item.expiresAt < Date.now()) return null;
   return item.value;
+}
+
+function cacheMeta({ status, source, ttlMs, expiresAt, reason }) {
+  return {
+    status,
+    source,
+    ttlMs,
+    expiresAt: expiresAt ? new Date(expiresAt).toISOString() : "",
+    reason
+  };
 }
 
 async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
@@ -83,23 +98,23 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
 }
 
 export async function getPreviousFixturesForTeam(teamId, limit = 5) {
-  return apiRequest("/fixtures", { team: teamId, last: limit, timezone: "UTC" });
+  return apiRequest("/fixtures", { team: teamId, last: limit, timezone: "UTC" }, SCHEDULED_DATASET_CACHE_TTL);
 }
 
 export async function getFixtureStatistics(fixtureId) {
-  return apiRequest("/fixtures/statistics", { fixture: fixtureId });
+  return apiRequest("/fixtures/statistics", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
 }
 
 export async function getFixtureEvents(fixtureId) {
-  return apiRequest("/fixtures/events", { fixture: fixtureId });
+  return apiRequest("/fixtures/events", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
 }
 
 export async function getFixturePlayers(fixtureId) {
-  return apiRequest("/fixtures/players", { fixture: fixtureId });
+  return apiRequest("/fixtures/players", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
 }
 
 export async function getFixtureLineups(fixtureId) {
-  return apiRequest("/fixtures/lineups", { fixture: fixtureId });
+  return apiRequest("/fixtures/lineups", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
 }
 
 function chooseSeason(seasons, requestedSeason, targetDate) {
@@ -276,8 +291,10 @@ function availability(value) {
 }
 
 export function invalidateFixtureCache(fixtureId) {
-  const cachedDataset = datasetCache.get(fixtureId)?.value;
+  const key = String(fixtureId);
+  const cachedDataset = datasetCache.get(key)?.value || datasetCache.get(fixtureId)?.value;
   const relatedTeamIds = new Set([cachedDataset?.fixture?.homeTeamId, cachedDataset?.fixture?.awayTeamId].filter(Boolean).map(String));
+  datasetCache.delete(key);
   datasetCache.delete(fixtureId);
   for (const cacheKey of requestCache.keys()) {
     const url = new URL(cacheKey);
@@ -310,10 +327,7 @@ export async function getPlayerGoalFixtureDataset(fixtureId) {
   };
 }
 
-export async function getFixtureDataset(fixtureId, { forceRefresh = false, includeHistorical = false } = {}) {
-  if (forceRefresh) invalidateFixtureCache(fixtureId);
-  const cachedDataset = datasetCache.get(fixtureId);
-  if (cachedDataset?.expiresAt > Date.now() && (!includeHistorical || cachedDataset.value.historicalEstimatedXg)) return cachedDataset.value;
+async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHistorical = false } = {}) {
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const base = fixtureRows[0];
   if (!base) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
@@ -470,8 +484,57 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
     return reviewed ? { ...market, ...reviewed } : market;
   });
   dataset.analysisInput = buildAnalysisInput(dataset);
-  datasetCache.set(fixtureId, { value: dataset, expiresAt: Date.now() + CACHE_TTL });
   return dataset;
+}
+
+function datasetCacheTtl(fixture) {
+  if (fixture?.status === "live") return LIVE_CACHE_TTL;
+  if (fixture?.status === "finished") return FINISHED_DATASET_CACHE_TTL;
+  return SCHEDULED_DATASET_CACHE_TTL;
+}
+
+function withCacheInfo(dataset, info) {
+  return {
+    ...dataset,
+    cacheInfo: info,
+    researchData: dataset.researchData ? { ...dataset.researchData, cacheInfo: info } : dataset.researchData
+  };
+}
+
+export async function getFixtureDataset(fixtureId, { forceRefresh = false, includeHistorical = false } = {}) {
+  const key = String(fixtureId);
+  if (forceRefresh) invalidateFixtureCache(key);
+  const cachedDataset = datasetCache.get(key);
+  if (cachedDataset?.expiresAt > Date.now() && (!includeHistorical || cachedDataset.value.historicalEstimatedXg)) {
+    return withCacheInfo(cachedDataset.value, cacheMeta({
+      status: "hit",
+      source: "memory-dataset-cache",
+      ttlMs: Math.max(0, cachedDataset.expiresAt - Date.now()),
+      expiresAt: cachedDataset.expiresAt,
+      reason: "Se reutilizo el dataset normalizado del fixture; no se recalcularon historicos."
+    }));
+  }
+  if (!forceRefresh && pendingDatasetRequests.has(key)) {
+    recordApiFootballPendingHit();
+    return pendingDatasetRequests.get(key);
+  }
+  const request = (async () => {
+    const updateReason = forceRefresh ? "refresh_forzado_por_usuario" : cachedDataset ? "cache_expirado" : "primera_carga";
+    const dataset = await buildFixtureDataset(key, { forceRefresh, includeHistorical });
+    const ttlMs = datasetCacheTtl(dataset.fixture);
+    const expiresAt = Date.now() + ttlMs;
+    const value = withCacheInfo(dataset, cacheMeta({
+      status: "miss",
+      source: "api-football",
+      ttlMs,
+      expiresAt,
+      reason: updateReason
+    }));
+    datasetCache.set(key, { value, expiresAt });
+    return value;
+  })().finally(() => pendingDatasetRequests.delete(key));
+  pendingDatasetRequests.set(key, request);
+  return request;
 }
 
 export async function getFixtureResult(fixtureId) {
