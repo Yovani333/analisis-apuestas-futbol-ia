@@ -190,6 +190,12 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/player-goal-candidates`);
   },
 
+  async compareSimulationTeams(params) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", metrics: [], message: "La simulación requiere datos reales de API-Football." };
+    return requestJson(`/api/simulation/compare?${new URLSearchParams(params)}`);
+  },
+
   async getFixtureResult(fixtureId) {
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`);
     return payload.result;

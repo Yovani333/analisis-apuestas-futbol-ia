@@ -52,6 +52,7 @@ const state = {
   isLoadingTeamGoals: false,
   isLoadingCorners: false,
   isLoadingSpecificMarkets: false,
+  isLoadingSimulation: false,
   teamPerformanceLoadingFixtures: new Set(),
   playerGoalLoadingFixtures: new Set(),
   isRefreshingResearch: false,
@@ -129,6 +130,20 @@ const elements = {
   historyMetrics: document.querySelector("#history-metrics"),
   updateParlayResults: document.querySelector("#update-parlay-results")
 };
+
+Object.assign(elements, {
+  simulationCompetition: document.querySelector("#simulation-competition"),
+  simulationWindow: document.querySelector("#simulation-window"),
+  simulationTeamAId: document.querySelector("#simulation-team-a-id"),
+  simulationTeamAName: document.querySelector("#simulation-team-a-name"),
+  simulationTeamBId: document.querySelector("#simulation-team-b-id"),
+  simulationTeamBName: document.querySelector("#simulation-team-b-name"),
+  simulationFixtureDate: document.querySelector("#simulation-fixture-date"),
+  simulationUseSelected: document.querySelector("#simulation-use-selected"),
+  simulationCompare: document.querySelector("#simulation-compare"),
+  simulationStatus: document.querySelector("#simulation-status"),
+  simulationResults: document.querySelector("#simulation-results")
+});
 
 Object.assign(elements, {
   themeToggle: document.querySelector("#theme-toggle"), alertCount: document.querySelector("#alert-count"),
@@ -987,6 +1002,81 @@ function renderLiveData(research, fixture = selectedFixture()) {
     contentElement.innerHTML = fixture && research
       ? `${fixtureProgressBanner(fixture)}${renderSupportingDetail(key, research)}`
       : `<div class="research-empty">${escapeHtml(fixture ? emptyMessage : "Selecciona un partido para consultar esta información.")}</div>`;
+  }
+}
+
+function localDatetimeValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function useSelectedFixtureForSimulation() {
+  const fixture = selectedFixture();
+  if (!fixture) return showNotice("Selecciona primero un encuentro en Dashboard.");
+  elements.simulationCompetition.value = fixture.leagueName || "";
+  elements.simulationTeamAId.value = fixture.homeTeamId || "";
+  elements.simulationTeamAName.value = fixture.home || "";
+  elements.simulationTeamBId.value = fixture.awayTeamId || "";
+  elements.simulationTeamBName.value = fixture.away || "";
+  elements.simulationFixtureDate.value = localDatetimeValue(fixture.utcDateTime || fixture.date);
+  elements.simulationCompare.dataset.fixtureId = fixture.id || "";
+  showNotice("Simulación preparada con el encuentro seleccionado.");
+}
+
+function renderSimulationComparison(result) {
+  const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
+  elements.simulationStatus.className = `status-badge status-badge--${statusClass(status)}`;
+  elements.simulationStatus.textContent = status;
+  if (!result.metrics?.length) {
+    elements.simulationResults.innerHTML = `<div class="research-empty"><strong>${escapeHtml(status)}</strong><p>${escapeHtml(result.message || "No hay datos suficientes para comparar equipos.")}</p></div>`;
+    return;
+  }
+  const rows = result.metrics.map((row) => `<tr>
+    <td>${escapeHtml(row.label)}</td>
+    <td>${displayValue(row.teamA)}${escapeHtml(row.suffix || "")}</td>
+    <td>${displayValue(row.teamB)}${escapeHtml(row.suffix || "")}</td>
+    <td>${row.difference === null ? "No disponible" : `${displayValue(row.difference)}${escapeHtml(row.suffix || "")}`}</td>
+    <td>${escapeHtml(row.advantage)}</td>
+    <td>${escapeHtml(row.quality === "available" ? "Disponible" : "Parcial")}</td>
+  </tr>`).join("");
+  const fixtureList = (team) => `<article><strong>${escapeHtml(team.name)}</strong><span>${displayValue(team.matchesWithStatistics, 0)} / ${displayValue(result.windowSize, 0)} partidos con estadística</span><small>${team.fixturesUsed.map((item) => `${(item.date || "").slice(0, 10)} ${item.home} vs ${item.away}`).join(" | ") || "Sin fixtures útiles"}</small></article>`;
+  elements.simulationResults.innerHTML = `<div class="simulation-summary">
+    <article><span>Fuente</span><strong>${escapeHtml(result.source)}</strong><small>${escapeHtml(result.modelVersion || "")}</small></article>
+    <article><span>Ventana</span><strong>${displayValue(result.windowSize, 0)}</strong><small>Partidos previos por equipo</small></article>
+    <article><span>Competición</span><strong>${escapeHtml(result.competition || "No especificada")}</strong><small>${escapeHtml(formatUpdatedAt(result.generatedAt))}</small></article>
+  </div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Métrica</th><th>${escapeHtml(result.teamA.name)}</th><th>${escapeHtml(result.teamB.name)}</th><th>Diferencia</th><th>Ventaja</th><th>Calidad</th></tr></thead><tbody>${rows}</tbody></table></div><div class="simulation-fixtures">${fixtureList(result.teamA)}${fixtureList(result.teamB)}</div>`;
+}
+
+async function runSimulationComparison() {
+  if (state.isLoadingSimulation) return;
+  const params = {
+    competition: elements.simulationCompetition.value,
+    window: elements.simulationWindow.value || "5",
+    teamAId: elements.simulationTeamAId.value,
+    teamAName: elements.simulationTeamAName.value,
+    teamBId: elements.simulationTeamBId.value,
+    teamBName: elements.simulationTeamBName.value,
+    fixtureDate: elements.simulationFixtureDate.value ? new Date(elements.simulationFixtureDate.value).toISOString() : ""
+  };
+  if (elements.simulationCompare.dataset.fixtureId) params.fixtureId = elements.simulationCompare.dataset.fixtureId;
+  state.isLoadingSimulation = true;
+  elements.simulationCompare.disabled = true;
+  elements.simulationCompare.textContent = "Comparando...";
+  elements.simulationStatus.className = "status-badge status-badge--processing";
+  elements.simulationStatus.textContent = "Procesando";
+  elements.simulationResults.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Consultando histórico desde API-Football o caché...</p></div>';
+  try {
+    const result = await footballDataService.compareSimulationTeams(params);
+    renderSimulationComparison(result);
+  } catch (error) {
+    renderSimulationComparison({ status: "not_available", metrics: [], message: error.message });
+  } finally {
+    state.isLoadingSimulation = false;
+    elements.simulationCompare.disabled = false;
+    elements.simulationCompare.textContent = "Comparar";
   }
 }
 
@@ -2598,6 +2688,9 @@ elements.refreshResearch.addEventListener("click", refreshResearchData);
 elements.refreshCoverage.addEventListener("click", refreshResearchData);
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.refreshLiveNow.addEventListener("click", refreshLiveDataNow);
+elements.simulationUseSelected.addEventListener("click", useSelectedFixtureForSimulation);
+elements.simulationCompare.addEventListener("click", runSimulationComparison);
+[elements.simulationTeamAId, elements.simulationTeamBId].forEach((input) => input.addEventListener("input", () => { elements.simulationCompare.dataset.fixtureId = ""; }));
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.toggleAnalysis.addEventListener("click", () => toggleReadyModule(elements.toggleAnalysis, elements.analysisContent));
 elements.downloadEvidenceTxt.addEventListener("click", downloadCurrentEvidence);

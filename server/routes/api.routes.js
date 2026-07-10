@@ -5,7 +5,7 @@ import { ALLOWED_LEAGUES } from "../config/leagues.js";
 import { AppError } from "../errors.js";
 import { parseFixtureId, parseFixtureQuery } from "../middleware/validate.js";
 import {
-  getFixtureDataset, getFixtureEvents, getFixtureLineups, getFixturePlayers, getFixtureResult, getPlayerGoalFixtureDataset, getPreviousFixturesForTeam, resolveLeague, searchFixtures
+  getFixtureDataset, getFixtureEvents, getFixtureLineups, getFixturePlayers, getFixtureResult, getFixtureStatistics, getPlayerGoalFixtureDataset, getPreviousFixturesForTeam, resolveLeague, searchFixtures
 } from "../services/api-football.service.js";
 import { generateAnalysis } from "../services/openai.service.js";
 import { generateRuleBasedAnalysis } from "../services/rule-analysis.service.js";
@@ -20,6 +20,7 @@ import { runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/
 import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
 import { getPlayerGoalCandidates } from "../services/player-goal-candidates.service.js";
+import { compareTeamsWithHistoricalStats } from "../services/simulation-comparator.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -88,6 +89,27 @@ apiRouter.get("/fixtures/:fixtureId/research", requireLiveMode, researchLimiter,
 
 apiRouter.get("/fixtures/:fixtureId/result", requireLiveMode, asyncRoute(async (req, res) => {
   res.json({ source: "api-football", result: await getFixtureResult(parseFixtureId(req.params.fixtureId)) });
+}));
+
+apiRouter.get("/simulation/compare", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = req.query.fixtureId ? parseFixtureId(req.query.fixtureId) : null;
+  const windowSize = Number(req.query.window || 5);
+  let teamA = { id: req.query.teamAId, name: String(req.query.teamAName || "Equipo A") };
+  let teamB = { id: req.query.teamBId, name: String(req.query.teamBName || "Equipo B") };
+  let fixtureDate = String(req.query.fixtureDate || "");
+  let competition = String(req.query.competition || "");
+  if (fixtureId) {
+    const dataset = await getFixtureDataset(fixtureId);
+    teamA = { id: dataset.fixture.homeTeamId, name: dataset.fixture.home };
+    teamB = { id: dataset.fixture.awayTeamId, name: dataset.fixture.away };
+    fixtureDate = dataset.fixture.utcDateTime || dataset.fixture.date || fixtureDate;
+    competition = dataset.fixture.leagueName || competition;
+  }
+  const result = await compareTeamsWithHistoricalStats({ teamA, teamB, fixtureDate, windowSize, competition }, {
+    getPreviousFixtures: getPreviousFixturesForTeam,
+    getFixtureStatistics
+  });
+  res.json(result);
 }));
 
 apiRouter.get("/fixtures/:fixtureId/team-performance", requireLiveMode, asyncRoute(async (req, res) => {

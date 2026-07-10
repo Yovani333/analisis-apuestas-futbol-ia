@@ -6,8 +6,9 @@ const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 
-test("las vistas principales siguen el orden Dashboard, Transparencia, Guía, Catálogo y En vivo", () => {
-  assert.match(html, /data-view="dashboard"[\s\S]*data-view="transparency">Transparencia de datos<\/button>\s*<button[^>]+data-view="guide">Guía de análisis<\/button>\s*<button[^>]+data-view="markets">Catálogo de mercados<\/button>\s*<button[^>]+data-view="live">En vivo/);
+test("las vistas principales siguen el orden Dashboard, Simulación, Transparencia, Guía, Catálogo y En vivo", () => {
+  assert.match(html, /data-view="dashboard"[\s\S]*data-view="simulation">Simulación<\/button>\s*<button[^>]+data-view="transparency">Transparencia de datos<\/button>\s*<button[^>]+data-view="guide">Guía de análisis<\/button>\s*<button[^>]+data-view="markets">Catálogo de mercados<\/button>\s*<button[^>]+data-view="live">En vivo/);
+  assert.match(html, /data-view-panel="simulation"[\s\S]*Comparador de equipos con datos reales/);
   assert.match(html, /data-view-panel="markets"/);
   const guide = html.slice(html.indexOf('data-view-panel="guide"'), html.indexOf('data-view-panel="markets"'));
   assert.doesNotMatch(guide, /id="specific-markets-panel"/);
