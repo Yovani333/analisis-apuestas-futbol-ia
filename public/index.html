@@ -201,6 +201,17 @@
           <div id="data-picks-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para evaluar mercados con los datos disponibles.</div></div>
         </section>
 
+        <section id="outcome-panel" class="panel outcome-panel advanced-module-panel" aria-labelledby="outcome-title">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Selector obligatorio 1X2</p><h2 id="outcome-title">Gana / Empata / Pierde <button class="info-tooltip" type="button" data-tooltip-key="model_probability" aria-label="Informacion sobre Probabilidad del modelo" aria-expanded="false">?</button></h2></div>
+            <div class="panel-actions">
+              <button id="show-outcome" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button>
+              <span id="outcome-status" class="status-badge status-badge--unavailable">No disponible</span>
+            </div>
+          </div>
+          <div id="outcome-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para ver las tres posibilidades 1X2 sin forzar pick.</div></div>
+        </section>
+
         <section id="poisson-panel" class="panel poisson-panel advanced-module-panel" aria-labelledby="poisson-title">
           <div class="panel-heading">
             <div><p class="eyebrow">Estadísticas avanzadas</p><h2 id="poisson-title">Motor Poisson <button class="info-tooltip" type="button" data-tooltip-key="poisson" aria-label="Información sobre Modelo Poisson" aria-expanded="false">?</button></h2></div>
