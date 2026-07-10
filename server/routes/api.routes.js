@@ -80,6 +80,7 @@ apiRouter.get("/fixtures/:fixtureId/research", requireLiveMode, researchLimiter,
     source: dataset.source,
     fetchedAt: dataset.fetchedAt,
     refreshed: forceRefresh,
+    cacheInfo: dataset.cacheInfo || null,
     researchData: dataset.researchData
   });
 }));
