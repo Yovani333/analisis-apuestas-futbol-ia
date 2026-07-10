@@ -27,6 +27,7 @@ const state = {
   selectedFixtureId: null,
   analysisByFixture: new Map(),
   dataPicksByFixture: new Map(),
+  outcomeByFixture: new Map(),
   poissonByFixture: new Map(),
   teamGoalsByFixture: new Map(),
   cornersByFixture: new Map(),
@@ -46,6 +47,7 @@ const state = {
   isSearching: false,
   isAnalyzing: false,
   isLoadingDataPicks: false,
+  isLoadingOutcome: false,
   isLoadingPoisson: false,
   isLoadingTeamGoals: false,
   isLoadingCorners: false,
@@ -97,6 +99,9 @@ const elements = {
   showDataPicks: document.querySelector("#show-data-picks"),
   dataPicksStatus: document.querySelector("#data-picks-status"),
   dataPicksContent: document.querySelector("#data-picks-content"),
+  showOutcome: document.querySelector("#show-outcome"),
+  outcomeStatus: document.querySelector("#outcome-status"),
+  outcomeContent: document.querySelector("#outcome-content"),
   showPoisson: document.querySelector("#show-poisson"),
   poissonStatus: document.querySelector("#poisson-status"),
   poissonContent: document.querySelector("#poisson-content"),
@@ -273,6 +278,7 @@ function toggleReadyModule(button, content) {
 const guideModuleParts = {
   "guide-coverage-module": { contents: () => [], buttons: () => [] },
   "guide-team-goals-module": { contents: () => [elements.teamGoalsContent], buttons: () => [elements.showTeamGoals], load: () => loadTeamGoals() },
+  "guide-outcome-module": { contents: () => [elements.outcomeContent], buttons: () => [elements.showOutcome], load: () => loadOutcomeScenarios() },
   "guide-poisson-module": { contents: () => [elements.poissonContent], buttons: () => [elements.showPoisson], load: () => loadPoisson() },
   "guide-odds-module": { contents: () => [], buttons: () => [] },
   "guide-data-picks-module": { contents: () => [elements.dataPicksContent], buttons: () => [elements.showDataPicks], load: () => loadDataPicks() }
@@ -577,6 +583,16 @@ function renderFixtureData() {
   }
   elements.dataPicksContent.hidden = true;
   if (savedDataPicks) { elements.showDataPicks.textContent = "Mostrar"; elements.showDataPicks.classList.remove("button--ready"); }
+  elements.showOutcome.disabled = state.isLoadingOutcome;
+  const savedOutcome = state.outcomeByFixture.get(fixture.id);
+  if (savedOutcome) renderOutcomeScenarios(savedOutcome);
+  else {
+    elements.outcomeStatus.className = "status-badge status-badge--unavailable";
+    elements.outcomeStatus.textContent = "No disponible";
+    elements.outcomeContent.innerHTML = '<div class="research-empty">Pulsa "Mostrar" para revisar local, empate y visitante.</div>';
+  }
+  elements.outcomeContent.hidden = true;
+  if (savedOutcome) { elements.showOutcome.textContent = "Mostrar"; elements.showOutcome.classList.remove("button--ready"); }
   elements.showPoisson.disabled = state.isLoadingPoisson;
   const savedPoisson = state.poissonByFixture.get(fixture.id);
   if (savedPoisson) renderPoisson(savedPoisson);
@@ -1789,6 +1805,67 @@ function saveDataPick(selectionKey) {
   });
 }
 
+function outcomeDecisionClass(decision = "") {
+  if (decision === "apuesta_recomendada") return "green";
+  if (decision === "apuesta_con_valor_pero_riesgo_alto" || decision === "modelos_contradictorios") return "orange";
+  if (decision === "sin_valor" || decision === "datos_insuficientes") return "red";
+  return "gray";
+}
+
+function renderOutcomeScenarios(result) {
+  const scenarios = result?.scenarios || [];
+  const statusLabels = {
+    available: ["Disponible", "available"], partial: ["Parcial", "partial"],
+    not_available: ["No disponible", "unavailable"], error: ["Error", "unavailable"]
+  };
+  const [label, status] = statusLabels[result?.status] || statusLabels.not_available;
+  elements.outcomeStatus.className = `status-badge status-badge--${status}`;
+  elements.outcomeStatus.textContent = label;
+  if (!scenarios.length) {
+    elements.outcomeContent.innerHTML = `<div class="research-empty"><strong>${escapeHtml(result?.decisionLabel || label)}</strong><p>${escapeHtml((result?.missingData || []).join("; ") || result?.warning || "No hay datos suficientes para calcular 1X2.")}</p></div>`;
+    return;
+  }
+  const warningText = result.warning || "EV positivo no decide por si solo.";
+  const scenarioCards = scenarios.map((item) => {
+    const support = item.supportingData?.slice(0, 4).join(" | ") || "Sin soporte suficiente.";
+    const contradictions = item.contradictingData?.length ? item.contradictingData.join(" ") : "Sin contradicciones fuertes.";
+    return `<article class="outcome-card outcome-card--${escapeHtml(outcomeDecisionClass(item.decision))}">
+      <header><span>${escapeHtml(item.label)}</span><strong>${displayValue(item.probabilityPct)}%</strong></header>
+      <div class="outcome-bar"><i style="width:${Math.min(100, Number(item.probabilityPct || 0))}%"></i></div>
+      <dl><div><dt>Confianza futbolistica</dt><dd>${displayValue(item.footballConfidenceScore, 0)}/100</dd></div><div><dt>Cuota</dt><dd>${item.decimalOdds ? `${displayValue(item.decimalOdds)} (${escapeHtml(item.bookmaker)})` : "No disponible"}</dd></div><div><dt>EV</dt><dd>${item.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(item.expectedValuePct)}%`}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(item.decisionLabel)}</dd></div></dl>
+      <p><b>Apoya:</b> ${escapeHtml(support)}</p><p><b>Contradice:</b> ${escapeHtml(contradictions)}</p>
+    </article>`;
+  }).join("");
+  elements.outcomeContent.innerHTML = `<div class="outcome-summary">
+    <article><span>Resultado mas probable</span><strong>${escapeHtml(result.resultMostLikely || "No disponible")}</strong><small>${escapeHtml(result.decisionLabel || "No bet")}</small></article>
+    <article><span>Confianza</span><strong>${displayValue(result.confidenceScore, 0)}/100</strong><small>Riesgo ${escapeHtml(result.risk || "medium")}</small></article>
+    <article><span>Fuentes</span><strong>${escapeHtml((result.supportingData || []).join(" + ") || "Modelo interno")}</strong><small>${escapeHtml((result.missingData || []).slice(0, 2).join(" | "))}</small></article>
+  </div><div class="outcome-grid">${scenarioCards}</div><p class="market-disclaimer">${escapeHtml(warningText)}</p>`;
+}
+
+async function loadOutcomeScenarios() {
+  const fixture = selectedFixture();
+  if (!fixture || state.isLoadingOutcome) return;
+  if (state.outcomeByFixture.has(fixture.id)) return toggleReadyModule(elements.showOutcome, elements.outcomeContent);
+  state.isLoadingOutcome = true;
+  elements.showOutcome.disabled = true;
+  elements.showOutcome.textContent = "Calculando...";
+  elements.outcomeStatus.className = "status-badge status-badge--processing";
+  elements.outcomeStatus.textContent = "Calculando";
+  try {
+    const result = await footballDataService.getOutcomeScenarios(fixture);
+    state.outcomeByFixture.set(fixture.id, result);
+    renderOutcomeScenarios(result);
+    showModuleReady(elements.showOutcome, elements.outcomeContent);
+  } catch (error) {
+    renderOutcomeScenarios({ status: "error", scenarios: [], warning: error.message, decisionLabel: "Error" });
+  } finally {
+    state.isLoadingOutcome = false;
+    elements.showOutcome.disabled = !selectedFixture();
+    if (!state.outcomeByFixture.has(fixture.id)) elements.showOutcome.textContent = "Mostrar";
+  }
+}
+
 function renderPoisson(result) {
   const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
   elements.poissonStatus.className = `status-badge status-badge--${statusClass(status)}`;
@@ -2517,6 +2594,7 @@ elements.dataPicksContent.addEventListener("click", (event) => {
   if (addButton) addDataPickToParlay(addButton.dataset.addDataPick);
   if (saveButton) saveDataPick(saveButton.dataset.saveDataPick);
 });
+elements.showOutcome.addEventListener("click", loadOutcomeScenarios);
 elements.showPoisson.addEventListener("click", loadPoisson);
 elements.poissonContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-poisson]");

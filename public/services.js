@@ -139,6 +139,12 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/poisson`, { method: "POST" });
   },
 
+  async getOutcomeScenarios(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", scenarios: [], warning: "El selector 1X2 requiere datos reales normalizados." };
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/outcome-1x2`, { method: "POST" });
+  },
+
   async getTeamGoalProbability(fixture) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", picks: [], warning: "La probabilidad de gol requiere datos reales normalizados." };

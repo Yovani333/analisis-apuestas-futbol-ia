@@ -13,6 +13,7 @@ import { generateDataPicks } from "../services/data-picks.service.js";
 import { calculatePoissonModel } from "../services/poisson-model.service.js";
 import { calculateTeamGoalProbability } from "../services/team-goal-probability.service.js";
 import { calculateCornersModel } from "../services/corners-model.service.js";
+import { buildOutcomeScenarios } from "../services/outcome-scenarios.service.js";
 import { buildSpecificMarkets } from "../services/specific-markets.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 import { runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
@@ -184,6 +185,13 @@ apiRouter.post("/fixtures/:fixtureId/models/corners", requireLiveMode, asyncRout
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const dataset = await getFixtureDataset(fixtureId);
   res.json(dataset.cornersModel || calculateCornersModel(dataset));
+}));
+
+apiRouter.post("/fixtures/:fixtureId/models/outcome-1x2", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const dataset = await getFixtureDataset(fixtureId);
+  dataset.poissonModel ||= calculatePoissonModel(dataset);
+  res.json(buildOutcomeScenarios(dataset));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/markets/specific", requireLiveMode, asyncRoute(async (req, res) => {
