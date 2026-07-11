@@ -196,6 +196,12 @@ export const footballDataService = {
     return requestJson(`/api/simulation/compare?${new URLSearchParams(params)}`);
   },
 
+  async runAdvancedSimulation(params) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", warnings: ["La simulacion avanzada requiere datos reales normalizados."], message: "Activa API-Football para ejecutar Elo + Dixon-Coles." };
+    return requestJson(`/api/simulation/advanced?${new URLSearchParams(params)}`);
+  },
+
   async getFixtureResult(fixtureId) {
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`);
     return payload.result;

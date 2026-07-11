@@ -21,6 +21,7 @@ import { getTeamPerformanceForFixture } from "../services/team-performance.servi
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
 import { getPlayerGoalCandidates } from "../services/player-goal-candidates.service.js";
 import { compareTeamsWithHistoricalStats } from "../services/simulation-comparator.service.js";
+import { runAdvancedSimulation } from "../services/advanced-simulation.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -110,6 +111,36 @@ apiRouter.get("/simulation/compare", requireLiveMode, asyncRoute(async (req, res
     getFixtureStatistics
   });
   res.json(result);
+}));
+
+apiRouter.get("/simulation/advanced", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = req.query.fixtureId ? parseFixtureId(req.query.fixtureId) : null;
+  const windowSize = Number(req.query.window || 5);
+  let teamA = { id: req.query.teamAId, name: String(req.query.teamAName || "Equipo A") };
+  let teamB = { id: req.query.teamBId, name: String(req.query.teamBName || "Equipo B") };
+  let fixtureDate = String(req.query.fixtureDate || "");
+  let competition = String(req.query.competition || "");
+  let dataset = null;
+  if (fixtureId) {
+    dataset = await getFixtureDataset(fixtureId);
+    dataset.poissonModel ||= calculatePoissonModel(dataset);
+    teamA = { id: dataset.fixture.homeTeamId, name: dataset.fixture.home };
+    teamB = { id: dataset.fixture.awayTeamId, name: dataset.fixture.away };
+    fixtureDate = dataset.fixture.utcDateTime || dataset.fixture.date || fixtureDate;
+    competition = dataset.fixture.leagueName || competition;
+  }
+  res.json(await runAdvancedSimulation({
+    fixtureId,
+    teamA,
+    teamB,
+    fixtureDate,
+    windowSize,
+    competition,
+    dataset
+  }, {
+    getPreviousFixtures: getPreviousFixturesForTeam,
+    getFixtureStatistics
+  }));
 }));
 
 apiRouter.get("/fixtures/:fixtureId/team-performance", requireLiveMode, asyncRoute(async (req, res) => {
