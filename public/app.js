@@ -1109,6 +1109,7 @@ function renderAdvancedSimulation(result = {}) {
   const list = (items = []) => items.length ? items.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>No disponible</li>";
   const api = result.audit?.apiConsumption || {};
   const cache = result.cacheInfo || {};
+  const validation = result.validation || {};
   elements.simulationAdvancedResults.innerHTML = `<section class="simulation-advanced">
     <div class="panel-heading">
       <div><p class="eyebrow">Elo + Dixon-Coles + contexto</p><h3>Resumen final de simulación avanzada</h3></div>
@@ -1131,7 +1132,7 @@ function renderAdvancedSimulation(result = {}) {
     </div>
     <div class="simulation-grid-two">
       <article><h4>Advertencias</h4><ul>${list(result.warnings)}</ul></article>
-      <article><h4>Auditoría</h4><ul><li>ID: ${escapeHtml(result.audit?.recordId || "No disponible")}</li><li>Versión Elo: ${escapeHtml(result.audit?.versions?.elo || "")}</li><li>Versión Dixon-Coles: ${escapeHtml(result.audit?.versions?.dixonColes || "")}</li><li>Cache: ${escapeHtml(cache.status || (result.cached ? "hit" : "miss"))} · ${escapeHtml(cache.reason || "Sin detalle")}</li><li>API real usada: ${displayValue(api.networkRequests, 0)} solicitudes · hits cache ${displayValue(api.cacheHits, 0)} · misses ${displayValue(api.cacheMisses, 0)}</li><li>${escapeHtml(result.audit?.cachePolicy || "")}</li></ul></article>
+      <article><h4>Auditoría</h4><ul><li>ID: ${escapeHtml(result.audit?.recordId || "No disponible")}</li><li>Validación: ${escapeHtml(validation.status || "No disponible")} · 1X2 ${displayValue(validation.checks?.oneXTwoSumPct)}% · matriz ${displayValue(validation.checks?.matrixProbabilitySum)}</li><li>Versión Elo: ${escapeHtml(result.audit?.versions?.elo || "")}</li><li>Versión Dixon-Coles: ${escapeHtml(result.audit?.versions?.dixonColes || "")}</li><li>Cache: ${escapeHtml(cache.status || (result.cached ? "hit" : "miss"))} · ${escapeHtml(cache.reason || "Sin detalle")}</li><li>API real usada: ${displayValue(api.networkRequests, 0)} solicitudes · hits cache ${displayValue(api.cacheHits, 0)} · misses ${displayValue(api.cacheMisses, 0)}</li><li>${escapeHtml(result.audit?.cachePolicy || "")}</li></ul></article>
     </div>
   </section>`;
 }

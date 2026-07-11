@@ -1,4 +1,5 @@
 import { compareTeamsWithHistoricalStats } from "./simulation-comparator.service.js";
+import { validateAdvancedSimulationResult } from "./advanced-simulation-validation.service.js";
 import { poissonProbability } from "./poisson-model.service.js";
 
 const simulationCache = new Map();
@@ -350,6 +351,7 @@ async function calculateAdvancedSimulation(input, dependencies, key) {
       dataMissing: context.variablesMissing
     }
   };
+  result.validation = validateAdvancedSimulationResult(result, input);
   const expiresAt = Date.now() + SIMULATION_CACHE_TTL_MS;
   return { ...result, cached: false, cacheInfo: cacheInfo("miss", key, expiresAt, "simulation_calculada_y_guardada") };
 }
