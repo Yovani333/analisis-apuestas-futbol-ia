@@ -22,6 +22,12 @@ import { buildTeamPerformancePicks } from "../services/team-performance-picks.se
 import { getPlayerGoalCandidates } from "../services/player-goal-candidates.service.js";
 import { compareTeamsWithHistoricalStats } from "../services/simulation-comparator.service.js";
 import { runAdvancedSimulation } from "../services/advanced-simulation.service.js";
+import {
+  createSimulationAuditRecord,
+  getSimulationAuditRecord,
+  listSimulationAuditRecords,
+  saveSimulationAuditRecord
+} from "../services/simulation-audit-store.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -113,8 +119,22 @@ apiRouter.get("/simulation/compare", requireLiveMode, asyncRoute(async (req, res
   res.json(result);
 }));
 
+apiRouter.get("/simulation/audit", requireLiveMode, asyncRoute(async (req, res) => {
+  res.json({
+    source: "simulation-runtime-audit-store",
+    records: listSimulationAuditRecords({ fixtureId: req.query.fixtureId, limit: req.query.limit })
+  });
+}));
+
+apiRouter.get("/simulation/audit/:recordId", requireLiveMode, asyncRoute(async (req, res) => {
+  const record = getSimulationAuditRecord(req.params.recordId);
+  if (!record) throw new AppError("No se encontro la simulacion auditada.", 404, "SIMULATION_AUDIT_NOT_FOUND");
+  res.json({ source: "simulation-runtime-audit-store", record });
+}));
+
 apiRouter.get("/simulation/advanced", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = req.query.fixtureId ? parseFixtureId(req.query.fixtureId) : null;
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
   const windowSize = Number(req.query.window || 5);
   let teamA = { id: req.query.teamAId, name: String(req.query.teamAName || "Equipo A") };
   let teamB = { id: req.query.teamBId, name: String(req.query.teamBName || "Equipo B") };
@@ -129,7 +149,8 @@ apiRouter.get("/simulation/advanced", requireLiveMode, asyncRoute(async (req, re
     fixtureDate = dataset.fixture.utcDateTime || dataset.fixture.date || fixtureDate;
     competition = dataset.fixture.leagueName || competition;
   }
-  res.json(await runAdvancedSimulation({
+  const before = getApiFootballObservability();
+  const input = {
     fixtureId,
     teamA,
     teamB,
@@ -137,10 +158,22 @@ apiRouter.get("/simulation/advanced", requireLiveMode, asyncRoute(async (req, re
     windowSize,
     competition,
     dataset
-  }, {
+  };
+  const result = await runAdvancedSimulation(input, {
     getPreviousFixtures: getPreviousFixturesForTeam,
     getFixtureStatistics
-  }));
+  }, { forceRefresh });
+  const after = getApiFootballObservability();
+  const record = saveSimulationAuditRecord(createSimulationAuditRecord(result, input, { before, after }));
+  res.json({
+    ...result,
+    audit: {
+      ...result.audit,
+      recordId: record?.id || "",
+      apiConsumption: record?.apiConsumption || null,
+      persisted: Boolean(record)
+    }
+  });
 }));
 
 apiRouter.get("/fixtures/:fixtureId/team-performance", requireLiveMode, asyncRoute(async (req, res) => {

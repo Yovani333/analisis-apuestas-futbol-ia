@@ -1,6 +1,9 @@
 import { compareTeamsWithHistoricalStats } from "./simulation-comparator.service.js";
 import { poissonProbability } from "./poisson-model.service.js";
 
+const simulationCache = new Map();
+const pendingSimulations = new Map();
+const SIMULATION_CACHE_TTL_MS = 60 * 60 * 1000;
 const round = (value, digits = 2) => Number(Number(value || 0).toFixed(digits));
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const numeric = (value) => {
@@ -13,9 +16,34 @@ function metric(comparison, key) {
   return comparison?.metrics?.find((row) => row.key === key) || {};
 }
 
-function pctToProbability(value) {
-  const parsed = numeric(value);
-  return parsed === null ? null : clamp(parsed / 100, 0, 1);
+function clone(value) {
+  return JSON.parse(JSON.stringify(value ?? null));
+}
+
+function cacheKey(input = {}) {
+  const fixtureId = input.fixtureId || input.dataset?.fixture?.id || "";
+  const teamAId = input.teamA?.id || input.dataset?.fixture?.homeTeamId || "";
+  const teamBId = input.teamB?.id || input.dataset?.fixture?.awayTeamId || "";
+  const fixtureDate = input.fixtureDate || input.dataset?.fixture?.utcDateTime || input.dataset?.fixture?.date || "";
+  return [
+    fixtureId || "manual",
+    teamAId,
+    teamBId,
+    input.windowSize || 5,
+    fixtureDate,
+    input.competition || input.dataset?.fixture?.leagueName || ""
+  ].map((value) => String(value || "").trim()).join("|");
+}
+
+function cacheInfo(status, key, expiresAt, reason) {
+  return {
+    status,
+    source: "simulation-memory-cache",
+    key,
+    ttlMs: Math.max(0, (expiresAt || Date.now()) - Date.now()),
+    expiresAt: expiresAt ? new Date(expiresAt).toISOString() : "",
+    reason
+  };
 }
 
 function normalizeThree(home, draw, away) {
@@ -265,7 +293,7 @@ function chooseDecision(marketComparison, finalProbabilities, warnings) {
   };
 }
 
-export async function runAdvancedSimulation(input, dependencies) {
+async function calculateAdvancedSimulation(input, dependencies, key) {
   const comparison = await compareTeamsWithHistoricalStats(input, dependencies);
   if (!comparison.metrics?.length) {
     return {
@@ -297,7 +325,7 @@ export async function runAdvancedSimulation(input, dependencies) {
   const marketComparison = compareMarket(finalProbabilities, dataset);
   const warnings = [...(comparison.warnings || []), ...context.warnings, "Regresion ordinal no entrenada: se usa ajuste contextual rule_based."];
   const decision = chooseDecision(marketComparison, finalProbabilities, warnings);
-  return {
+  const result = {
     status: comparison.status === "not_available" ? "partial" : comparison.status,
     source: "API-Football + cache interna + modelos internos",
     modelVersion: "advanced-simulation-v1",
@@ -322,6 +350,28 @@ export async function runAdvancedSimulation(input, dependencies) {
       dataMissing: context.variablesMissing
     }
   };
+  const expiresAt = Date.now() + SIMULATION_CACHE_TTL_MS;
+  return { ...result, cached: false, cacheInfo: cacheInfo("miss", key, expiresAt, "simulation_calculada_y_guardada") };
+}
+
+export async function runAdvancedSimulation(input, dependencies, options = {}) {
+  const key = cacheKey(input);
+  const cached = simulationCache.get(key);
+  if (!options.forceRefresh && cached?.expiresAt > Date.now()) {
+    return { ...clone(cached.value), cached: true, cacheInfo: cacheInfo("hit", key, cached.expiresAt, "simulation_reutilizada_sin_nuevas_consultas") };
+  }
+  if (!options.forceRefresh && pendingSimulations.has(key)) {
+    const value = await pendingSimulations.get(key);
+    return { ...clone(value), cached: true, cacheInfo: cacheInfo("pending_hit", key, Date.now() + SIMULATION_CACHE_TTL_MS, "solicitud_en_curso_reutilizada") };
+  }
+  const request = calculateAdvancedSimulation(input, dependencies, key).then((value) => {
+    if (value.status !== "not_available") {
+      simulationCache.set(key, { value, expiresAt: Date.now() + SIMULATION_CACHE_TTL_MS });
+    }
+    return value;
+  }).finally(() => pendingSimulations.delete(key));
+  pendingSimulations.set(key, request);
+  return request;
 }
 
 export const __advancedSimulationInternals = {
@@ -329,5 +379,7 @@ export const __advancedSimulationInternals = {
   calculateDixonColes,
   applyContext,
   compareMarket,
-  normalizeThree
+  normalizeThree,
+  cacheKey,
+  simulationCache
 };

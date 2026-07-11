@@ -64,9 +64,28 @@ test("ejecuta simulacion avanzada con Elo, Dixon-Coles, contexto y mercado", asy
   assert.ok(result.marketComparison[0].selectionKey === "home_win");
   assert.ok(["apuesta_recomendada", "apuesta_con_valor_pero_riesgo_alto", "no_bet"].includes(result.summary.decision));
   assert.ok(result.warnings.some((item) => /Regresion ordinal/.test(item)));
+  assert.equal(result.cached, false);
+  assert.equal(result.cacheInfo.status, "miss");
 });
 
 test("normaliza probabilidades aunque las entradas sean cero", () => {
   const result = __advancedSimulationInternals.normalizeThree(0, 0, 0);
   assert.equal(Number((result.home + result.draw + result.away).toFixed(6)), 1);
+});
+
+test("reutiliza cache para la misma simulacion avanzada", async () => {
+  const input = {
+    teamA: { id: 1, name: "Cache A" },
+    teamB: { id: 2, name: "Cache B" },
+    fixtureDate: "2026-07-11T10:00:00Z",
+    windowSize: 5,
+    competition: "Mundial"
+  };
+  const deps = dependencies();
+  const first = await runAdvancedSimulation(input, deps, { forceRefresh: true });
+  const second = await runAdvancedSimulation(input, deps);
+  assert.equal(first.cached, false);
+  assert.equal(second.cached, true);
+  assert.equal(second.cacheInfo.status, "hit");
+  assert.deepEqual(second.finalProbabilities, first.finalProbabilities);
 });
