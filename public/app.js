@@ -53,6 +53,7 @@ const state = {
   isLoadingCorners: false,
   isLoadingSpecificMarkets: false,
   isLoadingSimulation: false,
+  isLoadingAdvancedSimulation: false,
   teamPerformanceLoadingFixtures: new Set(),
   playerGoalLoadingFixtures: new Set(),
   isRefreshingResearch: false,
@@ -141,8 +142,10 @@ Object.assign(elements, {
   simulationFixtureDate: document.querySelector("#simulation-fixture-date"),
   simulationUseSelected: document.querySelector("#simulation-use-selected"),
   simulationCompare: document.querySelector("#simulation-compare"),
+  simulationAdvanced: document.querySelector("#simulation-advanced"),
   simulationStatus: document.querySelector("#simulation-status"),
-  simulationResults: document.querySelector("#simulation-results")
+  simulationResults: document.querySelector("#simulation-results"),
+  simulationAdvancedResults: document.querySelector("#simulation-advanced-results")
 });
 
 Object.assign(elements, {
@@ -1050,8 +1053,7 @@ function renderSimulationComparison(result) {
   </div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Métrica</th><th>${escapeHtml(result.teamA.name)}</th><th>${escapeHtml(result.teamB.name)}</th><th>Diferencia</th><th>Ventaja</th><th>Calidad</th></tr></thead><tbody>${rows}</tbody></table></div><div class="simulation-fixtures">${fixtureList(result.teamA)}${fixtureList(result.teamB)}</div>`;
 }
 
-async function runSimulationComparison() {
-  if (state.isLoadingSimulation) return;
+function simulationParamsFromForm() {
   const params = {
     competition: elements.simulationCompetition.value,
     window: elements.simulationWindow.value || "5",
@@ -1062,6 +1064,12 @@ async function runSimulationComparison() {
     fixtureDate: elements.simulationFixtureDate.value ? new Date(elements.simulationFixtureDate.value).toISOString() : ""
   };
   if (elements.simulationCompare.dataset.fixtureId) params.fixtureId = elements.simulationCompare.dataset.fixtureId;
+  return params;
+}
+
+async function runSimulationComparison() {
+  if (state.isLoadingSimulation) return;
+  const params = simulationParamsFromForm();
   state.isLoadingSimulation = true;
   elements.simulationCompare.disabled = true;
   elements.simulationCompare.textContent = "Comparando...";
@@ -1077,6 +1085,70 @@ async function runSimulationComparison() {
     state.isLoadingSimulation = false;
     elements.simulationCompare.disabled = false;
     elements.simulationCompare.textContent = "Comparar";
+  }
+}
+
+function renderAdvancedSimulation(result = {}) {
+  if (!elements.simulationAdvancedResults) return;
+  if (!result.summary) {
+    elements.simulationAdvancedResults.innerHTML = `<div class="research-empty"><strong>Simulación avanzada no disponible</strong><p>${escapeHtml(result.message || "Ejecuta una comparación con datos históricos suficientes.")}</p></div>`;
+    return;
+  }
+  const summary = result.summary;
+  const probabilityCards = [["Local", result.finalProbabilities?.homeWin], ["Empate", result.finalProbabilities?.draw], ["Visitante", result.finalProbabilities?.awayWin]]
+    .map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${displayValue(value)}%</strong><small>Probabilidad final calibrada</small></article>`).join("");
+  const scoreChips = (result.dixonColes?.likelyScores || []).map((row) => `<span class="score-chip">${escapeHtml(row.score)} · ${displayValue(row.probabilityPct)}%</span>`).join("");
+  const marketRows = (result.marketComparison || []).slice(0, 8).map((row) => `<tr>
+    <td>${escapeHtml(row.market || "Mercado")}</td><td>${escapeHtml(row.selection || "Selección")}</td>
+    <td>${displayValue(row.modelProbabilityPct)}%</td><td>${displayValue(row.decimalOdds)}</td>
+    <td>${displayValue(row.fairOdds)}</td><td>${displayValue(row.edgePct)}%</td>
+    <td class="${Number(row.expectedValuePct) >= 0 ? "value-positive" : "value-negative"}">${displayValue(row.expectedValuePct)}%</td>
+    <td>${escapeHtml(row.status || "observacion")}</td>
+  </tr>`).join("");
+  const matrixRows = (result.dixonColes?.goalMatrix || []).slice(0, 16).map((row) => `<tr><td>${escapeHtml(`${row.homeGoals}-${row.awayGoals}`)}</td><td>${displayValue(row.probabilityPct)}%</td></tr>`).join("");
+  const list = (items = []) => items.length ? items.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>No disponible</li>";
+  elements.simulationAdvancedResults.innerHTML = `<section class="simulation-advanced">
+    <div class="panel-heading">
+      <div><p class="eyebrow">Elo + Dixon-Coles + contexto</p><h3>Resumen final de simulación avanzada</h3></div>
+      <span class="status-badge status-badge--${statusClass(result.status === "available" ? "Disponible" : "Parcial")}">${escapeHtml(result.status === "available" ? "Disponible" : "Parcial")}</span>
+    </div>
+    <div class="simulation-summary simulation-summary--advanced">
+      <article><span>Pick sugerido</span><strong>${escapeHtml(summary.pick)}</strong><small>${escapeHtml(summary.decision)}</small></article>
+      <article><span>Mercado</span><strong>${escapeHtml(summary.market)}</strong><small>Cuota ${displayValue(summary.decimalOdds)} · EV ${displayValue(summary.expectedValuePct)}%</small></article>
+      <article><span>Confianza / riesgo</span><strong>${escapeHtml(summary.confidence)} · ${escapeHtml(summary.risk)}</strong><small>${escapeHtml(summary.explanation)}</small></article>
+    </div>
+    <div class="simulation-summary">${probabilityCards}</div>
+    <div class="simulation-steps">
+      <article><h4>Paso 1 — Elo</h4><dl><div><dt>Elo local</dt><dd>${displayValue(result.elo?.teamA, 0)}</dd></div><div><dt>Elo visitante</dt><dd>${displayValue(result.elo?.teamB, 0)}</dd></div><div><dt>Diferencia</dt><dd>${displayValue(result.elo?.difference, 0)}</dd></div><div><dt>Localía</dt><dd>${displayValue(result.elo?.homeAdvantage, 0)}</dd></div><div><dt>Fuerza</dt><dd>${escapeHtml(result.elo?.strengthClass || "No disponible")}</dd></div><div><dt>Calidad</dt><dd>${escapeHtml(result.elo?.quality || "No disponible")}</dd></div></dl></article>
+      <article><h4>Paso 2 — Dixon-Coles</h4><dl><div><dt>Lambda local</dt><dd>${displayValue(result.dixonColes?.lambdaHome)}</dd></div><div><dt>Lambda visitante</dt><dd>${displayValue(result.dixonColes?.lambdaAway)}</dd></div><div><dt>Rho</dt><dd>${displayValue(result.dixonColes?.rho)}</dd></div><div><dt>Over 2.5</dt><dd>${displayValue(result.dixonColes?.probabilities?.over25)}%</dd></div><div><dt>BTTS Sí</dt><dd>${displayValue(result.dixonColes?.probabilities?.bttsYes)}%</dd></div></dl><div class="score-chip-row">${scoreChips || "<span class=\"score-chip\">Sin marcadores</span>"}</div></article>
+      <article><h4>Paso 3 — Contexto</h4><dl><div><dt>Modo</dt><dd>${escapeHtml(result.context?.mode || "rule_based")}</dd></div><div><dt>Antes</dt><dd>${displayValue(result.context?.probabilityBefore?.homeWin)} / ${displayValue(result.context?.probabilityBefore?.draw)} / ${displayValue(result.context?.probabilityBefore?.awayWin)}</dd></div><div><dt>Después</dt><dd>${displayValue(result.context?.probabilityAfter?.homeWin)} / ${displayValue(result.context?.probabilityAfter?.draw)} / ${displayValue(result.context?.probabilityAfter?.awayWin)}</dd></div></dl><ul>${list(result.context?.variablesMissing)}</ul></article>
+    </div>
+    <div class="simulation-grid-two">
+      <article><h4>Comparación con mercado</h4>${marketRows ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Mercado</th><th>Selección</th><th>Modelo</th><th>Cuota</th><th>Justa</th><th>Edge</th><th>EV</th><th>Estado</th></tr></thead><tbody>${marketRows}</tbody></table></div>` : "<p class=\"muted-text\">No hay cuotas compatibles para comparar.</p>"}</article>
+      <article><h4>Matriz de goles</h4>${matrixRows ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Marcador</th><th>Prob.</th></tr></thead><tbody>${matrixRows}</tbody></table></div>` : "<p class=\"muted-text\">Matriz no disponible.</p>"}</article>
+    </div>
+    <div class="simulation-grid-two">
+      <article><h4>Advertencias</h4><ul>${list(result.warnings)}</ul></article>
+      <article><h4>Auditoría</h4><ul><li>Versión Elo: ${escapeHtml(result.audit?.versions?.elo || "")}</li><li>Versión Dixon-Coles: ${escapeHtml(result.audit?.versions?.dixonColes || "")}</li><li>${escapeHtml(result.audit?.cachePolicy || "")}</li></ul></article>
+    </div>
+  </section>`;
+}
+
+async function runAdvancedSimulation() {
+  if (state.isLoadingAdvancedSimulation) return;
+  const params = simulationParamsFromForm();
+  state.isLoadingAdvancedSimulation = true;
+  elements.simulationAdvanced.disabled = true;
+  elements.simulationAdvanced.textContent = "Simulando...";
+  elements.simulationAdvancedResults.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Ejecutando Elo, Dixon-Coles y ajuste contextual...</p></div>';
+  try {
+    renderAdvancedSimulation(await footballDataService.runAdvancedSimulation(params));
+  } catch (error) {
+    renderAdvancedSimulation({ status: "not_available", message: error.message });
+  } finally {
+    state.isLoadingAdvancedSimulation = false;
+    elements.simulationAdvanced.disabled = false;
+    elements.simulationAdvanced.textContent = "Ejecutar simulación avanzada";
   }
 }
 
@@ -2690,6 +2762,7 @@ elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses
 elements.refreshLiveNow.addEventListener("click", refreshLiveDataNow);
 elements.simulationUseSelected.addEventListener("click", useSelectedFixtureForSimulation);
 elements.simulationCompare.addEventListener("click", runSimulationComparison);
+elements.simulationAdvanced.addEventListener("click", runAdvancedSimulation);
 [elements.simulationTeamAId, elements.simulationTeamBId].forEach((input) => input.addEventListener("input", () => { elements.simulationCompare.dataset.fixtureId = ""; }));
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.toggleAnalysis.addEventListener("click", () => toggleReadyModule(elements.toggleAnalysis, elements.analysisContent));
