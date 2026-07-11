@@ -298,13 +298,17 @@
           <span id="simulation-status" class="status-badge status-badge--unavailable">No disponible</span>
         </div>
         <div class="simulation-form">
-          <label>Competición / torneo<input id="simulation-competition" type="text" placeholder="Ej. Copa Mundial FIFA" /></label>
+          <label>Competición / país<input id="simulation-competition" type="text" list="simulation-competition-options" placeholder="Busca liga, torneo o país" /><datalist id="simulation-competition-options"></datalist></label>
           <label>Ventana<select id="simulation-window"><option value="5">Últimos 5 partidos</option><option value="10">Últimos 10 partidos</option></select></label>
-          <label>Equipo A ID<input id="simulation-team-a-id" inputmode="numeric" placeholder="ID API-Football" /></label>
+          <p class="simulation-helper">Tip: primero busca partidos en Dashboard para poblar sugerencias reales de equipos, ligas y países. También puedes usar “Usar encuentro seleccionado”.</p>
+          <label class="simulation-search-field">Buscar equipo local / A<input id="simulation-team-a-search" type="search" list="simulation-team-options" placeholder="Escribe equipo o país" autocomplete="off" /></label>
+          <label>Equipo A ID<input id="simulation-team-a-id" inputmode="numeric" placeholder="Se llena al seleccionar" /></label>
           <label>Equipo A nombre<input id="simulation-team-a-name" placeholder="Equipo A" /></label>
-          <label>Equipo B ID<input id="simulation-team-b-id" inputmode="numeric" placeholder="ID API-Football" /></label>
+          <label class="simulation-search-field">Buscar equipo visitante / B<input id="simulation-team-b-search" type="search" list="simulation-team-options" placeholder="Escribe equipo o país" autocomplete="off" /></label>
+          <label>Equipo B ID<input id="simulation-team-b-id" inputmode="numeric" placeholder="Se llena al seleccionar" /></label>
           <label>Equipo B nombre<input id="simulation-team-b-name" placeholder="Equipo B" /></label>
           <label>Fecha de corte<input id="simulation-fixture-date" type="datetime-local" /></label>
+          <datalist id="simulation-team-options"></datalist>
         </div>
         <div class="simulation-actions">
           <button id="simulation-use-selected" class="button button--secondary" type="button">Usar encuentro seleccionado</button>
@@ -502,6 +506,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260710-module-refresh-v1"></script>
+    <script type="module" src="app.js?v=20260710-simulation-search-v1"></script>
   </body>
 </html>

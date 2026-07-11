@@ -60,7 +60,9 @@ const state = {
   isRefreshingStatuses: false,
   isRefreshingLive: false,
   isCapturingEvidence: false,
-  lastLiveRefreshAt: null
+  lastLiveRefreshAt: null,
+  simulationTeamOptionByValue: new Map(),
+  simulationCompetitionOptionByValue: new Map()
 };
 
 const elements = {
@@ -137,9 +139,13 @@ const elements = {
 
 Object.assign(elements, {
   simulationCompetition: document.querySelector("#simulation-competition"),
+  simulationCompetitionOptions: document.querySelector("#simulation-competition-options"),
   simulationWindow: document.querySelector("#simulation-window"),
+  simulationTeamOptions: document.querySelector("#simulation-team-options"),
+  simulationTeamASearch: document.querySelector("#simulation-team-a-search"),
   simulationTeamAId: document.querySelector("#simulation-team-a-id"),
   simulationTeamAName: document.querySelector("#simulation-team-a-name"),
+  simulationTeamBSearch: document.querySelector("#simulation-team-b-search"),
   simulationTeamBId: document.querySelector("#simulation-team-b-id"),
   simulationTeamBName: document.querySelector("#simulation-team-b-name"),
   simulationFixtureDate: document.querySelector("#simulation-fixture-date"),
@@ -507,6 +513,7 @@ function teamCrest(name, logo, size = "default") {
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
+  refreshSimulationPickers();
 
   if (!state.fixtures.length) {
     elements.matchesList.innerHTML = `<div class="empty-results">${state.hasSearched ? "No se encontraron partidos para los filtros seleccionados." : "Selecciona una liga y un rango de fechas para buscar partidos."}</div>`;
@@ -1041,13 +1048,85 @@ function useSelectedFixtureForSimulation() {
   const fixture = selectedFixture();
   if (!fixture) return showNotice("Selecciona primero un encuentro en Dashboard.");
   elements.simulationCompetition.value = fixture.leagueName || "";
+  elements.simulationTeamASearch.value = simulationTeamDisplay({
+    id: fixture.homeTeamId, name: fixture.home, leagueName: fixture.leagueName, country: fixture.country
+  });
   elements.simulationTeamAId.value = fixture.homeTeamId || "";
   elements.simulationTeamAName.value = fixture.home || "";
+  elements.simulationTeamBSearch.value = simulationTeamDisplay({
+    id: fixture.awayTeamId, name: fixture.away, leagueName: fixture.leagueName, country: fixture.country
+  });
   elements.simulationTeamBId.value = fixture.awayTeamId || "";
   elements.simulationTeamBName.value = fixture.away || "";
   elements.simulationFixtureDate.value = localDatetimeValue(fixture.utcDateTime || fixture.date);
   elements.simulationCompare.dataset.fixtureId = fixture.id || "";
   showNotice("Simulación preparada con el encuentro seleccionado.");
+}
+
+function simulationTeamDisplay(team) {
+  const details = [team.leagueName, team.country].filter(Boolean).join(" · ");
+  const idText = team.id ? ` · ID ${team.id}` : "";
+  return `${team.name || "Equipo"}${details ? ` · ${details}` : ""}${idText}`;
+}
+
+function uniqueSimulationOptions(items, keyFn) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = keyFn(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function refreshSimulationPickers() {
+  if (!elements.simulationTeamOptions || !elements.simulationCompetitionOptions) return;
+  const leagueOptions = uniqueSimulationOptions([
+    ...ALLOWED_LEAGUES.map((league) => ({
+      value: `${league.name} · ${league.country}`,
+      competition: league.name,
+      country: league.country
+    })),
+    ...state.fixtures.flatMap((fixture) => [
+      { value: `${fixture.leagueName || "Competición"} · ${fixture.country || "País no informado"}`, competition: fixture.leagueName || "", country: fixture.country || "" },
+      fixture.country ? { value: `${fixture.country} · país`, competition: fixture.country, country: fixture.country } : null
+    ]).filter(Boolean)
+  ], (item) => item.value.toLowerCase());
+  state.simulationCompetitionOptionByValue = new Map(leagueOptions.map((item) => [item.value, item]));
+  elements.simulationCompetitionOptions.innerHTML = leagueOptions
+    .map((item) => `<option value="${escapeHtml(item.value)}" label="${escapeHtml(item.competition || item.country)}"></option>`)
+    .join("");
+
+  const teams = uniqueSimulationOptions(state.fixtures.flatMap((fixture) => [
+    { id: fixture.homeTeamId, name: fixture.home, leagueName: fixture.leagueName, country: fixture.country },
+    { id: fixture.awayTeamId, name: fixture.away, leagueName: fixture.leagueName, country: fixture.country }
+  ]), (team) => `${team.id || ""}:${String(team.name || "").toLowerCase()}`);
+  const teamOptions = teams.map((team) => ({ ...team, value: simulationTeamDisplay(team) }));
+  state.simulationTeamOptionByValue = new Map(teamOptions.map((item) => [item.value, item]));
+  elements.simulationTeamOptions.innerHTML = teamOptions
+    .map((item) => `<option value="${escapeHtml(item.value)}" label="${escapeHtml(item.name)}"></option>`)
+    .join("");
+}
+
+function applySimulationTeamSelection(side) {
+  const isA = side === "A";
+  const search = isA ? elements.simulationTeamASearch : elements.simulationTeamBSearch;
+  const idInput = isA ? elements.simulationTeamAId : elements.simulationTeamBId;
+  const nameInput = isA ? elements.simulationTeamAName : elements.simulationTeamBName;
+  const selected = state.simulationTeamOptionByValue.get(search.value);
+  elements.simulationCompare.dataset.fixtureId = "";
+  if (!selected) return;
+  idInput.value = selected.id || "";
+  nameInput.value = selected.name || "";
+  if (!elements.simulationCompetition.value && (selected.leagueName || selected.country)) {
+    elements.simulationCompetition.value = selected.leagueName || selected.country;
+  }
+}
+
+function applySimulationCompetitionSelection() {
+  const selected = state.simulationCompetitionOptionByValue.get(elements.simulationCompetition.value);
+  if (selected?.competition) elements.simulationCompetition.value = selected.competition;
+  elements.simulationCompare.dataset.fixtureId = "";
 }
 
 function renderSimulationComparison(result) {
@@ -1711,6 +1790,7 @@ function switchView(view) {
   });
   if (view === "saved") { renderSavedPicks(); renderSavedParlays(); }
   if (view === "audit") renderAuditFixtureOptions();
+  if (view === "simulation") refreshSimulationPickers();
   if (["transparency", "guide", "markets"].includes(view)) void refreshCurrentViewData(view);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -2829,7 +2909,13 @@ elements.refreshLiveNow.addEventListener("click", refreshLiveDataNow);
 elements.simulationUseSelected.addEventListener("click", useSelectedFixtureForSimulation);
 elements.simulationCompare.addEventListener("click", runSimulationComparison);
 elements.simulationAdvanced.addEventListener("click", runAdvancedSimulation);
-[elements.simulationTeamAId, elements.simulationTeamBId].forEach((input) => input.addEventListener("input", () => { elements.simulationCompare.dataset.fixtureId = ""; }));
+elements.simulationCompetition.addEventListener("change", applySimulationCompetitionSelection);
+elements.simulationCompetition.addEventListener("input", () => { elements.simulationCompare.dataset.fixtureId = ""; });
+elements.simulationTeamASearch.addEventListener("input", () => applySimulationTeamSelection("A"));
+elements.simulationTeamASearch.addEventListener("change", () => applySimulationTeamSelection("A"));
+elements.simulationTeamBSearch.addEventListener("input", () => applySimulationTeamSelection("B"));
+elements.simulationTeamBSearch.addEventListener("change", () => applySimulationTeamSelection("B"));
+[elements.simulationTeamAId, elements.simulationTeamBId, elements.simulationTeamAName, elements.simulationTeamBName].forEach((input) => input.addEventListener("input", () => { elements.simulationCompare.dataset.fixtureId = ""; }));
 elements.generateSelectedAnalysis.addEventListener("click", analyzeSelectedFixture);
 elements.toggleAnalysis.addEventListener("click", () => toggleReadyModule(elements.toggleAnalysis, elements.analysisContent));
 elements.downloadEvidenceTxt.addEventListener("click", downloadCurrentEvidence);
