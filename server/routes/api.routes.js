@@ -179,7 +179,7 @@ apiRouter.get("/simulation/advanced", requireLiveMode, asyncRoute(async (req, re
 apiRouter.get("/fixtures/:fixtureId/team-performance", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
-  const dataset = await getFixtureDataset(fixtureId, { forceRefresh: false });
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
   const performance = await getTeamPerformanceForFixture(dataset.fixture, {
     getPreviousFixtures: getPreviousFixturesForTeam,
     getFixturePlayers
@@ -269,23 +269,26 @@ apiRouter.post("/fixtures/:fixtureId/models/team-goals", requireLiveMode, asyncR
 
 apiRouter.post("/fixtures/:fixtureId/models/corners", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
-  const dataset = await getFixtureDataset(fixtureId);
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
   res.json(dataset.cornersModel || calculateCornersModel(dataset));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/models/outcome-1x2", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
-  const dataset = await getFixtureDataset(fixtureId);
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
   dataset.poissonModel ||= calculatePoissonModel(dataset);
   res.json(buildOutcomeScenarios(dataset));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/markets/specific", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
-  const dataset = await getFixtureDataset(fixtureId);
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
   dataset.poissonModel ||= calculatePoissonModel(dataset);
   dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
-  dataset.playerGoalCandidates = await getPlayerGoalCandidates(dataset, playerGoalDependencies);
+  dataset.playerGoalCandidates = await getPlayerGoalCandidates(dataset, playerGoalDependencies, { forceRefresh });
   res.json(buildSpecificMarkets(dataset));
 }));
 

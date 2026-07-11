@@ -367,6 +367,27 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .data-dialog__close { display: grid; width: 38px; height: 38px; place-items: center; flex: 0 0 auto; color: var(--muted); font-size: 1.5rem; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
 .data-dialog__close:hover, .data-dialog__close:focus-visible { color: var(--text); border-color: #9fbcf5; outline: 0; }
 .data-dialog__content { max-height: calc(100vh - 125px); padding: 14px 16px 18px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.ready-dialog {
+  width: min(420px, calc(100% - 28px));
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+}
+.ready-dialog::backdrop {
+  background: rgb(15 35 65 / 46%);
+  backdrop-filter: blur(3px);
+}
+.ready-dialog__panel {
+  padding: 22px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.ready-dialog__panel h2 { margin: 4px 0 8px; }
+.ready-dialog__panel p:not(.eyebrow) { margin: 0 0 16px; color: var(--muted); line-height: 1.45; }
 .fixture-progress { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 10px; margin-bottom: 10px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 8px; }
 .fixture-progress strong { min-width: 0; font-size: .76rem; text-align: center; overflow-wrap: anywhere; }
 .fixture-progress strong b { padding: 0 6px; color: var(--text); font-size: .9rem; }

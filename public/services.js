@@ -139,10 +139,11 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/poisson`, { method: "POST" });
   },
 
-  async getOutcomeScenarios(fixture) {
+  async getOutcomeScenarios(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", scenarios: [], warning: "El selector 1X2 requiere datos reales normalizados." };
-    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/outcome-1x2`, { method: "POST" });
+    const query = refresh ? "?refresh=true" : "";
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/outcome-1x2${query}`, { method: "POST" });
   },
 
   async getTeamGoalProbability(fixture) {
@@ -151,16 +152,18 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/team-goals`, { method: "POST" });
   },
 
-  async getCornersModel(fixture) {
+  async getCornersModel(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", picks: [], warning: "Corners requiere estadísticas históricas oficiales." };
-    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/corners`, { method: "POST" });
+    const query = refresh ? "?refresh=true" : "";
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/corners${query}`, { method: "POST" });
   },
 
-  async getSpecificMarkets(fixture) {
+  async getSpecificMarkets(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", groups: [], warnings: ["Los mercados específicos requieren datos reales normalizados."] };
-    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/markets/specific`, { method: "POST" });
+    const query = refresh ? "?refresh=true" : "";
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/markets/specific${query}`, { method: "POST" });
   },
 
   async getResearchData(fixtureId, refresh = false) {
@@ -171,7 +174,7 @@ export const footballDataService = {
     return payload.researchData || null;
   },
 
-  async getTeamPerformance(fixture) {
+  async getTeamPerformance(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") {
       return {
@@ -181,13 +184,15 @@ export const footballDataService = {
         message: "El rendimiento promedio requiere estadisticas reales de API-Football."
       };
     }
-    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/team-performance`);
+    const query = refresh ? "?refresh=true" : "";
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/team-performance${query}`);
   },
 
-  async getPlayerGoalCandidates(fixture) {
+  async getPlayerGoalCandidates(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", candidates: [], message: "El análisis de jugadores requiere estadísticas reales de API-Football." };
-    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/player-goal-candidates`);
+    const query = refresh ? "?refresh=true" : "";
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/player-goal-candidates${query}`);
   },
 
   async compareSimulationTeams(params) {

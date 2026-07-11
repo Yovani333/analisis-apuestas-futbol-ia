@@ -205,6 +205,7 @@
           <div class="panel-heading">
             <div><p class="eyebrow">Selector obligatorio 1X2</p><h2 id="outcome-title">Gana / Empata / Pierde <button class="info-tooltip" type="button" data-tooltip-key="model_probability" aria-label="Informacion sobre Probabilidad del modelo" aria-expanded="false">?</button></h2></div>
             <div class="panel-actions">
+              <button id="refresh-outcome" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button>
               <button id="show-outcome" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button>
               <span id="outcome-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
@@ -234,13 +235,13 @@
         <section id="player-goal-panel" class="panel player-goal-panel advanced-module-panel" aria-labelledby="player-goal-title">
           <div class="panel-heading">
             <div><p class="eyebrow">Amenaza ofensiva individual</p><h2 id="player-goal-title">Jugador con posible gol</h2></div>
-            <div class="panel-actions"><button id="toggle-player-goal" class="button button--secondary button--compact" type="button" aria-expanded="true" disabled>Ocultar</button><span id="player-goal-status" class="status-badge status-badge--unavailable">No disponible</span></div>
+            <div class="panel-actions"><button id="refresh-player-goal" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button><button id="toggle-player-goal" class="button button--secondary button--compact" type="button" aria-expanded="true" disabled>Ocultar</button><span id="player-goal-status" class="status-badge status-badge--unavailable">No disponible</span></div>
           </div>
           <div id="player-goal-content" aria-live="polite"><div class="research-empty">Selecciona un partido para analizar jugadores con mayor amenaza de gol.</div></div>
         </section>
 
         <section id="corners-panel" class="panel corners-panel advanced-module-panel" aria-labelledby="corners-title">
-          <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners <button class="info-tooltip" type="button" data-tooltip-key="corners" aria-label="Información sobre Corners" aria-expanded="false">?</button></h2></div><div class="panel-actions"><button id="show-corners" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+          <div class="panel-heading"><div><p class="eyebrow">Mundial / torneos cortos</p><h2 id="corners-title">Corners <button class="info-tooltip" type="button" data-tooltip-key="corners" aria-label="Información sobre Corners" aria-expanded="false">?</button></h2></div><div class="panel-actions"><button id="refresh-corners" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button><button id="show-corners" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="corners-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
           <div id="corners-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar corners oficiales históricos.</div></div>
         </section>
 
@@ -251,6 +252,7 @@
               <h2 id="team-performance-title">Rendimiento promedio por equipo</h2>
             </div>
             <div class="panel-actions">
+              <button id="refresh-team-performance" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button>
               <button id="toggle-team-performance" class="button button--secondary button--compact" type="button" aria-expanded="true">Ocultar</button>
               <span id="team-performance-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
@@ -467,6 +469,15 @@
       <div id="data-detail-content" class="data-dialog__content"></div>
     </dialog>
 
+    <dialog id="fixture-ready-dialog" class="ready-dialog" aria-labelledby="fixture-ready-title">
+      <div class="ready-dialog__panel">
+        <p class="eyebrow">Encuentro seleccionado</p>
+        <h2 id="fixture-ready-title">Listo</h2>
+        <p>Los datos del partido se prepararon. Los módulos se cerraron para iniciar una revisión limpia.</p>
+        <button id="fixture-ready-accept" class="button button--primary" type="button">Aceptar</button>
+      </div>
+    </dialog>
+
     <aside id="parlay-slip" class="parlay-slip" aria-labelledby="parlay-slip-title" hidden>
       <div class="parlay-slip__header">
         <div>
@@ -491,6 +502,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260705-data-live-v1"></script>
+    <script type="module" src="app.js?v=20260710-module-refresh-v1"></script>
   </body>
 </html>

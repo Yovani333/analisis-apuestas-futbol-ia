@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260705-player-goal-v1";
+import { footballDataService } from "./services.js?v=20260710-module-refresh-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
@@ -103,6 +103,7 @@ const elements = {
   dataPicksStatus: document.querySelector("#data-picks-status"),
   dataPicksContent: document.querySelector("#data-picks-content"),
   showOutcome: document.querySelector("#show-outcome"),
+  refreshOutcome: document.querySelector("#refresh-outcome"),
   outcomeStatus: document.querySelector("#outcome-status"),
   outcomeContent: document.querySelector("#outcome-content"),
   showPoisson: document.querySelector("#show-poisson"),
@@ -111,11 +112,13 @@ const elements = {
   showTeamGoals: document.querySelector("#show-team-goals"),
   teamGoalsStatus: document.querySelector("#team-goals-status"),
   teamGoalsContent: document.querySelector("#team-goals-content"),
-  showCorners: document.querySelector("#show-corners"), cornersStatus: document.querySelector("#corners-status"), cornersContent: document.querySelector("#corners-content"),
+  showCorners: document.querySelector("#show-corners"), refreshCorners: document.querySelector("#refresh-corners"), cornersStatus: document.querySelector("#corners-status"), cornersContent: document.querySelector("#corners-content"),
   showSpecificMarkets: document.querySelector("#show-specific-markets"), specificMarketsStatus: document.querySelector("#specific-markets-status"), specificMarketsContent: document.querySelector("#specific-markets-content"),
   teamPerformanceTitle: document.querySelector("#team-performance-title"), teamPerformanceStatus: document.querySelector("#team-performance-status"),
-  teamPerformanceContent: document.querySelector("#team-performance-content"), toggleTeamPerformance: document.querySelector("#toggle-team-performance"),
-  playerGoalStatus: document.querySelector("#player-goal-status"), playerGoalContent: document.querySelector("#player-goal-content"), togglePlayerGoal: document.querySelector("#toggle-player-goal"),
+  teamPerformanceContent: document.querySelector("#team-performance-content"), toggleTeamPerformance: document.querySelector("#toggle-team-performance"), refreshTeamPerformance: document.querySelector("#refresh-team-performance"),
+  playerGoalStatus: document.querySelector("#player-goal-status"), playerGoalContent: document.querySelector("#player-goal-content"), togglePlayerGoal: document.querySelector("#toggle-player-goal"), refreshPlayerGoal: document.querySelector("#refresh-player-goal"),
+  fixtureReadyDialog: document.querySelector("#fixture-ready-dialog"),
+  fixtureReadyAccept: document.querySelector("#fixture-ready-accept"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -248,6 +251,14 @@ function showNotice(message) {
   notice.dataset.timeoutId = String(timeoutId);
 }
 
+function showFixtureReadyDialog() {
+  if (!elements.fixtureReadyDialog?.showModal) {
+    showNotice("Listo. Encuentro seleccionado.");
+    return;
+  }
+  if (!elements.fixtureReadyDialog.open) elements.fixtureReadyDialog.showModal();
+}
+
 function renderLeagueOptions() {
   elements.leagueOptions.innerHTML = ALLOWED_LEAGUES.map((league) => `
     <label class="checkbox-row">
@@ -308,9 +319,14 @@ function resetAnalysisGuide() {
   collapseGuideModules({
     details: document.querySelectorAll("#analysis-guide-content details.guide-module"),
     parts: Object.values(guideModuleParts),
-    extraContents: [elements.analysisContent],
-    extraButtons: [elements.toggleAnalysis]
+    extraContents: [elements.analysisContent, elements.playerGoalContent, elements.teamPerformanceContent, elements.cornersContent, elements.specificMarketsContent],
+    extraButtons: [elements.toggleAnalysis, elements.togglePlayerGoal, elements.toggleTeamPerformance, elements.showCorners]
   });
+  if (elements.specificMarketsContent) elements.specificMarketsContent.hidden = false;
+  if (elements.refreshOutcome) elements.refreshOutcome.disabled = !selectedFixture();
+  if (elements.refreshPlayerGoal) elements.refreshPlayerGoal.disabled = !selectedFixture();
+  if (elements.refreshTeamPerformance) elements.refreshTeamPerformance.disabled = !selectedFixture();
+  if (elements.refreshCorners) elements.refreshCorners.disabled = !selectedFixture();
 }
 
 function handleGuideModuleToggle(details) {
@@ -593,6 +609,10 @@ function renderFixtureData() {
     </div>
     ${probabilityLine}`;
   updateAnalysisActionState();
+  elements.refreshOutcome.disabled = false;
+  elements.refreshPlayerGoal.disabled = false;
+  elements.refreshTeamPerformance.disabled = false;
+  elements.refreshCorners.disabled = false;
   elements.showDataPicks.disabled = state.isLoadingDataPicks;
   const savedDataPicks = state.dataPicksByFixture.get(fixture.id);
   if (savedDataPicks) renderDataPicks(savedDataPicks);
@@ -613,6 +633,7 @@ function renderFixtureData() {
   }
   elements.outcomeContent.hidden = true;
   if (savedOutcome) { elements.showOutcome.textContent = "Mostrar"; elements.showOutcome.classList.remove("button--ready"); }
+  elements.showOutcome.setAttribute("aria-expanded", "false");
   elements.showPoisson.disabled = state.isLoadingPoisson;
   const savedPoisson = state.poissonByFixture.get(fixture.id);
   if (savedPoisson) renderPoisson(savedPoisson);
@@ -641,15 +662,15 @@ function renderFixtureData() {
     elements.playerGoalStatus.textContent = "No disponible";
     elements.playerGoalContent.innerHTML = '<div class="research-empty">Analizando jugadores con mayor amenaza de gol…</div>';
   }
-  elements.playerGoalContent.hidden = false;
-  elements.togglePlayerGoal.textContent = "Ocultar";
-  elements.togglePlayerGoal.setAttribute("aria-expanded", "true");
+  elements.playerGoalContent.hidden = true;
+  resetModuleButton(elements.togglePlayerGoal);
   elements.showCorners.disabled = state.isLoadingCorners;
   const savedCorners = state.cornersByFixture.get(fixture.id);
   if (savedCorners) renderCorners(savedCorners);
   else { elements.cornersStatus.className = "status-badge status-badge--unavailable"; elements.cornersStatus.textContent = "No disponible"; elements.cornersContent.innerHTML = '<div class="research-empty">Pulsa “Mostrar” para analizar corners oficiales.</div>'; }
   elements.cornersContent.hidden = true;
   if (savedCorners) { elements.showCorners.textContent = "Mostrar"; elements.showCorners.classList.remove("button--ready"); }
+  elements.showCorners.setAttribute("aria-expanded", "false");
   elements.showSpecificMarkets.disabled = state.isLoadingSpecificMarkets;
   const savedSpecificMarkets = state.specificMarketsByFixture.get(fixture.id);
   if (savedSpecificMarkets) renderSpecificMarkets(savedSpecificMarkets);
@@ -1690,7 +1711,28 @@ function switchView(view) {
   });
   if (view === "saved") { renderSavedPicks(); renderSavedParlays(); }
   if (view === "audit") renderAuditFixtureOptions();
+  if (["transparency", "guide", "markets"].includes(view)) void refreshCurrentViewData(view);
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function refreshCurrentViewData(view) {
+  const fixture = selectedFixture();
+  if (!fixture) return;
+  if (view === "transparency") {
+    await refreshResearchData();
+    return;
+  }
+  if (view === "markets") {
+    await loadSpecificMarkets(true);
+    return;
+  }
+  if (view === "guide") {
+    await refreshResearchData();
+    if (elements.outcomeContent && !elements.outcomeContent.hidden) await loadOutcomeScenarios(true);
+    if (elements.playerGoalContent && !elements.playerGoalContent.hidden) await loadPlayerGoalCandidates(selectedFixture(), true, true);
+    if (elements.teamPerformanceContent && !elements.teamPerformanceContent.hidden) await loadTeamPerformance(selectedFixture(), true, true);
+    if (elements.cornersContent && !elements.cornersContent.hidden) await loadCorners(true);
+  }
 }
 
 function renderAnalysis(analysis) {
@@ -2015,26 +2057,29 @@ function renderOutcomeScenarios(result) {
   </div><div class="outcome-grid">${scenarioCards}</div><p class="market-disclaimer">${escapeHtml(warningText)}</p>`;
 }
 
-async function loadOutcomeScenarios() {
+async function loadOutcomeScenarios(forceRefresh = false) {
   const fixture = selectedFixture();
   if (!fixture || state.isLoadingOutcome) return;
-  if (state.outcomeByFixture.has(fixture.id)) return toggleReadyModule(elements.showOutcome, elements.outcomeContent);
+  if (!forceRefresh && state.outcomeByFixture.has(fixture.id)) return toggleReadyModule(elements.showOutcome, elements.outcomeContent);
   state.isLoadingOutcome = true;
   elements.showOutcome.disabled = true;
-  elements.showOutcome.textContent = "Calculando...";
+  elements.refreshOutcome.disabled = true;
+  elements.showOutcome.textContent = forceRefresh ? "Actualizando..." : "Calculando...";
   elements.outcomeStatus.className = "status-badge status-badge--processing";
-  elements.outcomeStatus.textContent = "Calculando";
+  elements.outcomeStatus.textContent = forceRefresh ? "Actualizando" : "Calculando";
   try {
-    const result = await footballDataService.getOutcomeScenarios(fixture);
+    const result = await footballDataService.getOutcomeScenarios(fixture, forceRefresh);
     state.outcomeByFixture.set(fixture.id, result);
     renderOutcomeScenarios(result);
     showModuleReady(elements.showOutcome, elements.outcomeContent);
+    if (forceRefresh) showNotice("Selector 1X2 actualizado.");
   } catch (error) {
     renderOutcomeScenarios({ status: "error", scenarios: [], warning: error.message, decisionLabel: "Error" });
   } finally {
     state.isLoadingOutcome = false;
     elements.showOutcome.disabled = !selectedFixture();
-    if (!state.outcomeByFixture.has(fixture.id)) elements.showOutcome.textContent = "Mostrar";
+    elements.refreshOutcome.disabled = !selectedFixture();
+    elements.showOutcome.textContent = elements.outcomeContent.hidden ? "Mostrar" : "Ocultar";
   }
 }
 
@@ -2169,13 +2214,13 @@ function renderCorners(result) {
   decoratePickSignals(elements.cornersContent, ".poisson-market", result.picks);
 }
 
-async function loadCorners() {
+async function loadCorners(forceRefresh = false) {
   const fixture = selectedFixture(); if (!fixture || state.isLoadingCorners) return;
-  if (state.cornersByFixture.has(fixture.id)) return toggleReadyModule(elements.showCorners, elements.cornersContent);
-  state.isLoadingCorners = true; elements.showCorners.disabled = true; elements.showCorners.textContent = "Calculando…";
-  try { const result = await footballDataService.getCornersModel(fixture); state.cornersByFixture.set(fixture.id, result); renderCorners(result); showModuleReady(elements.showCorners, elements.cornersContent); }
+  if (!forceRefresh && state.cornersByFixture.has(fixture.id)) return toggleReadyModule(elements.showCorners, elements.cornersContent);
+  state.isLoadingCorners = true; elements.showCorners.disabled = true; elements.refreshCorners.disabled = true; elements.showCorners.textContent = forceRefresh ? "Actualizando…" : "Calculando…";
+  try { const result = await footballDataService.getCornersModel(fixture, forceRefresh); state.cornersByFixture.set(fixture.id, result); renderCorners(result); showModuleReady(elements.showCorners, elements.cornersContent); if (forceRefresh) showNotice("Corners actualizados."); }
   catch (error) { renderCorners({ status: "not_available", warning: error.message, picks: [] }); elements.cornersContent.hidden = false; }
-  finally { state.isLoadingCorners = false; elements.showCorners.disabled = !selectedFixture(); if (!state.cornersByFixture.has(fixture.id)) elements.showCorners.textContent = "Mostrar"; }
+  finally { state.isLoadingCorners = false; elements.showCorners.disabled = !selectedFixture(); elements.refreshCorners.disabled = !selectedFixture(); elements.showCorners.textContent = elements.cornersContent.hidden ? "Mostrar" : "Ocultar"; }
 }
 
 function cornerLeg(selectionKey) { const fixture = selectedFixture(); const result = state.cornersByFixture.get(fixture?.id); const pick = result?.picks?.find((item) => item.selectionKey === selectionKey); if (!fixture || !pick) return null; return { id: `${fixture.id}:corners:${selectionKey}`, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date, market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey, decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null, impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct, expectedValue: pick.expectedValuePct, fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.level, reasoning: result.preMatchSignal, requiresReview: result.status !== "available", sourceModule: "corners", source: result.source, supportingData: pick.supportingData, contradictingData: pick.contradictingData }; }
@@ -2226,22 +2271,23 @@ function renderSpecificMarkets(result) {
   elements.specificMarketsContent.innerHTML = `${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}<div class="market-intents">${groupedHtml}</div>`;
 }
 
-async function loadSpecificMarkets() {
+async function loadSpecificMarkets(forceRefresh = false) {
   const fixture = selectedFixture();
   if (!fixture || state.isLoadingSpecificMarkets) return;
-  if (state.specificMarketsByFixture.has(fixture.id)) {
+  if (!forceRefresh && state.specificMarketsByFixture.has(fixture.id)) {
     renderSpecificMarkets(state.specificMarketsByFixture.get(fixture.id));
     elements.specificMarketsContent.hidden = false;
     return;
   }
   state.isLoadingSpecificMarkets = true;
   elements.showSpecificMarkets.disabled = true;
-  elements.showSpecificMarkets.textContent = "Evaluando…";
+  elements.showSpecificMarkets.textContent = forceRefresh ? "Actualizando…" : "Evaluando…";
   try {
-    const result = await footballDataService.getSpecificMarkets(fixture);
+    const result = await footballDataService.getSpecificMarkets(fixture, forceRefresh);
     state.specificMarketsByFixture.set(fixture.id, result);
     renderSpecificMarkets(result);
     elements.specificMarketsContent.hidden = false;
+    if (forceRefresh) showNotice("Catálogo de mercados actualizado.");
   } catch (error) {
     renderSpecificMarkets({ status: "not_available", groups: [], warnings: [error.message] });
     elements.specificMarketsContent.hidden = false;
@@ -2410,24 +2456,29 @@ function playerGoalPickLeg(index) {
 function addPlayerGoalPick(index) { const leg = playerGoalPickLeg(index); if (leg) appendPickToParlay(leg, "Pick de jugador agregado a Mi parlay."); }
 function savePlayerGoalPick(index) { const leg = playerGoalPickLeg(index); if (leg) saveIndividualLeg({ ...leg, result: "pending" }); }
 
-async function loadPlayerGoalCandidates(fixture) {
+async function loadPlayerGoalCandidates(fixture, forceRefresh = false, reveal = false) {
   if (!fixture || state.playerGoalLoadingFixtures.has(fixture.id)) return;
   const saved = state.playerGoalByFixture.get(fixture.id);
-  if (saved) return renderPlayerGoalCandidates(saved);
+  if (!forceRefresh && saved) return renderPlayerGoalCandidates(saved);
   state.playerGoalLoadingFixtures.add(fixture.id);
   elements.togglePlayerGoal.disabled = true;
+  elements.refreshPlayerGoal.disabled = true;
   elements.playerGoalStatus.className = "status-badge status-badge--processing";
-  elements.playerGoalStatus.textContent = "Analizando";
+  elements.playerGoalStatus.textContent = forceRefresh ? "Actualizando" : "Analizando";
   elements.playerGoalContent.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Analizando jugadores con mayor amenaza de gol…</p></div>';
   try {
-    const result = await footballDataService.getPlayerGoalCandidates(fixture);
+    const result = await footballDataService.getPlayerGoalCandidates(fixture, forceRefresh);
     state.playerGoalByFixture.set(fixture.id, result);
     if (String(state.selectedFixtureId) === String(fixture.id)) renderPlayerGoalCandidates(result);
+    if (reveal) showModuleReady(elements.togglePlayerGoal, elements.playerGoalContent);
+    else elements.playerGoalContent.hidden = true;
+    if (forceRefresh) showNotice("Amenaza ofensiva individual actualizada.");
   } catch (error) {
     if (String(state.selectedFixtureId) === String(fixture.id)) renderPlayerGoalCandidates({ status: "error", candidates: [], message: error.message });
   } finally {
     state.playerGoalLoadingFixtures.delete(fixture.id);
     if (String(state.selectedFixtureId) === String(fixture.id)) elements.togglePlayerGoal.disabled = false;
+    if (String(state.selectedFixtureId) === String(fixture.id)) elements.refreshPlayerGoal.disabled = false;
   }
 }
 
@@ -2468,30 +2519,37 @@ function saveTeamPerformancePick(reference) {
   if (leg) saveIndividualLeg({ ...leg, result: "pending" });
 }
 
-async function loadTeamPerformance(fixture) {
+async function loadTeamPerformance(fixture, forceRefresh = false, reveal = false) {
   if (!fixture || state.teamPerformanceLoadingFixtures.has(fixture.id)) return;
   const saved = state.teamPerformanceByFixture.get(fixture.id);
-  if (saved) return renderTeamPerformance(saved, fixture);
+  if (!forceRefresh && saved) return renderTeamPerformance(saved, fixture);
   state.teamPerformanceLoadingFixtures.add(fixture.id);
+  elements.refreshTeamPerformance.disabled = true;
   elements.teamPerformanceTitle.textContent = "Rendimiento promedio por equipo";
   elements.teamPerformanceStatus.className = "status-badge status-badge--processing";
-  elements.teamPerformanceStatus.textContent = "Calculando";
+  elements.teamPerformanceStatus.textContent = forceRefresh ? "Actualizando" : "Calculando";
   elements.teamPerformanceContent.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Comparando la misma ventana histórica para ambos equipos…</p></div>';
-  applyTeamPerformanceVisibility(teamPerformanceVisible());
+  applyTeamPerformanceVisibility(reveal);
   try {
-    const result = await footballDataService.getTeamPerformance(fixture);
+    const result = await footballDataService.getTeamPerformance(fixture, forceRefresh);
     state.teamPerformanceByFixture.set(fixture.id, result);
     if (String(state.selectedFixtureId) === String(fixture.id)) renderTeamPerformance(result, fixture);
+    if (!reveal) {
+      elements.teamPerformanceContent.hidden = true;
+      resetModuleButton(elements.toggleTeamPerformance);
+    }
+    if (forceRefresh) showNotice("Forma individual agregada actualizada.");
   } catch (error) {
     if (String(state.selectedFixtureId) === String(fixture.id)) renderTeamPerformance({ status: "not_available", k: 0, message: error.message }, fixture);
   } finally {
     state.teamPerformanceLoadingFixtures.delete(fixture.id);
+    if (String(state.selectedFixtureId) === String(fixture.id)) elements.refreshTeamPerformance.disabled = false;
   }
 }
 
 async function selectFixture(fixtureId, analysisMode = null) {
   if (state.isAnalyzing) return;
-  if (state.selectedFixtureId !== fixtureId) resetAnalysisGuide();
+  resetAnalysisGuide();
   state.selectedFixtureId = fixtureId;
   renderMatches();
   const fixtureIndex = state.fixtures.findIndex((fixture) => fixture.id === fixtureId);
@@ -2502,7 +2560,8 @@ async function selectFixture(fixtureId, analysisMode = null) {
     renderMatches();
     renderFixtureData();
     void loadSpecificMarkets();
-    void loadTeamPerformance(detailedFixture).then(() => loadPlayerGoalCandidates(detailedFixture));
+    void loadTeamPerformance(detailedFixture, false, false).then(() => loadPlayerGoalCandidates(detailedFixture, false, false));
+    if (!analysisMode) showFixtureReadyDialog();
   } catch (error) {
     elements.filterError.hidden = false;
     elements.filterError.textContent = error.message;
@@ -2761,6 +2820,10 @@ elements.researchGrid.addEventListener("click", (event) => {
 });
 elements.refreshResearch.addEventListener("click", refreshResearchData);
 elements.refreshCoverage.addEventListener("click", refreshResearchData);
+elements.refreshOutcome.addEventListener("click", () => loadOutcomeScenarios(true));
+elements.refreshPlayerGoal.addEventListener("click", () => loadPlayerGoalCandidates(selectedFixture(), true, true));
+elements.refreshTeamPerformance.addEventListener("click", () => loadTeamPerformance(selectedFixture(), true, true));
+elements.refreshCorners.addEventListener("click", () => loadCorners(true));
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.refreshLiveNow.addEventListener("click", refreshLiveDataNow);
 elements.simulationUseSelected.addEventListener("click", useSelectedFixtureForSimulation);
@@ -2801,6 +2864,7 @@ elements.specificMarketsContent.addEventListener("click", (event) => {
   if (save) saveSpecificMarketPick(save.dataset.saveSpecific);
 });
 elements.dataDialogClose.addEventListener("click", closeDataDialog);
+elements.fixtureReadyAccept.addEventListener("click", () => elements.fixtureReadyDialog.close());
 elements.dataDialogContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-odds-pick]");
   const saveButton = event.target.closest("[data-save-odds-pick]");
@@ -2927,13 +2991,9 @@ elements.matchesList.addEventListener("click", async (event) => {
     return;
   }
   if (button?.dataset.action === "data") {
-    switchView("guide");
-    const decision = document.querySelector("#guide-data-picks-module");
-    if (decision) decision.open = true;
-    window.requestAnimationFrame(() => decision?.scrollIntoView({ behavior: "auto", block: "start" }));
+    showFixtureReadyDialog();
     return;
   }
-  switchView("transparency");
 });
 elements.matchesList.addEventListener("keydown", async (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
@@ -2941,7 +3001,6 @@ elements.matchesList.addEventListener("keydown", async (event) => {
   if (!card || event.target.closest("button")) return;
   event.preventDefault();
   await selectFixture(card.dataset.fixtureId, false);
-  switchView("transparency");
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
