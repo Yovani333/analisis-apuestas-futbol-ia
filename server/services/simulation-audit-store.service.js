@@ -56,6 +56,7 @@ export function createSimulationAuditRecord(result = {}, input = {}, observabili
     marketComparison: clone(result.marketComparison || []),
     decision: clone(result.summary || {}),
     warnings: clone(result.warnings || []),
+    validation: clone(result.validation || {}),
     apiConsumption: apiDelta(observability.before, observability.after),
     cacheInfo: clone(result.cacheInfo || null),
     status: result.status || "not_available"
