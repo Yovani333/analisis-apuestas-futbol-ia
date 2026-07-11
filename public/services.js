@@ -202,6 +202,12 @@ export const footballDataService = {
     return requestJson(`/api/simulation/advanced?${new URLSearchParams(params)}`);
   },
 
+  async getSimulationAuditHistory(params = {}) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { source: "mock", records: [] };
+    return requestJson(`/api/simulation/audit?${new URLSearchParams(params)}`);
+  },
+
   async getFixtureResult(fixtureId) {
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`);
     return payload.result;
