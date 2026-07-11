@@ -15,6 +15,7 @@ const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
 const ANALYSIS_USAGE_KEY = "football-ai.analysis-usage.v1";
 const TEAM_PERFORMANCE_VISIBILITY_KEY = "football-ai.team-performance-visible.v1";
+const PICK_COLLECTION_CACHE_KEY = "football-ai.pick-collection-cache.v1";
 const readLocalJson = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 };
@@ -34,6 +35,7 @@ const state = {
   specificMarketsByFixture: new Map(),
   teamPerformanceByFixture: new Map(),
   playerGoalByFixture: new Map(),
+  pickCollectionByFixture: new Map(Object.entries(readLocalJson(PICK_COLLECTION_CACHE_KEY, {}))),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
@@ -60,6 +62,7 @@ const state = {
   isRefreshingStatuses: false,
   isRefreshingLive: false,
   isCapturingEvidence: false,
+  isCollectingPickInfo: false,
   lastLiveRefreshAt: null,
   simulationTeamOptionByValue: new Map(),
   simulationCompetitionOptionByValue: new Map()
@@ -158,6 +161,9 @@ Object.assign(elements, {
 });
 
 Object.assign(elements, {
+  collectPickInfo: document.querySelector("#collect-pick-info"),
+  pickCollectionStatus: document.querySelector("#pick-collection-status"),
+  pickCollectionContent: document.querySelector("#pick-collection-content-inner"),
   themeToggle: document.querySelector("#theme-toggle"), alertCount: document.querySelector("#alert-count"),
   notificationToggle: document.querySelector("#notification-toggle"), notificationCount: document.querySelector("#notification-count"),
   notificationPopover: document.querySelector("#notification-popover"), notificationList: document.querySelector("#notification-list"),
@@ -465,6 +471,9 @@ function clearSelectedFixtureData() {
   elements.dataStatus.textContent = "No disponible";
   renderResearchData(null);
   renderLiveData(null, null);
+  elements.collectPickInfo.disabled = true;
+  setPickCollectionStatus("Listo para recopilar", "unavailable");
+  renderPickCollection(null);
   showAnalysisEmpty();
 }
 
@@ -620,6 +629,8 @@ function renderFixtureData() {
   elements.refreshPlayerGoal.disabled = false;
   elements.refreshTeamPerformance.disabled = false;
   elements.refreshCorners.disabled = false;
+  elements.collectPickInfo.disabled = false;
+  renderPickCollection(state.pickCollectionByFixture.get(fixture.id));
   elements.showDataPicks.disabled = state.isLoadingDataPicks;
   const savedDataPicks = state.dataPicksByFixture.get(fixture.id);
   if (savedDataPicks) renderDataPicks(savedDataPicks);
@@ -1791,8 +1802,279 @@ function switchView(view) {
   if (view === "saved") { renderSavedPicks(); renderSavedParlays(); }
   if (view === "audit") renderAuditFixtureOptions();
   if (view === "simulation") refreshSimulationPickers();
+  if (view === "pick-collection") {
+    elements.collectPickInfo.disabled = !selectedFixture() || state.isCollectingPickInfo;
+    renderPickCollection(state.pickCollectionByFixture.get(selectedFixture()?.id));
+  }
   if (["transparency", "guide", "markets"].includes(view)) void refreshCurrentViewData(view);
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+const PICK_COLLECTION_MODEL_VERSION = "pick-analysis-snapshot-v1";
+
+function persistPickCollectionCache() {
+  writeLocalJson(PICK_COLLECTION_CACHE_KEY, Object.fromEntries(state.pickCollectionByFixture.entries()));
+}
+
+function collectionStatusClass(status) {
+  if (status === "valid") return "available";
+  if (status === "contradictory" || status === "insufficient") return "partial";
+  return "unavailable";
+}
+
+function collectionModule({ name, result = "No disponible", probability = null, sampleSize = null, source = "Sistema", quality = "not_available", confidence = "No disponible", warnings = [], status = "not_available", updatedAt = new Date().toISOString() }) {
+  return { name, result, probability, sampleSize, source, quality, confidence, warnings: warnings.filter(Boolean), status, updatedAt };
+}
+
+function collectionPickFromMarket(fixture, pick, sourceModule, sourceLabel, backingModels = []) {
+  if (!pick?.selection || !pick?.market) return null;
+  const decimalOdds = Number(pick.decimalOdds ?? pick.odds);
+  const modelProbability = Number(pick.modelProbabilityPct ?? pick.probabilityPct ?? pick.confidenceScore ?? pick.goalThreatScore);
+  const fairOdds = modelProbability > 0 ? Number((100 / modelProbability).toFixed(2)) : null;
+  const expectedValue = Number.isFinite(Number(pick.expectedValuePct)) ? Number(pick.expectedValuePct) : (Number.isFinite(decimalOdds) && modelProbability > 0 ? Number(((decimalOdds * modelProbability) - 100).toFixed(1)) : null);
+  const confidenceScore = Number(pick.confidenceScore ?? pick.goalThreatScore ?? modelProbability ?? 0);
+  const hasValue = expectedValue === null || expectedValue >= 0;
+  const isActionable = confidenceScore >= 45 && hasValue && !String(pick.decision || pick.level || "").toLowerCase().includes("evitar");
+  if (!isActionable) return null;
+  return {
+    id: `${fixture.id}:collection:${sourceModule}:${pick.selectionKey || pick.playerId || pick.selection}`,
+    fixtureId: fixture.id,
+    league: fixture.leagueName,
+    home: fixture.home,
+    away: fixture.away,
+    date: fixture.date,
+    market: pick.market,
+    selection: pick.selection,
+    marketCode: pick.marketKey || sourceModule,
+    selectionCode: pick.selectionKey || pick.playerId || pick.selection,
+    decimalOdds: Number.isFinite(decimalOdds) ? decimalOdds : null,
+    originalOdds: Number.isFinite(decimalOdds) ? decimalOdds : null,
+    updatedOdds: null,
+    impliedProbability: Number.isFinite(decimalOdds) && decimalOdds > 0 ? Number((100 / decimalOdds).toFixed(1)) : null,
+    modelProbability: Number.isFinite(modelProbability) ? Number(modelProbability.toFixed(1)) : null,
+    estimatedProbability: Number.isFinite(modelProbability) ? Number(modelProbability.toFixed(1)) : null,
+    fairOdds,
+    expectedValue,
+    fixtureStatus: fixture.statusLabel || fixture.status,
+    kickoffAt: fixture.utcDateTime || null,
+    lastUpdatedAt: new Date().toISOString(),
+    confidence: pick.confidence || `${confidenceScore}/100`,
+    confidenceScore,
+    risk: pick.risk || pick.level || pick.decision || (confidenceScore >= 70 ? "Medio" : "Revisión"),
+    reasoning: pick.explanation || pick.reasoning || (pick.supportingData || []).join("; ") || "Incluido por consenso mínimo entre módulos existentes.",
+    requiresReview: confidenceScore < 70,
+    sourceModule: "pick_analysis_snapshot",
+    source: sourceLabel,
+    sourceLabel: "Recopilación para Picks",
+    backingModels,
+    supportingData: pick.supportingData || backingModels,
+    contradictingData: pick.contradictingData || []
+  };
+}
+
+function collectCandidateMarkets(fixture, results) {
+  const candidates = [];
+  const push = (pick, module, label, backingModels) => {
+    const candidate = collectionPickFromMarket(fixture, pick, module, label, backingModels);
+    if (candidate && !candidates.some((item) => item.market === candidate.market && item.selection === candidate.selection)) candidates.push(candidate);
+  };
+  (results.dataPicks?.picks || []).forEach((pick) => pick.canAdd && push(pick, "data_picks", "Picks basados en datos", ["Motor de Decisión"]));
+  (results.poisson?.suggestedMarkets || []).forEach((pick) => push(pick, "poisson", "Modelo Poisson", ["Poisson"]));
+  (results.teamGoals?.picks || []).forEach((pick) => push(pick, "team_goals", "Probabilidad de gol por equipo", ["Ataque vs Defensa"]));
+  (results.corners?.picks || []).forEach((pick) => push(pick, "corners", "Corners", ["Corners"]));
+  (results.specificMarkets?.groups || []).forEach((group) => (group.picks || []).forEach((pick) => push(pick, "specific_markets", "Catálogo de mercados", [group.label || "Mercado específico"])));
+  ["home", "away"].forEach((side) => (results.teamPerformance?.picks?.[side] || []).forEach((pick) => pick.canAdd && push(pick, "team_average_performance", "Rendimiento promedio por equipo", ["Tiros + pases + disciplina"])));
+  (results.playerGoals?.candidates || []).forEach((candidate) => push({
+    ...candidate,
+    market: candidate.market || "Jugador anota en cualquier momento",
+    selection: candidate.selection || `${candidate.playerName} anota`,
+    decimalOdds: candidate.odds,
+    confidenceScore: candidate.goalThreatScore
+  }, "player_goal_candidate", "Jugador con posible gol", ["Amenaza ofensiva individual"]));
+  return candidates
+    .filter((candidate) => (candidate.expectedValue === null || candidate.expectedValue >= 0) && Number(candidate.confidenceScore || 0) >= 45)
+    .sort((a, b) => Number(b.confidenceScore || 0) - Number(a.confidenceScore || 0))
+    .slice(0, 8);
+}
+
+function buildConsensus(candidateMarkets) {
+  const bySelection = new Map();
+  for (const pick of candidateMarkets) {
+    const key = `${pick.market}:${pick.selection}`;
+    const current = bySelection.get(key) || { market: pick.market, selection: pick.selection, models: new Set(), confidence: 0 };
+    (pick.backingModels || [pick.source]).forEach((model) => current.models.add(model));
+    current.confidence = Math.max(current.confidence, Number(pick.confidenceScore || 0));
+    bySelection.set(key, current);
+  }
+  return [...bySelection.values()].map((item) => ({
+    market: item.market,
+    selection: item.selection,
+    models: [...item.models],
+    confidence: item.confidence,
+    status: item.models.size >= 2 ? "valid" : "insufficient"
+  }));
+}
+
+function buildPickAnalysisSnapshot(fixture, results, errors = []) {
+  const modules = [
+    collectionModule({ name: "Fixture", result: `${fixture.home} vs ${fixture.away}`, source: fixture.dataSource || "api-football", quality: fixture.dataQuality?.level || "partial", confidence: `${fixture.dataQuality?.score ?? 0}/100`, status: fixture.id ? "valid" : "insufficient", updatedAt: fixture.fetchedAt || new Date().toISOString() }),
+    collectionModule({ name: "Rendimiento reciente", result: results.teamPerformance?.status || "No disponible", sampleSize: results.teamPerformance?.k || null, source: results.teamPerformance?.source || "API-Football", quality: results.teamPerformance?.status === "available" ? "available" : "partial", confidence: results.teamPerformance?.status === "available" ? "Media" : "Baja", warnings: [results.teamPerformance?.message], status: results.teamPerformance?.status === "available" ? "valid" : "insufficient", updatedAt: results.teamPerformance?.updatedAt }),
+    collectionModule({ name: "Selector 1X2", result: results.outcome?.decisionLabel || "No disponible", probability: results.outcome?.scenarios?.[0]?.probabilityPct || null, source: results.outcome?.source || "Modelo interno", quality: results.outcome?.status || "not_available", confidence: results.outcome?.confidenceLabel || "No disponible", warnings: [results.outcome?.warning], status: results.outcome?.status === "available" ? "valid" : "insufficient" }),
+    collectionModule({ name: "Poisson", result: results.poisson?.status || "No disponible", source: results.poisson?.source || "Modelo interno", quality: results.poisson?.status || "not_available", confidence: results.poisson?.status === "available" ? "Media" : "Baja", warnings: [results.poisson?.warning], status: results.poisson?.status === "available" ? "valid" : "insufficient" }),
+    collectionModule({ name: "Ataque vs Defensa", result: results.teamGoals?.status || "No disponible", source: results.teamGoals?.source || "Modelo interno", quality: results.teamGoals?.status || "not_available", confidence: results.teamGoals?.status === "available" ? "Media" : "Baja", warnings: [results.teamGoals?.warning], status: results.teamGoals?.status === "available" ? "valid" : "insufficient" }),
+    collectionModule({ name: "Corners", result: results.corners?.status || "No disponible", source: results.corners?.source || "Modelo interno", quality: results.corners?.status || "not_available", confidence: results.corners?.confidenceScore ? `${results.corners.confidenceScore}/100` : "No disponible", warnings: results.corners?.warnings || [results.corners?.warning], status: results.corners?.status === "available" ? "valid" : "insufficient" }),
+    collectionModule({ name: "Jugadores", result: results.playerGoals?.status || "No disponible", sampleSize: results.playerGoals?.playersEvaluated || null, source: results.playerGoals?.source || "API-Football", quality: results.playerGoals?.status || "not_available", confidence: results.playerGoals?.status === "available" ? "Media" : "No disponible", warnings: [results.playerGoals?.message], status: results.playerGoals?.status === "available" ? "valid" : "insufficient" }),
+    collectionModule({ name: "Mercado y cuotas", result: `${fixture.marketAnalysis?.length || 0} mercados normalizados`, source: "API-Football", quality: fixture.marketAnalysis?.length ? "available" : "not_available", confidence: fixture.marketAnalysis?.length ? "Media" : "No disponible", status: fixture.marketAnalysis?.length ? "valid" : "insufficient" })
+  ];
+  const candidates = collectCandidateMarkets(fixture, results);
+  const consensus = buildConsensus(candidates);
+  const contradictions = modules.filter((module) => module.status === "contradictory").map((module) => `${module.name}: ${module.result}`);
+  const missingData = modules.filter((module) => module.status === "insufficient" || module.status === "not_available").map((module) => module.name);
+  const validModules = modules.filter((module) => module.status === "valid").length;
+  const availablePct = modules.length ? Math.round((validModules / modules.length) * 100) : 0;
+  const warnings = [
+    ...errors.map((error) => `${error.module}: ${error.message}`),
+    candidates.length ? "" : "No se encontró un pick recomendado: los datos disponibles no alcanzan los criterios mínimos de calidad, consenso y valor esperado."
+  ].filter(Boolean);
+  return {
+    type: "pickAnalysisSnapshot",
+    modelVersion: PICK_COLLECTION_MODEL_VERSION,
+    fixtureId: fixture.id,
+    generatedAt: new Date().toISOString(),
+    source: "existing-modules-cache-and-api",
+    match: {
+      competition: fixture.leagueName,
+      season: fixture.season || "",
+      date: fixture.date,
+      time: fixture.time,
+      home: fixture.home,
+      away: fixture.away,
+      venue: fixture.stadium || "",
+      status: fixture.statusLabel || fixture.status,
+      restDays: fixture.preMatch?.context?.restDays || null
+    },
+    summary: {
+      globalQuality: availablePct >= 70 ? "Disponible" : availablePct >= 40 ? "Parcial" : "Datos insuficientes",
+      availablePct,
+      modulesEvaluated: modules.length,
+      validModules,
+      contradictions: contradictions.length,
+      apiRequests: 0,
+      cacheUsed: true
+    },
+    modules,
+    consensus,
+    contradictions,
+    missingData,
+    candidateMarkets: candidates,
+    warnings,
+    audit: {
+      user: state.preferences.name || "Usuario local",
+      formulas: ["Poisson", "Outcome 1X2", "Team goals", "Corners", "Team performance", "Player goal candidates"].filter(Boolean),
+      errors,
+      note: "No se modificaron fórmulas; se reutilizaron resultados de módulos existentes."
+    }
+  };
+}
+
+function setPickCollectionStatus(label, status = "processing") {
+  elements.pickCollectionStatus.className = `status-badge status-badge--${status}`;
+  elements.pickCollectionStatus.textContent = label;
+}
+
+async function collectStep(label, moduleName, task, errors) {
+  setPickCollectionStatus(label, "processing");
+  try {
+    return await task();
+  } catch (error) {
+    errors.push({ module: moduleName, message: error.message || "Error parcial" });
+    return null;
+  }
+}
+
+async function collectPickInformation() {
+  const fixture = selectedFixture();
+  if (!fixture || state.isCollectingPickInfo) return showNotice("Selecciona primero un encuentro en Dashboard.");
+  state.isCollectingPickInfo = true;
+  elements.collectPickInfo.disabled = true;
+  elements.collectPickInfo.textContent = "Recopilando datos...";
+  elements.pickCollectionContent.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Recopilando datos útiles del partido seleccionado...</p></div>';
+  const errors = [];
+  try {
+    const currentFixture = await collectStep("Consultando fuentes", "fixture", async () => {
+      const cached = selectedFixture();
+      return cached?.confirmedData ? cached : footballDataService.getFixtureData(fixture);
+    }, errors);
+    if (!currentFixture) throw new Error("No se pudo cargar el fixture base.");
+    const index = state.fixtures.findIndex((item) => item.id === currentFixture.id);
+    if (index >= 0) state.fixtures[index] = currentFixture;
+
+    const results = {};
+    setPickCollectionStatus("Ejecutando modelos", "processing");
+    results.dataPicks = state.dataPicksByFixture.get(currentFixture.id) || await collectStep("Ejecutando modelos", "picks basados en datos", () => footballDataService.getDataPicks(currentFixture), errors);
+    if (results.dataPicks) state.dataPicksByFixture.set(currentFixture.id, results.dataPicks);
+    results.outcome = state.outcomeByFixture.get(currentFixture.id) || await collectStep("Ejecutando modelos", "selector 1X2", () => footballDataService.getOutcomeScenarios(currentFixture), errors);
+    if (results.outcome) state.outcomeByFixture.set(currentFixture.id, results.outcome);
+    results.poisson = state.poissonByFixture.get(currentFixture.id) || await collectStep("Ejecutando modelos", "poisson", () => footballDataService.getPoissonModel(currentFixture), errors);
+    if (results.poisson) state.poissonByFixture.set(currentFixture.id, results.poisson);
+    results.teamGoals = state.teamGoalsByFixture.get(currentFixture.id) || await collectStep("Ejecutando modelos", "goles por equipo", () => footballDataService.getTeamGoalProbability(currentFixture), errors);
+    if (results.teamGoals) state.teamGoalsByFixture.set(currentFixture.id, results.teamGoals);
+    results.corners = state.cornersByFixture.get(currentFixture.id) || await collectStep("Validando consistencia", "corners", () => footballDataService.getCornersModel(currentFixture), errors);
+    if (results.corners) state.cornersByFixture.set(currentFixture.id, results.corners);
+    results.specificMarkets = state.specificMarketsByFixture.get(currentFixture.id) || await collectStep("Evaluando cuotas", "mercados específicos", () => footballDataService.getSpecificMarkets(currentFixture), errors);
+    if (results.specificMarkets) state.specificMarketsByFixture.set(currentFixture.id, results.specificMarkets);
+    results.teamPerformance = state.teamPerformanceByFixture.get(currentFixture.id) || await collectStep("Consultando fuentes", "rendimiento promedio", () => footballDataService.getTeamPerformance(currentFixture), errors);
+    if (results.teamPerformance) state.teamPerformanceByFixture.set(currentFixture.id, results.teamPerformance);
+    results.playerGoals = state.playerGoalByFixture.get(currentFixture.id) || await collectStep("Consultando fuentes", "jugadores", () => footballDataService.getPlayerGoalCandidates(currentFixture), errors);
+    if (results.playerGoals) state.playerGoalByFixture.set(currentFixture.id, results.playerGoals);
+
+    setPickCollectionStatus("Construyendo expediente", "processing");
+    const snapshot = buildPickAnalysisSnapshot(currentFixture, results, errors);
+    state.pickCollectionByFixture.set(currentFixture.id, snapshot);
+    persistPickCollectionCache();
+    renderPickCollection(snapshot);
+    setPickCollectionStatus(errors.length ? "Completado con advertencias" : snapshot.candidateMarkets.length ? "Completado" : "Datos insuficientes", errors.length || !snapshot.candidateMarkets.length ? "partial" : "available");
+  } catch (error) {
+    setPickCollectionStatus("Error parcial", "unavailable");
+    elements.pickCollectionContent.innerHTML = `<div class="research-empty"><strong>Error de fuente</strong><p>${escapeHtml(error.message)}</p></div>`;
+  } finally {
+    state.isCollectingPickInfo = false;
+    elements.collectPickInfo.disabled = !selectedFixture();
+    elements.collectPickInfo.textContent = "Recabar información";
+  }
+}
+
+function renderPickCollection(snapshot) {
+  if (!snapshot) {
+    elements.pickCollectionContent.innerHTML = '<div class="research-empty">Selecciona un encuentro y presiona “Recabar información”.</div>';
+    return;
+  }
+  const summary = snapshot.summary || {};
+  const moduleRows = (snapshot.modules || []).map((module) => `<tr><td>${escapeHtml(module.name)}</td><td>${escapeHtml(module.result)}</td><td>${module.probability === null || module.probability === undefined ? "—" : `${displayValue(module.probability)}%`}</td><td>${module.sampleSize ?? "—"}</td><td>${escapeHtml(module.source)}</td><td>${escapeHtml(module.confidence)}</td><td><span class="status-badge status-badge--${collectionStatusClass(module.status)}">${escapeHtml(module.status)}</span></td><td>${escapeHtml((module.warnings || []).join(" ") || "Sin advertencias")}</td></tr>`).join("");
+  const consensus = (snapshot.consensus || []).map((item) => `<article><strong>${escapeHtml(item.selection)}</strong><span>${escapeHtml(item.market)}</span><small>${escapeHtml(item.models.join(" + ") || "Sin consenso independiente")} · ${escapeHtml(item.status)}</small></article>`).join("");
+  const candidates = (snapshot.candidateMarkets || []).map((pick, index) => `<article class="collection-pick">
+    <div><span>${escapeHtml(pick.market)}</span><strong>${escapeHtml(pick.selection)}</strong><small>Modelo ${displayValue(pick.modelProbability)}% · Cuota ${displayValue(pick.decimalOdds)} · Justa ${displayValue(pick.fairOdds)} · EV ${pick.expectedValue === null ? "Sin cuota" : `${displayValue(pick.expectedValue)}%`}</small><small>Respaldos: ${escapeHtml((pick.backingModels || []).join(" + ") || pick.source)}</small><p>${escapeHtml(pick.reasoning)}</p></div>
+    <button class="button button--primary button--compact" type="button" data-add-collection-pick="${index}">Agregar pick</button>
+  </article>`).join("");
+  elements.pickCollectionContent.innerHTML = `<div class="collection-summary">
+    <article><span>Calidad global</span><strong>${escapeHtml(summary.globalQuality || "No disponible")}</strong><small>${displayValue(summary.availablePct, 0)}% datos disponibles</small></article>
+    <article><span>Módulos</span><strong>${displayValue(summary.validModules, 0)} / ${displayValue(summary.modulesEvaluated, 0)}</strong><small>válidos / evaluados</small></article>
+    <article><span>Contradicciones</span><strong>${displayValue(summary.contradictions, 0)}</strong><small>${escapeHtml(formatUpdatedAt(snapshot.generatedAt))}</small></article>
+  </div>
+  ${snapshot.warnings?.length ? `<div class="data-picks-warnings">${snapshot.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
+  <section class="collection-block"><h3>Datos recopilados</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Módulo</th><th>Resultado</th><th>Prob.</th><th>Muestra</th><th>Fuente</th><th>Confianza</th><th>Estado</th><th>Advertencias</th></tr></thead><tbody>${moduleRows}</tbody></table></div></section>
+  <section class="collection-grid"><article><h3>Coincidencias analíticas</h3><div class="collection-mini-list">${consensus || '<p class="muted-text">Sin coincidencias suficientes entre módulos independientes.</p>'}</div></article><article><h3>Contradicciones y faltantes</h3><ul>${[...(snapshot.contradictions || []), ...(snapshot.missingData || []).map((item) => `Falta o es insuficiente: ${item}`)].map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>Sin contradicciones graves detectadas.</li>"}</ul></article></section>
+  <section class="collection-block"><h3>Mercados candidatos</h3>${candidates || '<div class="research-empty">No se encontró un pick recomendado: los datos disponibles no alcanzan los criterios mínimos de calidad, consenso y valor esperado.</div>'}</section>`;
+}
+
+function collectionPickLeg(index) {
+  const snapshot = state.pickCollectionByFixture.get(selectedFixture()?.id);
+  return snapshot?.candidateMarkets?.[Number(index)] || null;
+}
+
+function addCollectionPick(index) {
+  const leg = collectionPickLeg(index);
+  if (leg) appendPickToParlay(leg, "Pick de recopilación agregado a Mi parlay.");
 }
 
 async function refreshCurrentViewData(view) {
@@ -2906,6 +3188,11 @@ elements.refreshTeamPerformance.addEventListener("click", () => loadTeamPerforma
 elements.refreshCorners.addEventListener("click", () => loadCorners(true));
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.refreshLiveNow.addEventListener("click", refreshLiveDataNow);
+elements.collectPickInfo.addEventListener("click", collectPickInformation);
+elements.pickCollectionContent.addEventListener("click", (event) => {
+  const add = event.target.closest("[data-add-collection-pick]");
+  if (add) addCollectionPick(add.dataset.addCollectionPick);
+});
 elements.simulationUseSelected.addEventListener("click", useSelectedFixtureForSimulation);
 elements.simulationCompare.addEventListener("click", runSimulationComparison);
 elements.simulationAdvanced.addEventListener("click", runAdvancedSimulation);

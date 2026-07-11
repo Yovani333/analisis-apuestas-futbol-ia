@@ -28,6 +28,7 @@
         <button class="main-nav__item" type="button" data-view="guide">Guía de análisis</button>
         <button class="main-nav__item" type="button" data-view="markets">Catálogo de mercados</button>
         <button class="main-nav__item" type="button" data-view="live">En vivo</button>
+        <button class="main-nav__item" type="button" data-view="pick-collection">Recopilación para Picks</button>
         <button id="theme-toggle" class="main-nav__item" type="button" aria-pressed="false" title="Cambiar tema">Modo oscuro</button>
         <button class="main-nav__item" type="button" data-view="saved">
           <span aria-hidden="true">▣</span> Mis apuestas <span id="saved-parlay-count" class="nav-count">0</span>
@@ -408,6 +409,25 @@
       </section>
     </main>
 
+    <main id="pick-collection-content" class="utility-view pick-collection-view" data-view-panel="pick-collection" hidden>
+      <section class="utility-heading">
+        <div><p class="eyebrow">Expediente auditable</p><h2>Recopilación para Picks</h2><p>Consolida datos, modelos, cuotas, contradicciones y mercados candidatos del encuentro seleccionado sin modificar fórmulas existentes.</p></div>
+        <div class="panel-actions">
+          <button id="collect-pick-info" class="button button--primary" type="button" disabled>Recabar información</button>
+          <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
+        </div>
+      </section>
+      <section class="panel pick-collection-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Motor de consenso</p><h2>Expediente analítico del partido</h2></div>
+          <span id="pick-collection-status" class="status-badge status-badge--unavailable">Listo para recopilar</span>
+        </div>
+        <div id="pick-collection-content-inner" class="pick-collection-content" aria-live="polite">
+          <div class="research-empty">Selecciona un encuentro en Dashboard y presiona “Recabar información”. No se generan picks si no hay calidad, consenso y valor suficiente.</div>
+        </div>
+      </section>
+    </main>
+
     <main id="parlays-guardados" class="saved-view" data-view-panel="saved" hidden>
       <section class="saved-view__heading">
         <div>
@@ -506,6 +526,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260710-simulation-search-v1"></script>
+    <script type="module" src="app.js?v=20260711-pick-collection-v1"></script>
   </body>
 </html>
