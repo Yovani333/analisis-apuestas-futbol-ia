@@ -1010,6 +1010,57 @@ body {
   letter-spacing: .04em;
   text-transform: uppercase;
 }
+.league-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 10px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.league-group__header h3 {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin: 0;
+}
+.league-group__header h3 small {
+  color: var(--muted);
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.league-group__toggle {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  flex: 0 0 34px;
+  color: var(--primary);
+  font: 800 1.25rem/1 system-ui, sans-serif;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color .16s ease, border-color .16s ease, background-color .16s ease;
+}
+.league-group__toggle:hover,
+.league-group__toggle:focus-visible {
+  color: white;
+  background: var(--primary);
+  border-color: var(--primary);
+  outline: none;
+}
+.league-group__matches {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
 .league-code { color: white; background: #17385d; border-radius: 4px; }
 .match-card {
   grid-template-columns: minmax(0, 1fr) minmax(180px, .28fr) auto;
