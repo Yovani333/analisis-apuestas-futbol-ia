@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildPlayerGoalCandidates, calculateGoalThreatScore, clearPlayerGoalCandidatesCache,
+  buildPlayerGoalCandidates, calculateGoalThreatScore, calculateIndividualFormScore, clearPlayerGoalCandidatesCache,
   getPlayerGoalCandidates, normalizeTeamPlayerHistory, selectPlayerHistoryFixtures
 } from "../server/services/player-goal-candidates.service.js";
 
@@ -28,6 +28,8 @@ test("normaliza strings y calcula amenaza sin NaN", () => {
   assert.equal(players[0].xgLast5, 0.42);
   assert.ok(players[0].conservativeGoalProbability > 0);
   assert.ok(Number.isFinite(calculateGoalThreatScore(players[0], { goalProbability: "65%" })));
+  assert.ok(Number.isFinite(calculateIndividualFormScore(players[0])));
+  assert.ok(players[0].individualFormScore > 0);
 });
 
 test("genera máximo tres candidatos ordenados y permite ambos equipos", () => {

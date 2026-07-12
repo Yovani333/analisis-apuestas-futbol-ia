@@ -1,5 +1,6 @@
 import { calculatePoissonModel } from "./poisson-model.service.js";
 import { resolveModuleQuality } from "./module-quality.service.js";
+import { buildShortTournamentContext } from "./short-tournament-context.service.js";
 
 const round = (value, digits = 1) => Number(Number(value || 0).toFixed(digits));
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, Number(value) || 0));
@@ -16,13 +17,13 @@ function normalizeThree(home, draw, away) {
 function probabilityFromFavorite(dataset) {
   const raw = dataset.fixture?.favorite?.probabilities || dataset.researchData?.favorite?.probabilities || {};
   const probabilities = normalizeThree(raw.home, raw.draw, raw.away);
-  return probabilities ? { source: "API-Football 1X2", weight: 1, probabilities } : null;
+  return probabilities ? { source: "API-Football 1X2", family: "provider-prediction", weight: 1, qualityFactor: .9, probabilities } : null;
 }
 
 function probabilityFromPoisson(dataset) {
   const poisson = dataset.poissonModel || calculatePoissonModel(dataset);
   const probabilities = normalizeThree(poisson.probabilities?.homeWin, poisson.probabilities?.draw, poisson.probabilities?.awayWin);
-  return probabilities ? { source: "Modelo Poisson", weight: poisson.status === "available" ? .9 : .65, probabilities, poisson } : { poisson };
+  return probabilities ? { source: "Modelo Poisson", family: "goal-model", weight: poisson.status === "available" ? .9 : .65, qualityFactor: Math.max(.4, numeric(poisson.quality?.score) / 100 || .55), probabilities, poisson } : { poisson };
 }
 
 function probabilityFromOdds(dataset) {
@@ -32,7 +33,7 @@ function probabilityFromOdds(dataset) {
   const draw = byKey("draw");
   const away = byKey("away_win");
   const probabilities = normalizeThree(100 / numeric(home?.decimalOdds), 100 / numeric(draw?.decimalOdds), 100 / numeric(away?.decimalOdds));
-  return probabilities ? { source: "Cuotas 1X2 sin margen", weight: .75, probabilities, odds: { home, draw, away } } : null;
+  return probabilities ? { source: "Cuotas 1X2 sin margen", family: "market", weight: .75, qualityFactor: .9, probabilities, odds: { home, draw, away } } : null;
 }
 
 function probabilityFromExpectedGoals(dataset) {
@@ -40,27 +41,40 @@ function probabilityFromExpectedGoals(dataset) {
   const xg = research.xgXga || {};
   const form = research.statsForm || {};
   const homeXg = numeric(xg.homeXG);
+  const homeXga = numeric(xg.homeXGA);
   const awayXg = numeric(xg.awayXG);
+  const awayXga = numeric(xg.awayXGA);
   const homeForm = numeric(form.homeGoalsForAvg) ?? numeric(form.homeAverageGoals);
   const awayForm = numeric(form.awayGoalsForAvg) ?? numeric(form.awayAverageGoals);
-  const home = homeXg ?? homeForm;
-  const away = awayXg ?? awayForm;
+  const homeInputs = [homeXg, awayXga].filter((value) => value !== null);
+  const awayInputs = [awayXg, homeXga].filter((value) => value !== null);
+  const home = homeInputs.length ? homeInputs.reduce((sum, value) => sum + value, 0) / homeInputs.length : homeForm;
+  const away = awayInputs.length ? awayInputs.reduce((sum, value) => sum + value, 0) / awayInputs.length : awayForm;
   if (home === null || away === null) return null;
   const diff = home - away;
   const draw = clamp(28 - Math.abs(diff) * 5, 18, 32);
   const homeWin = clamp((100 - draw) / 2 + diff * 16, 12, 76);
   const probabilities = normalizeThree(homeWin, draw, 100 - homeWin - draw);
-  return probabilities ? { source: homeXg !== null && awayXg !== null ? "xG/xGA estimado" : "Forma goleadora reciente", weight: homeXg !== null && awayXg !== null ? .8 : .55, probabilities } : null;
+  const hasXgDefensePair = homeInputs.length > 1 && awayInputs.length > 1;
+  return probabilities ? {
+    source: hasXgDefensePair ? "xG/xGA ataque contra defensa rival" : "Forma goleadora reciente",
+    family: "performance",
+    weight: hasXgDefensePair ? .8 : .55,
+    qualityFactor: hasXgDefensePair ? .85 : .6,
+    probabilities
+  } : null;
 }
 
 function weightedAverage(sources) {
   const usable = sources.filter(Boolean).filter((item) => item.probabilities);
   if (!usable.length) return null;
-  const weightTotal = usable.reduce((sum, item) => sum + item.weight, 0);
+  const hasGoalModel = usable.some((item) => item.family === "goal-model");
+  const effectiveWeight = (item) => item.weight * (item.qualityFactor || 1) * (hasGoalModel && item.family === "performance" ? .7 : 1);
+  const weightTotal = usable.reduce((sum, item) => sum + effectiveWeight(item), 0);
   return normalizeThree(
-    usable.reduce((sum, item) => sum + item.probabilities.home * item.weight, 0) / weightTotal,
-    usable.reduce((sum, item) => sum + item.probabilities.draw * item.weight, 0) / weightTotal,
-    usable.reduce((sum, item) => sum + item.probabilities.away * item.weight, 0) / weightTotal
+    usable.reduce((sum, item) => sum + item.probabilities.home * effectiveWeight(item), 0) / weightTotal,
+    usable.reduce((sum, item) => sum + item.probabilities.draw * effectiveWeight(item), 0) / weightTotal,
+    usable.reduce((sum, item) => sum + item.probabilities.away * effectiveWeight(item), 0) / weightTotal
   );
 }
 
@@ -83,16 +97,29 @@ function oddsFor(key, oddsSource, dataset) {
   return decimalOdds ? { decimalOdds, impliedProbabilityPct: round(100 / decimalOdds), bookmaker: row.bookmaker || "API-Football" } : { decimalOdds: null, impliedProbabilityPct: null, bookmaker: "" };
 }
 
-function scenarioDecision({ key, probability, leaderKey, gap, quality, ev, contradictions, missingCriticalData }) {
+function scenarioDecision({ key, probability, leaderKey, gap, quality, ev, contradictions, missingCriticalData, tournament }) {
   if (missingCriticalData) return "datos_insuficientes";
   if (contradictions.length >= 2) return "modelos_contradictorios";
   if (key !== leaderKey) return "solo_observacion";
   if (gap < 6) return "no_bet";
   if (contradictions.length) return "modelos_contradictorios";
-  if (ev !== null && ev > 4 && quality >= 60 && probability >= 42) return "apuesta_recomendada";
+  if (ev !== null && ev > 4 && quality >= 60 && probability >= 42 && !tournament.isKnockout) return "apuesta_recomendada";
   if (ev !== null && ev > 0 && probability >= 38) return "apuesta_con_valor_pero_riesgo_alto";
   if (ev !== null && ev <= 0) return "sin_valor";
   return quality >= 55 && probability >= 42 ? "solo_observacion" : "no_bet";
+}
+
+function confidenceLabel(score) {
+  if (score >= 75) return "Alta";
+  if (score >= 55) return "Media";
+  if (score > 0) return "Baja";
+  return "No disponible";
+}
+
+function rejectionReason({ key, leaderKey, probability, leaderProbability, contradictions }) {
+  if (key === leaderKey) return "Es la inclinación principal porque tiene la mayor probabilidad combinada.";
+  if (contradictions.length) return `No se eligió como escenario principal: ${contradictions[0]}`;
+  return `No se eligió porque queda ${round(leaderProbability - probability)} puntos por debajo del escenario principal.`;
 }
 
 function decisionLabel(decision) {
@@ -113,6 +140,7 @@ export function buildOutcomeScenarios(dataset = {}) {
   const poissonSource = probabilityFromPoisson(dataset);
   const oddsSource = probabilityFromOdds(dataset);
   const expectedSource = probabilityFromExpectedGoals(dataset);
+  const tournament = buildShortTournamentContext(dataset);
   const sources = [favoriteSource, poissonSource, oddsSource, expectedSource].filter((item) => item?.probabilities);
   const probabilities = weightedAverage(sources);
   const missingData = [];
@@ -137,20 +165,22 @@ export function buildOutcomeScenarios(dataset = {}) {
   const ordered = [...entries].sort((a, b) => probabilities[b[0]] - probabilities[a[0]]);
   const leaderKey = ordered[0][0];
   const gap = probabilities[ordered[0][0]] - probabilities[ordered[1][0]];
-  const missingCriticalData = sources.length < 2;
+  const missingCriticalData = sources.length === 0;
   const scenarios = entries.map(([key, label]) => {
     const market = oddsFor(key, oddsSource, dataset);
     const probability = probabilities[key];
     const ev = market.decimalOdds ? round(probability * market.decimalOdds - 100) : null;
     const contradictions = contradictionsFor(key, sources, probability);
-    const decision = scenarioDecision({ key, probability, leaderKey, gap, quality, ev, contradictions, missingCriticalData });
-    const confidenceScore = round(clamp(quality * .45 + probability * .35 + Math.max(0, gap) * .2 - contradictions.length * 12), 0);
+    const decision = scenarioDecision({ key, probability, leaderKey, gap, quality, ev, contradictions, missingCriticalData, tournament });
+    const rawConfidence = clamp(quality * .45 + probability * .35 + Math.max(0, gap) * .2 - contradictions.length * 12 - tournament.riskAdjustment);
+    const confidenceScore = round(Math.min(rawConfidence, tournament.confidenceCap), 0);
     return {
       key, label, probabilityPct: round(probability), marketProbabilityPct: market.impliedProbabilityPct,
       decimalOdds: market.decimalOdds, bookmaker: market.bookmaker, expectedValuePct: ev,
       footballConfidenceScore: confidenceScore, risk: contradictions.length ? "medium" : gap < 6 ? "high" : confidenceScore >= 65 ? "low" : "medium",
       decision, decisionLabel: decisionLabel(decision), supportingData: sources.map((item) => `${item.source}: ${round(item.probabilities[key])}%`),
-      contradictingData: contradictions, missingData
+      contradictingData: contradictions, missingData,
+      notSelectedReason: rejectionReason({ key, leaderKey, probability, leaderProbability: probabilities[leaderKey], contradictions })
     };
   });
   const leader = scenarios.find((item) => item.key === leaderKey);
@@ -159,10 +189,12 @@ export function buildOutcomeScenarios(dataset = {}) {
   return {
     status, fixtureId: String(fixture.id || ""), source: "API-Football + modelos internos",
     modelVersion: "outcome-scenarios-v1", probabilities, scenarios, resultMostLikely: leader?.label || "",
-    confidenceScore: leader?.footballConfidenceScore || 0, risk: leader?.risk || "high",
+    confidenceScore: leader?.footballConfidenceScore || 0, confidenceLabel: confidenceLabel(leader?.footballConfidenceScore || 0), risk: leader?.risk || "high",
     decision: globalDecision, decisionLabel: decisionLabel(globalDecision),
     supportingData: sources.map((item) => item.source), contradictions: [...new Set(scenarios.flatMap((item) => item.contradictingData))],
-    missingData, warning: "Se muestran siempre las tres posibilidades 1X2. EV positivo no decide por si solo; si hay paridad o contradiccion, el resultado queda como observacion o no bet.",
+    missingData, tournamentContext: tournament, resultScope: tournament.scope,
+    whyNotOthers: scenarios.filter((item) => item.key !== leaderKey).map((item) => ({ label: item.label, reason: item.notSelectedReason })),
+    warning: ["Se muestran siempre las tres posibilidades 1X2. EV positivo no decide por si solo; si hay paridad o contradiccion, el resultado queda como observacion o no bet.", ...tournament.warnings].join(" "),
     quality: resolveModuleQuality({ status, score: sources.length >= 2 ? quality : 0, notes: missingData }),
     generatedAt: new Date().toISOString()
   };
