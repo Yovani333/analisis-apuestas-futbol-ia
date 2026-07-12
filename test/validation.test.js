@@ -30,3 +30,9 @@ test("valida identificadores de fixture", () => {
   assert.equal(parseFixtureId("123"), 123);
   assert.throws(() => parseFixtureId("abc"), /Fixture inválido/i);
 });
+
+test("acepta todas las nuevas competiciones confirmadas sin el límite artificial de siete", () => {
+  const slugs = ["mls", "brasileirao-serie-a", "liga-profesional-argentina", "liga-mx-femenil", "liga-expansion-mx", "eredivisie", "allsvenskan", "eliteserien", "conmebol-libertadores", "conmebol-sudamericana", "uefa-champions-qualifying", "uefa-europa-qualifying", "uefa-conference-qualifying"];
+  const result = parseFixtureQuery({ leagues: slugs.join(","), dateFrom: "2026-07-01", dateTo: "2026-07-31", status: "all", season: "auto" });
+  assert.deepEqual(result.leagues, slugs);
+});

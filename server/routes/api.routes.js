@@ -72,8 +72,9 @@ apiRouter.get("/leagues", asyncRoute(async (req, res) => {
 
 apiRouter.get("/fixtures", requireLiveMode, asyncRoute(async (req, res) => {
   const filters = parseFixtureQuery(req.query);
-  const fixtures = await searchFixtures(filters);
-  res.json({ source: "api-football", fixtures });
+  const leagueErrors = [];
+  const fixtures = await searchFixtures(filters, { onLeagueError: (error) => leagueErrors.push(error) });
+  res.json({ source: "api-football", fixtures, leagueErrors });
 }));
 
 apiRouter.get("/fixtures/:fixtureId", requireLiveMode, asyncRoute(async (req, res) => {

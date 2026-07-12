@@ -21,8 +21,10 @@ import { calculateCornersModel } from "./corners-model.service.js";
 import { calculatePoissonModel } from "./poisson-model.service.js";
 import { calculateTeamGoalProbability } from "./team-goal-probability.service.js";
 import { resolveModuleQuality } from "./module-quality.service.js";
+import { buildCompetitionContext } from "./competition-context.service.js";
 
 const leagueCache = new Map();
+const leagueCacheExpiry = new Map();
 const requestCache = new Map();
 const datasetCache = new Map();
 const pendingDatasetRequests = new Map();
@@ -32,6 +34,7 @@ const PREDICTION_CACHE_TTL = 30 * 60 * 1000;
 const HISTORICAL_CACHE_TTL = 24 * 60 * 60 * 1000;
 const SCHEDULED_DATASET_CACHE_TTL = 30 * 60 * 1000;
 const FINISHED_DATASET_CACHE_TTL = 12 * 60 * 60 * 1000;
+const LEAGUE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
 function getCached(key) {
@@ -117,7 +120,7 @@ export async function getFixtureLineups(fixtureId) {
   return apiRequest("/fixtures/lineups", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
 }
 
-function chooseSeason(seasons, requestedSeason, targetDate) {
+export function chooseSeason(seasons, requestedSeason, targetDate) {
   if (requestedSeason !== "auto") return requestedSeason;
   const byDate = seasons.find((season) => season.start <= targetDate && season.end >= targetDate);
   const current = seasons.find((season) => season.current);
@@ -125,23 +128,37 @@ function chooseSeason(seasons, requestedSeason, targetDate) {
   return byDate?.year || current?.year || latest?.year;
 }
 
+function cachedLeague(slug) {
+  if ((leagueCacheExpiry.get(slug) || 0) <= Date.now()) {
+    leagueCache.delete(slug);
+    leagueCacheExpiry.delete(slug);
+    return null;
+  }
+  return leagueCache.get(slug) || null;
+}
+
+function cacheLeague(slug, value) {
+  leagueCache.set(slug, value);
+  leagueCacheExpiry.set(slug, Date.now() + LEAGUE_CACHE_TTL);
+  return value;
+}
+
 export async function resolveLeague(slug, includeSeasons = false) {
-  if (leagueCache.has(slug) && (!includeSeasons || leagueCache.get(slug).seasons?.length)) return leagueCache.get(slug);
+  const cached = cachedLeague(slug);
+  if (cached && (!includeSeasons || cached.seasons?.length)) return cached;
   const config = getAllowedLeague(slug);
   if (!config) throw new AppError("Liga no permitida.", 400, "INVALID_LEAGUE");
 
   if (config.apiId && !includeSeasons) {
     const resolved = { ...config, seasons: [] };
-    leagueCache.set(slug, resolved);
-    return resolved;
+    return cacheLeague(slug, resolved);
   }
 
   if (config.apiId && includeSeasons) {
     const [match] = await apiRequest("/leagues", { id: config.apiId });
     if (match) {
       const resolved = { ...config, seasons: match.seasons || [] };
-      leagueCache.set(slug, resolved);
-      return resolved;
+      return cacheLeague(slug, resolved);
     }
   }
 
@@ -153,8 +170,7 @@ export async function resolveLeague(slug, includeSeasons = false) {
     );
     if (match) {
       const resolved = { ...config, apiId: match.league.id, seasons: match.seasons || [] };
-      leagueCache.set(slug, resolved);
-      return resolved;
+      return cacheLeague(slug, resolved);
     }
   }
   throw new AppError(`No se pudo verificar ${config.name} en API-Football.`, 502, "LEAGUE_NOT_RESOLVED");
@@ -229,13 +245,27 @@ export function normalizeFixture(item, league) {
   const date = new Date(item.fixture.date);
   const pacific = pacificDateParts(date);
   const shortStatus = item.fixture.status.short;
-  const neutralVenue = league.slug === "world-cup";
+  const neutralVenue = Boolean(league.neutralVenue || league.slug === "world-cup");
+  const round = item.league?.round || "";
+  const competitionType = league.competitionType || (item.league?.type === "Cup" ? "cup" : "league");
+  const isQualifyingRound = competitionType === "qualifying" || /qualifying/i.test(round);
+  const isKnockoutRound = isQualifyingRound || /round of|quarter|semi|final/i.test(round);
+  const apiCoverage = league.seasons?.find((season) => Number(season.year) === Number(item.league?.season))?.coverage || null;
   return {
     id: String(item.fixture.id),
     leagueSlug: league.slug,
     leagueName: league.name,
     leagueId: item.league.id,
     season: item.league.season,
+    round,
+    competitionType,
+    competitionScope: isQualifyingRound ? "qualifying" : competitionType,
+    region: league.region || "",
+    confederation: league.confederation || "",
+    isQualifyingRound,
+    isKnockoutRound,
+    coverageLevel: league.coverageLevel || "standard",
+    apiCoverage,
     home: item.teams.home.name,
     away: item.teams.away.name,
     homeLogo: item.teams.home.logo || "",
@@ -266,24 +296,57 @@ export function normalizeFixture(item, league) {
   };
 }
 
-export async function searchFixtures(filters, { request = apiRequest, leagueResolver = resolveLeague } = {}) {
-  const groups = await Promise.all(filters.leagues.map(async (slug) => {
-    const league = await leagueResolver(slug, filters.season === "auto");
-    const season = chooseSeason(league.seasons, filters.season, filters.dateFrom);
-    if (!season) throw new AppError(`No se encontró temporada válida para ${league.name}.`, 422, "SEASON_NOT_RESOLVED");
-    const fixtures = await request("/fixtures", {
-      league: league.apiId, season, from: filters.dateFrom, to: filters.dateTo, status: providerStatus(filters.status), timezone: PACIFIC_TIME_ZONE
-    }, LIVE_CACHE_TTL);
-    const normalized = fixtures
-      .map((item) => normalizeFixture(item, league))
-      .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
-    return normalized;
-  }));
-  return groups.flat().sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+function matchesConfiguredRound(item, league) {
+  if (!league.roundIncludes?.length) return true;
+  const round = String(item.league?.round || "").toLowerCase();
+  return league.roundIncludes.some((value) => round.includes(String(value).toLowerCase()));
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+export async function searchFixtures(filters, { request = apiRequest, leagueResolver = resolveLeague, onLeagueError = () => {} } = {}) {
+  const groups = await mapWithConcurrency(filters.leagues, 4, async (slug) => {
+    try {
+      const league = await leagueResolver(slug, filters.season === "auto");
+      const season = chooseSeason(league.seasons, filters.season, filters.dateFrom);
+      if (!season) throw new AppError(`No se encontró temporada válida para ${league.name}.`, 422, "SEASON_NOT_RESOLVED");
+      const fixtures = await request("/fixtures", {
+        league: league.apiId, season, from: filters.dateFrom, to: filters.dateTo, status: providerStatus(filters.status), timezone: PACIFIC_TIME_ZONE
+      }, LIVE_CACHE_TTL);
+      return fixtures
+        .filter((item) => matchesConfiguredRound(item, league))
+        .map((item) => normalizeFixture(item, league))
+        .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+    } catch (error) {
+      onLeagueError({ slug, code: error.code || "LEAGUE_SEARCH_FAILED", message: error.message || "API-Football no devolvió datos." });
+      return [];
+    }
+  });
+  const unique = new Map(groups.flat().map((fixture) => [fixture.id, fixture]));
+  return [...unique.values()].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
 }
 
 export function shouldLoadCurrentFixtureData(status) {
   return fixtureStatus(status) !== "scheduled";
+}
+
+export function isCoverageAvailable(coverage, path, fallback = true) {
+  if (!coverage) return fallback;
+  let value = coverage;
+  for (const key of String(path).split(".")) value = value?.[key];
+  return value !== false;
 }
 
 function availability(value) {
@@ -315,11 +378,14 @@ export async function getPlayerGoalFixtureDataset(fixtureId) {
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const base = fixtureRows[0];
   if (!base) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
-  const leagueConfig = ALLOWED_LEAGUES.find((league) => league.apiId === base.league?.id || league.apiNames.some((name) => name.toLowerCase() === base.league?.name?.toLowerCase()));
+  const leagueConfigBase = ALLOWED_LEAGUES.find((league) => league.apiId === base.league?.id || league.apiNames.some((name) => name.toLowerCase() === base.league?.name?.toLowerCase()));
+  const resolvedLeague = leagueConfigBase ? cachedLeague(leagueConfigBase.slug) : null;
+  const leagueConfig = leagueConfigBase ? { ...leagueConfigBase, seasons: resolvedLeague?.seasons || [] } : null;
   if (!leagueConfig) throw new AppError("El fixture no pertenece a una liga permitida.", 403, "FIXTURE_LEAGUE_NOT_ALLOWED");
+  const coverage = leagueConfig.seasons?.find((item) => Number(item.year) === Number(base.league?.season))?.coverage || null;
   const [injuries, odds] = await Promise.all([
-    apiRequest("/injuries", { fixture: fixtureId }).catch(() => []),
-    apiRequest("/odds", { fixture: fixtureId }).catch(() => [])
+    isCoverageAvailable(coverage, "injuries") ? apiRequest("/injuries", { fixture: fixtureId }).catch(() => []) : Promise.resolve([]),
+    isCoverageAvailable(coverage, "odds") ? apiRequest("/odds", { fixture: fixtureId }).catch(() => []) : Promise.resolve([])
   ]);
   return {
     fixture: normalizeFixture(base, { ...leagueConfig, name: base.league.name, countryLabel: base.league.country || leagueConfig.countryLabel }),
@@ -336,30 +402,38 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
     league.country.toLowerCase() === base.league.country?.toLowerCase() &&
     league.apiNames.some((name) => name.toLowerCase() === base.league.name?.toLowerCase())
   );
-  const leagueConfig = leagueConfigBase ? { ...leagueConfigBase, apiId: base.league.id } : null;
+  const resolvedLeague = leagueConfigBase ? cachedLeague(leagueConfigBase.slug) : null;
+  const leagueConfig = leagueConfigBase ? { ...leagueConfigBase, apiId: base.league.id, seasons: resolvedLeague?.seasons || [] } : null;
   if (!leagueConfig) throw new AppError("El fixture no pertenece a una liga permitida.", 403, "FIXTURE_LEAGUE_NOT_ALLOWED");
 
   const homeId = base.teams.home.id;
   const awayId = base.teams.away.id;
   const season = base.league.season;
   const loadCurrentFixtureData = shouldLoadCurrentFixtureData(base.fixture.status?.short);
+  const coverage = leagueConfig.seasons?.find((item) => Number(item.year) === Number(season))?.coverage || null;
+  const allows = (path, fallback = true) => isCoverageAvailable(coverage, path, fallback);
+  const unavailableByCoverage = [
+    ["Clasificación", "standings"], ["Lesiones", "injuries"], ["Alineaciones", "fixtures.lineups"],
+    ["Cuotas", "odds"], ["Estadísticas de fixture", "fixtures.statistics_fixtures"],
+    ["Estadísticas de jugadores", "fixtures.statistics_players"], ["Jugadores", "players"]
+  ].filter(([, path]) => !allows(path)).map(([label]) => label);
   const statisticsCutoffDate = new Date(Date.parse(base.fixture.date) - 86400000).toISOString().slice(0, 10);
   const safe = (promise) => promise.catch(() => []);
   const safeAdvanced = (promise) => promise.then((data) => ({ data, failed: false })).catch(() => ({ data: null, failed: true }));
   const [statistics, standings, h2h, injuries, lineups, odds, homeRecentRows, awayRecentRows, predictions, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
-    loadCurrentFixtureData ? safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })) : Promise.resolve([]),
-    safe(apiRequest("/standings", { league: base.league.id, season })),
+    loadCurrentFixtureData && allows("fixtures.statistics_fixtures") ? safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })) : Promise.resolve([]),
+    allows("standings") ? safe(apiRequest("/standings", { league: base.league.id, season })) : Promise.resolve([]),
     safe(apiRequest("/fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 })),
-    safe(apiRequest("/injuries", { fixture: fixtureId })),
-    safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })),
-    safe(apiRequest("/odds", { fixture: fixtureId })),
+    allows("injuries") ? safe(apiRequest("/injuries", { fixture: fixtureId })) : Promise.resolve([]),
+    allows("fixtures.lineups") ? safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })) : Promise.resolve([]),
+    allows("odds") ? safe(apiRequest("/odds", { fixture: fixtureId })) : Promise.resolve([]),
     safe(apiRequest("/fixtures", { team: homeId, last: 10, timezone: "UTC" })),
     safe(apiRequest("/fixtures", { team: awayId, last: 10, timezone: "UTC" })),
-    safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)),
-    loadCurrentFixtureData ? safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
-    loadCurrentFixtureData ? safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
-    safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: homeId, date: statisticsCutoffDate })),
-    safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: awayId, date: statisticsCutoffDate }))
+    allows("predictions") ? safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)) : Promise.resolve([]),
+    loadCurrentFixtureData && allows("fixtures.events") ? safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
+    loadCurrentFixtureData && allows("fixtures.statistics_players") ? safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
+    allows("fixtures.statistics_fixtures") ? safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: homeId, date: statisticsCutoffDate })) : Promise.resolve({ data: null, failed: false }),
+    allows("fixtures.statistics_fixtures") ? safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: awayId, date: statisticsCutoffDate })) : Promise.resolve({ data: null, failed: false })
   ]);
 
   const fixture = normalizeFixture(base, leagueConfig);
@@ -378,6 +452,8 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
     odds: oddsSummary,
     note: "Las frecuencias recientes son descriptivas, no garantizan resultados y no sustituyen una muestra histórica amplia."
   };
+  const competitionContext = buildCompetitionContext(fixture, [...homeRecentRows, ...awayRecentRows]);
+  preMatch.context = { ...(preMatch.context || {}), competition: competitionContext };
   fixture.dataAvailability = {
     standings: availability(standings), statistics: availability(statistics), h2h: availability(h2h),
     injuries: availability(injuries), lineups: availability(lineups), odds: availability(odds),
@@ -401,8 +477,12 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
     preMatch,
     marketAnalysis,
     dataQuality,
-    unavailable: ["news", "referee_details", "travel", "sidelined_not_verified"],
-    qualityAlerts: ["Los datos vacíos se conservan como no disponibles; no se completan por inferencia."]
+    competitionContext,
+    unavailable: ["news", "referee_details", "travel", "sidelined_not_verified", ...unavailableByCoverage.map((item) => `api_no_coverage:${item}`)],
+    qualityAlerts: [
+      "Los datos vacíos se conservan como no disponibles; no se completan por inferencia.",
+      unavailableByCoverage.length ? `Datos no disponibles en la API para esta temporada: ${unavailableByCoverage.join(", ")}.` : ""
+    ].filter(Boolean)
   };
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
   const currentFixtureXgAvailable = ["available", "partial"].includes(dataset.estimatedXg?.status);

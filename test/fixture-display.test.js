@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   normalizeFavorite,
   normalizeFixture,
+  isCoverageAvailable,
   searchFixtures,
   shouldLoadCurrentFixtureData
 } from "../server/services/api-football.service.js";
@@ -17,7 +18,7 @@ function providerFixture(status = "NS") {
       id: 77, date: "2026-06-22T02:00:00+00:00", status: { short: status, elapsed: status === "2H" ? 73 : null },
       venue: { name: "Estadio", city: "Los Ángeles" }
     },
-    league: { id: 1, season: 2026 },
+    league: { id: 1, season: 2026, round: "Group Stage - 1" },
     teams: {
       home: { id: 10, name: "Equipo Uno", logo: "https://media.api-sports.io/football/teams/10.png" },
       away: { id: 20, name: "Equipo Dos", logo: "https://media.api-sports.io/football/teams/20.png" }
@@ -130,4 +131,54 @@ test("solo carga estadísticas del fixture actual cuando ya inició", () => {
   assert.equal(shouldLoadCurrentFixtureData("TBD"), false);
   assert.equal(shouldLoadCurrentFixtureData("2H"), true);
   assert.equal(shouldLoadCurrentFixtureData("FT"), true);
+});
+
+test("normaliza tipo, región y ronda de una clasificatoria", () => {
+  const input = providerFixture();
+  input.league = { id: 2, season: 2026, round: "1st Qualifying Round" };
+  const fixture = normalizeFixture(input, {
+    slug: "uefa-champions-qualifying", name: "Clasificación Champions League", countryLabel: "UEFA",
+    competitionType: "qualifying", region: "International Clubs", confederation: "UEFA"
+  });
+  assert.equal(fixture.round, "1st Qualifying Round");
+  assert.equal(fixture.competitionScope, "qualifying");
+  assert.equal(fixture.isQualifyingRound, true);
+  assert.equal(fixture.isKnockoutRound, true);
+});
+
+test("filtra únicamente rondas clasificatorias para los selectores UEFA", async () => {
+  const qualifying = providerFixture();
+  qualifying.league = { id: 2, season: 2026, round: "1st Qualifying Round" };
+  const group = providerFixture();
+  group.fixture = { ...group.fixture, id: 78 };
+  group.league = { id: 2, season: 2026, round: "League Stage - 1" };
+  const fixtures = await searchFixtures({ leagues: ["uefa-champions-qualifying"], season: 2026, dateFrom: "2026-07-01", dateTo: "2026-07-31", status: "all" }, {
+    request: async () => [qualifying, group],
+    leagueResolver: async () => ({ slug: "uefa-champions-qualifying", name: "Clasificación Champions League", countryLabel: "UEFA", apiId: 2, competitionType: "qualifying", roundIncludes: ["Qualifying Round"], seasons: [] })
+  });
+  assert.equal(fixtures.length, 1);
+  assert.equal(fixtures[0].id, "77");
+});
+
+test("la matriz de cobertura permite degradar endpoints sin inventar datos", () => {
+  const coverage = { standings: true, injuries: false, fixtures: { lineups: false, statistics_fixtures: false } };
+  assert.equal(isCoverageAvailable(coverage, "standings"), true);
+  assert.equal(isCoverageAvailable(coverage, "injuries"), false);
+  assert.equal(isCoverageAvailable(coverage, "fixtures.lineups"), false);
+  assert.equal(isCoverageAvailable(null, "odds"), true);
+});
+
+test("una liga fallida no bloquea los fixtures de las demás", async () => {
+  const errors = [];
+  const fixtures = await searchFixtures({ leagues: ["world-cup", "mls"], season: 2026, dateFrom: "2026-07-01", dateTo: "2026-07-02", status: "all" }, {
+    leagueResolver: async (slug) => ({ ...league, slug, apiId: slug === "world-cup" ? 1 : 253, seasons: [] }),
+    request: async (path, params) => {
+      if (params.league === 253) throw new Error("Sin cobertura temporal");
+      return [providerFixture()];
+    },
+    onLeagueError: (error) => errors.push(error)
+  });
+  assert.equal(fixtures.length, 1);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].slug, "mls");
 });

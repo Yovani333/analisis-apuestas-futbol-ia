@@ -1,4 +1,4 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260712-expanded-competitions-v1";
 
 const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
@@ -52,6 +52,7 @@ function buildMockAnalysis(fixture) {
 
 // Capa mock reemplazable. El navegador nunca debe llamar directamente a API-Football u OpenAI.
 export const footballDataService = {
+  lastSearchWarnings: [],
   getAllowedLeagues() {
     return ALLOWED_LEAGUES;
   },
@@ -86,6 +87,7 @@ export const footballDataService = {
       leagues: filters.leagues.join(","), season: filters.season || "auto",
       dateFrom: filters.dateFrom, dateTo: filters.dateTo, status: filters.status
     })}`);
+    this.lastSearchWarnings = payload.leagueErrors || [];
     return payload.fixtures.map((fixture) => ({ ...fixture, dataSource: "api-football" }));
   },
 

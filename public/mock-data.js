@@ -1,11 +1,24 @@
 export const ALLOWED_LEAGUES = Object.freeze([
-  { slug: "la-liga", name: "La Liga", country: "España", code: "ESP", apiId: null, defaultSelected: false },
-  { slug: "chinese-super-league", name: "Superliga China", country: "China", code: "CHN", apiId: null, defaultSelected: false },
-  { slug: "bundesliga", name: "Bundesliga", country: "Alemania", code: "DEU", apiId: null, defaultSelected: false },
-  { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal", code: "PRT", apiId: null, defaultSelected: false },
-  { slug: "ligue-1", name: "Ligue 1", country: "Francia", code: "FRA", apiId: null, defaultSelected: false },
-  { slug: "liga-mx", name: "Liga MX Apertura", country: "México", code: "MEX", apiId: null, defaultSelected: false },
-  { slug: "world-cup", name: "Copa Mundial FIFA", country: "Mundial", code: "FIFA", apiId: null, defaultSelected: false }
+  { slug: "la-liga", name: "La Liga", country: "España", code: "ESP", region: "Europe", confederation: "UEFA", competitionType: "league" },
+  { slug: "chinese-super-league", name: "Superliga China", country: "China", code: "CHN", region: "Asia", confederation: "AFC", competitionType: "league" },
+  { slug: "bundesliga", name: "Bundesliga", country: "Alemania", code: "DEU", region: "Europe", confederation: "UEFA", competitionType: "league" },
+  { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal", code: "PRT", region: "Europe", confederation: "UEFA", competitionType: "league" },
+  { slug: "ligue-1", name: "Ligue 1", country: "Francia", code: "FRA", region: "Europe", confederation: "UEFA", competitionType: "league" },
+  { slug: "liga-mx", name: "Liga MX Apertura", country: "México", code: "MEX", region: "Americas", confederation: "CONCACAF", competitionType: "league" },
+  { slug: "world-cup", name: "Copa Mundial FIFA", country: "Mundial", code: "FIFA", region: "International", confederation: "FIFA", competitionType: "cup" },
+  { slug: "mls", name: "MLS", country: "Estados Unidos", code: "USA", region: "Americas", confederation: "CONCACAF", competitionType: "league" },
+  { slug: "brasileirao-serie-a", name: "Brasileirão Serie A", country: "Brasil", code: "BRA", region: "Americas", confederation: "CONMEBOL", competitionType: "league" },
+  { slug: "liga-profesional-argentina", name: "Liga Profesional Argentina", country: "Argentina", code: "ARG", region: "Americas", confederation: "CONMEBOL", competitionType: "league" },
+  { slug: "liga-mx-femenil", name: "Liga MX Femenil", country: "México", code: "MEX-W", region: "Americas", confederation: "CONCACAF", competitionType: "league", coverageLevel: "partial" },
+  { slug: "liga-expansion-mx", name: "Liga de Expansión MX", country: "México", code: "MEX-EXP", region: "Americas", confederation: "CONCACAF", competitionType: "league", coverageLevel: "limited" },
+  { slug: "eredivisie", name: "Eredivisie", country: "Países Bajos", code: "NLD", region: "Europe", confederation: "UEFA", competitionType: "league" },
+  { slug: "allsvenskan", name: "Allsvenskan", country: "Suecia", code: "SWE", region: "Europe", confederation: "UEFA", competitionType: "league" },
+  { slug: "eliteserien", name: "Eliteserien", country: "Noruega", code: "NOR", region: "Europe", confederation: "UEFA", competitionType: "league" },
+  { slug: "conmebol-libertadores", name: "Copa Libertadores", country: "CONMEBOL", code: "LIB", region: "International Clubs", confederation: "CONMEBOL", competitionType: "cup" },
+  { slug: "conmebol-sudamericana", name: "Copa Sudamericana", country: "CONMEBOL", code: "SUD", region: "International Clubs", confederation: "CONMEBOL", competitionType: "cup" },
+  { slug: "uefa-champions-qualifying", name: "Clasificación Champions League", country: "UEFA", code: "UCL-Q", region: "International Clubs", confederation: "UEFA", competitionType: "qualifying" },
+  { slug: "uefa-europa-qualifying", name: "Clasificación Europa League", country: "UEFA", code: "UEL-Q", region: "International Clubs", confederation: "UEFA", competitionType: "qualifying" },
+  { slug: "uefa-conference-qualifying", name: "Clasificación Conference League", country: "UEFA", code: "UECL-Q", region: "International Clubs", confederation: "UEFA", competitionType: "qualifying" }
 ]);
 
 export const DATA_CATEGORIES = Object.freeze([

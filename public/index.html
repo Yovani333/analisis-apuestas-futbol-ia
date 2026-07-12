@@ -83,10 +83,26 @@
 
           <div class="form-divider"></div>
 
+          <div class="date-fields">
+            <div class="field">
+              <label for="competition-country">País / región</label>
+              <select id="competition-country"><option value="all">Todos</option></select>
+            </div>
+            <div class="field">
+              <label for="competition-confederation">Confederación</label>
+              <select id="competition-confederation"><option value="all">Todas</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="competition-type">Tipo de competición</label>
+            <select id="competition-type"><option value="all">Todos</option><option value="league">Liga regular</option><option value="cup">Copa</option><option value="qualifying">Clasificatoria</option></select>
+          </div>
+
           <div class="field">
             <label for="season">Temporada</label>
             <select id="season" name="season">
-              <option value="2026">2026 (Copa Mundial / Liga MX Apertura)</option>
+              <option value="2026">2026</option>
+              <option value="2025">2025/2026</option>
               <option value="2024">2024/2025</option>
               <option value="2023">2023/2024</option>
               <option value="2022">2022/2023</option>
@@ -108,7 +124,7 @@
           </div>
           <div class="field">
             <label for="competition-main">Competición</label>
-            <select id="competition-main"><option value="world-cup">Copa Mundial FIFA 2026</option><option value="liga-mx">Liga MX</option><option value="europe">Europa</option><option value="all">Todas las competiciones</option><option value="custom">Personalizado</option></select>
+            <select id="competition-main"><option value="world-cup">Copa Mundial FIFA 2026</option><option value="liga-mx">Liga MX</option><option value="americas">América</option><option value="europe">Europa</option><option value="international-clubs">Clubes internacionales</option><option value="leagues">Ligas regulares</option><option value="cups">Copas y clasificatorias</option><option value="all">Todas las competiciones</option><option value="custom">Personalizado</option></select>
           </div>
 
           <div class="field">
@@ -526,6 +542,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260712-pick-intelligence-v2"></script>
+    <script type="module" src="app.js?v=20260712-expanded-competitions-v1"></script>
   </body>
 </html>

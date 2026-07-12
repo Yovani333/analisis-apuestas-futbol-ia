@@ -1,4 +1,4 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260712-expanded-competitions-v1";
 import { footballDataService } from "./services.js?v=20260712-pick-intelligence-v2";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
@@ -75,6 +75,9 @@ const elements = {
   dateFrom: document.querySelector("#date-from"),
   dateTo: document.querySelector("#date-to"),
   competition: document.querySelector("#competition-main"),
+  competitionCountry: document.querySelector("#competition-country"),
+  competitionConfederation: document.querySelector("#competition-confederation"),
+  competitionType: document.querySelector("#competition-type"),
   clearFilters: document.querySelector("#clear-filters"),
   setToday: document.querySelector("#set-today"),
   season: document.querySelector("#season"),
@@ -272,12 +275,23 @@ function showFixtureReadyDialog() {
 }
 
 function renderLeagueOptions() {
-  elements.leagueOptions.innerHTML = ALLOWED_LEAGUES.map((league) => `
-    <label class="checkbox-row">
-      <input type="checkbox" name="league" value="${escapeHtml(league.slug)}" />
-      <span>${escapeHtml(league.name)} — ${escapeHtml(league.country)}</span>
-    </label>
-  `).join("");
+  const groups = new Map();
+  for (const league of ALLOWED_LEAGUES) {
+    const label = league.region || "Otras";
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(league);
+  }
+  elements.leagueOptions.innerHTML = [...groups.entries()].map(([group, leagues]) => `<div class="league-option-group"><h4>${escapeHtml(group)}</h4>${leagues.map((league) => `
+      <label class="checkbox-row">
+        <input type="checkbox" name="league" value="${escapeHtml(league.slug)}" />
+        <span>${escapeHtml(league.name)} — ${escapeHtml(league.country)}${league.coverageLevel ? ` · cobertura ${escapeHtml(league.coverageLevel)}` : ""}</span>
+      </label>`).join("")}</div>`).join("");
+}
+
+function renderCompetitionFilters() {
+  const optionList = (values, allLabel) => `<option value="all">${allLabel}</option>${[...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "es")).map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}`;
+  elements.competitionCountry.innerHTML = optionList(ALLOWED_LEAGUES.map((league) => league.country), "Todos");
+  elements.competitionConfederation.innerHTML = optionList(ALLOWED_LEAGUES.map((league) => league.confederation), "Todas");
 }
 
 function selectedLeagueSlugs() {
@@ -356,13 +370,35 @@ function handleGuideModuleToggle(details) {
 function competitionLeagues(value = elements.competition.value) {
   if (value === "world-cup") return ["world-cup"];
   if (value === "liga-mx") return ["liga-mx"];
-  if (value === "europe") return ["la-liga", "bundesliga", "primeira-liga", "ligue-1"];
+  if (value === "americas") return ALLOWED_LEAGUES.filter((league) => league.region === "Americas").map((league) => league.slug);
+  if (value === "europe") return ALLOWED_LEAGUES.filter((league) => league.region === "Europe").map((league) => league.slug);
+  if (value === "international-clubs") return ALLOWED_LEAGUES.filter((league) => league.region === "International Clubs").map((league) => league.slug);
+  if (value === "leagues") return ALLOWED_LEAGUES.filter((league) => league.competitionType === "league").map((league) => league.slug);
+  if (value === "cups") return ALLOWED_LEAGUES.filter((league) => ["cup", "qualifying"].includes(league.competitionType)).map((league) => league.slug);
   if (value === "all") return ALLOWED_LEAGUES.map((league) => league.slug);
   return selectedLeagueSlugs();
 }
 
+function applyCompetitionMetadataFilters() {
+  const country = elements.competitionCountry.value;
+  const confederation = elements.competitionConfederation.value;
+  const type = elements.competitionType.value;
+  elements.competition.value = "custom";
+  elements.form.querySelectorAll('input[name="league"]').forEach((input) => {
+    const league = ALLOWED_LEAGUES.find((item) => item.slug === input.value);
+    input.checked = Boolean(league)
+      && (country === "all" || league.country === country)
+      && (confederation === "all" || league.confederation === confederation)
+      && (type === "all" || league.competitionType === type);
+  });
+  updateLeagueCount();
+}
+
 function syncCompetitionCheckboxes() {
   if (elements.competition.value === "custom") return;
+  elements.competitionCountry.value = "all";
+  elements.competitionConfederation.value = "all";
+  elements.competitionType.value = "all";
   const selected = new Set(competitionLeagues());
   elements.form.querySelectorAll('input[name="league"]').forEach((input) => { input.checked = selected.has(input.value); });
   updateLeagueCount();
@@ -484,6 +520,9 @@ function clearFilters() {
   elements.competition.value = "world-cup";
   elements.season.value = "auto";
   elements.status.value = "all";
+  elements.competitionCountry.value = "all";
+  elements.competitionConfederation.value = "all";
+  elements.competitionType.value = "all";
   elements.form.querySelectorAll('input[name="league"]').forEach((input) => { input.checked = false; });
   syncCompetitionCheckboxes();
   state.fixtures = [];
@@ -3093,7 +3132,12 @@ async function searchFixtures(event) {
       status: elements.status.value
     });
     const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
-    elements.searchFeedback.textContent = `Búsqueda ${source} completada · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
+    const searchWarnings = footballDataService.lastSearchWarnings || [];
+    elements.searchFeedback.textContent = `Búsqueda ${source} completada${searchWarnings.length ? ` con ${searchWarnings.length} competición(es) sin respuesta` : ""} · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
+    if (searchWarnings.length) {
+      elements.filterError.hidden = false;
+      elements.filterError.textContent = searchWarnings.map((warning) => `${warning.slug}: Datos no disponibles en la API`).join(" · ");
+    }
     renderMatches();
   } catch (error) {
     elements.filterError.hidden = false;
@@ -3109,6 +3153,7 @@ async function searchFixtures(event) {
 function handleFilterChange(event) {
   const input = event.target;
   if (input === elements.competition) syncCompetitionCheckboxes();
+  if ([elements.competitionCountry, elements.competitionConfederation, elements.competitionType].includes(input)) applyCompetitionMetadataFilters();
   if (input.matches('input[name="league"]')) {
     elements.competition.value = "custom";
     const leagueInputs = [...elements.form.querySelectorAll('input[name="league"]')];
@@ -3411,6 +3456,7 @@ initializeInfoTooltips();
 
 async function initializeApp() {
   renderLeagueOptions();
+  renderCompetitionFilters();
   const today = pacificToday();
   elements.dateFrom.value ||= today;
   elements.dateTo.value ||= today;
