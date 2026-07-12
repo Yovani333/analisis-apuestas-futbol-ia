@@ -42,6 +42,7 @@ const state = {
   evidenceSnapshots: loadEvidenceSnapshots(),
   savedTab: "individual",
   expandedParlays: new Set(),
+  expandedMatchGroups: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
   preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
   currentView: "dashboard",
@@ -573,9 +574,15 @@ function renderMatches() {
     fixtures: state.fixtures.filter((fixture) => fixture.leagueSlug === league.slug)
   })).filter((group) => group.fixtures.length);
 
-  elements.matchesList.innerHTML = groups.map(({ league, fixtures }) => `
+  elements.matchesList.innerHTML = groups.map(({ league, fixtures }) => {
+    const expanded = state.expandedMatchGroups.has(league.slug);
+    return `
     <section class="league-group" aria-labelledby="league-${escapeHtml(league.slug)}">
-      <h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</h3>
+      <header class="league-group__header">
+        <h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span><small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>
+        <button class="league-group__toggle" type="button" data-toggle-league="${escapeHtml(league.slug)}" aria-expanded="${expanded}" aria-controls="league-matches-${escapeHtml(league.slug)}" aria-label="${expanded ? "Ocultar" : "Mostrar"} encuentros de ${escapeHtml(league.name)}" title="${expanded ? "Ocultar encuentros" : "Mostrar encuentros"}">${expanded ? "−" : "+"}</button>
+      </header>
+      <div id="league-matches-${escapeHtml(league.slug)}" class="league-group__matches" ${expanded ? "" : "hidden"}>
       ${fixtures.map((fixture) => {
         const selected = state.selectedFixtureId === fixture.id;
         const isFinished = fixture.status === "finished";
@@ -612,8 +619,10 @@ function renderMatches() {
             </div>
           </article>`;
       }).join("")}
+      </div>
     </section>
-  `).join("") + `
+  `;
+  }).join("") + `
     <div class="matches-footer">
       <span>Mostrando ${state.fixtures.length} de ${state.fixtures.length} partidos</span>
       <span>Fuente: ${state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "demostración sintética"} · Horario del Pacífico (PT)</span>
@@ -3117,6 +3126,7 @@ async function searchFixtures(event) {
 
   resetAnalysisGuide();
   clearSelectedFixtureData();
+  state.expandedMatchGroups.clear();
   state.hasSearched = true;
   state.isSearching = true;
   const submitButton = elements.form.querySelector('button[type="submit"]');
@@ -3380,6 +3390,16 @@ document.addEventListener("click", (event) => {
   }
 });
 elements.matchesList.addEventListener("click", async (event) => {
+  const groupToggle = event.target.closest("[data-toggle-league]");
+  if (groupToggle) {
+    const leagueSlug = groupToggle.dataset.toggleLeague;
+    const shouldExpand = !state.expandedMatchGroups.has(leagueSlug);
+    if (shouldExpand) state.expandedMatchGroups.add(leagueSlug);
+    else state.expandedMatchGroups.delete(leagueSlug);
+    renderMatches();
+    elements.matchesList.querySelector(`[data-toggle-league="${CSS.escape(leagueSlug)}"]`)?.focus();
+    return;
+  }
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest("[data-fixture-id]");
   if (!card) return;
