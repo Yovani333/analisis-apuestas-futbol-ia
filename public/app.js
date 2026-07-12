@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260624-premium-dashboard-2";
-import { footballDataService } from "./services.js?v=20260710-module-refresh-v1";
+import { footballDataService } from "./services.js?v=20260712-pick-intelligence-v2";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
@@ -1999,41 +1999,14 @@ async function collectPickInformation() {
   elements.collectPickInfo.disabled = true;
   elements.collectPickInfo.textContent = "Recopilando datos...";
   elements.pickCollectionContent.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Recopilando datos útiles del partido seleccionado...</p></div>';
-  const errors = [];
   try {
-    const currentFixture = await collectStep("Consultando fuentes", "fixture", async () => {
-      const cached = selectedFixture();
-      return cached?.confirmedData ? cached : footballDataService.getFixtureData(fixture);
-    }, errors);
-    if (!currentFixture) throw new Error("No se pudo cargar el fixture base.");
-    const index = state.fixtures.findIndex((item) => item.id === currentFixture.id);
-    if (index >= 0) state.fixtures[index] = currentFixture;
-
-    const results = {};
-    setPickCollectionStatus("Ejecutando modelos", "processing");
-    results.dataPicks = state.dataPicksByFixture.get(currentFixture.id) || await collectStep("Ejecutando modelos", "picks basados en datos", () => footballDataService.getDataPicks(currentFixture), errors);
-    if (results.dataPicks) state.dataPicksByFixture.set(currentFixture.id, results.dataPicks);
-    results.outcome = state.outcomeByFixture.get(currentFixture.id) || await collectStep("Ejecutando modelos", "selector 1X2", () => footballDataService.getOutcomeScenarios(currentFixture), errors);
-    if (results.outcome) state.outcomeByFixture.set(currentFixture.id, results.outcome);
-    results.poisson = state.poissonByFixture.get(currentFixture.id) || await collectStep("Ejecutando modelos", "poisson", () => footballDataService.getPoissonModel(currentFixture), errors);
-    if (results.poisson) state.poissonByFixture.set(currentFixture.id, results.poisson);
-    results.teamGoals = state.teamGoalsByFixture.get(currentFixture.id) || await collectStep("Ejecutando modelos", "goles por equipo", () => footballDataService.getTeamGoalProbability(currentFixture), errors);
-    if (results.teamGoals) state.teamGoalsByFixture.set(currentFixture.id, results.teamGoals);
-    results.corners = state.cornersByFixture.get(currentFixture.id) || await collectStep("Validando consistencia", "corners", () => footballDataService.getCornersModel(currentFixture), errors);
-    if (results.corners) state.cornersByFixture.set(currentFixture.id, results.corners);
-    results.specificMarkets = state.specificMarketsByFixture.get(currentFixture.id) || await collectStep("Evaluando cuotas", "mercados específicos", () => footballDataService.getSpecificMarkets(currentFixture), errors);
-    if (results.specificMarkets) state.specificMarketsByFixture.set(currentFixture.id, results.specificMarkets);
-    results.teamPerformance = state.teamPerformanceByFixture.get(currentFixture.id) || await collectStep("Consultando fuentes", "rendimiento promedio", () => footballDataService.getTeamPerformance(currentFixture), errors);
-    if (results.teamPerformance) state.teamPerformanceByFixture.set(currentFixture.id, results.teamPerformance);
-    results.playerGoals = state.playerGoalByFixture.get(currentFixture.id) || await collectStep("Consultando fuentes", "jugadores", () => footballDataService.getPlayerGoalCandidates(currentFixture), errors);
-    if (results.playerGoals) state.playerGoalByFixture.set(currentFixture.id, results.playerGoals);
-
-    setPickCollectionStatus("Construyendo expediente", "processing");
-    const snapshot = buildPickAnalysisSnapshot(currentFixture, results, errors);
-    state.pickCollectionByFixture.set(currentFixture.id, snapshot);
+    setPickCollectionStatus("Recopilando y validando", "processing");
+    const snapshot = await footballDataService.getPickCollection(fixture);
+    if (!snapshot?.fixtureId) throw new Error("No se pudo construir el expediente del encuentro.");
+    state.pickCollectionByFixture.set(fixture.id, snapshot);
     persistPickCollectionCache();
     renderPickCollection(snapshot);
-    setPickCollectionStatus(errors.length ? "Completado con advertencias" : snapshot.candidateMarkets.length ? "Completado" : "Datos insuficientes", errors.length || !snapshot.candidateMarkets.length ? "partial" : "available");
+    setPickCollectionStatus(snapshot.candidateMarkets?.length ? "Completado" : "Datos insuficientes", snapshot.candidateMarkets?.length ? "available" : "partial");
   } catch (error) {
     setPickCollectionStatus("Error parcial", "unavailable");
     elements.pickCollectionContent.innerHTML = `<div class="research-empty"><strong>Error de fuente</strong><p>${escapeHtml(error.message)}</p></div>`;
@@ -2050,26 +2023,28 @@ function renderPickCollection(snapshot) {
     return;
   }
   const summary = snapshot.summary || {};
-  const moduleRows = (snapshot.modules || []).map((module) => `<tr><td>${escapeHtml(module.name)}</td><td>${escapeHtml(module.result)}</td><td>${module.probability === null || module.probability === undefined ? "—" : `${displayValue(module.probability)}%`}</td><td>${module.sampleSize ?? "—"}</td><td>${escapeHtml(module.source)}</td><td>${escapeHtml(module.confidence)}</td><td><span class="status-badge status-badge--${collectionStatusClass(module.status)}">${escapeHtml(module.status)}</span></td><td>${escapeHtml((module.warnings || []).join(" ") || "Sin advertencias")}</td></tr>`).join("");
-  const consensus = (snapshot.consensus || []).map((item) => `<article><strong>${escapeHtml(item.selection)}</strong><span>${escapeHtml(item.market)}</span><small>${escapeHtml(item.models.join(" + ") || "Sin consenso independiente")} · ${escapeHtml(item.status)}</small></article>`).join("");
+  const moduleRows = (snapshot.modules || []).map((module) => `<tr><td>${escapeHtml(module.name)}</td><td>${escapeHtml(module.result)}</td><td>${module.probability === null || module.probability === undefined ? "—" : `${displayValue(module.probability)}%`}</td><td>${module.sampleSize ?? "—"}</td><td>${escapeHtml(module.source)}</td><td>${escapeHtml(module.confidence)}</td><td><span class="status-badge status-badge--${collectionStatusClass(module.status)}">${escapeHtml(module.status)}</span></td><td>${escapeHtml((module.feeds || []).join(", ") || "Solo contexto")}</td><td>${escapeHtml((module.warnings || []).join(" ") || "Sin advertencias")}</td></tr>`).join("");
+  const consensus = (snapshot.consensus || []).map((item) => `<article><strong>${escapeHtml(item.selection)}</strong><span>${escapeHtml(item.market)}</span><small>${escapeHtml(item.models.join(" + ") || "Sin consenso independiente")} · ${escapeHtml(item.status === "valid" ? "Consenso" : item.status === "contradictory" ? "Contradictorio" : "Fuente única")}</small></article>`).join("");
   const candidates = (snapshot.candidateMarkets || []).map((pick, index) => `<article class="collection-pick">
     <div><span>${escapeHtml(pick.market)}</span><strong>${escapeHtml(pick.selection)}</strong><small>Modelo ${displayValue(pick.modelProbability)}% · Cuota ${displayValue(pick.decimalOdds)} · Justa ${displayValue(pick.fairOdds)} · EV ${pick.expectedValue === null ? "Sin cuota" : `${displayValue(pick.expectedValue)}%`}</small><small>Respaldos: ${escapeHtml((pick.backingModels || []).join(" + ") || pick.source)}</small><p>${escapeHtml(pick.reasoning)}</p></div>
-    <button class="button button--primary button--compact" type="button" data-add-collection-pick="${index}">Agregar pick</button>
+    <button class="button button--primary button--compact" type="button" data-add-collection-pick="${index}" ${pick.canAdd ? "" : 'disabled title="Requiere consenso independiente o validación del Motor de Decisión"'}>${pick.canAdd ? "Agregar pick" : "Solo observación"}</button>
   </article>`).join("");
   elements.pickCollectionContent.innerHTML = `<div class="collection-summary">
     <article><span>Calidad global</span><strong>${escapeHtml(summary.globalQuality || "No disponible")}</strong><small>${displayValue(summary.availablePct, 0)}% datos disponibles</small></article>
     <article><span>Módulos</span><strong>${displayValue(summary.validModules, 0)} / ${displayValue(summary.modulesEvaluated, 0)}</strong><small>válidos / evaluados</small></article>
     <article><span>Contradicciones</span><strong>${displayValue(summary.contradictions, 0)}</strong><small>${escapeHtml(formatUpdatedAt(snapshot.generatedAt))}</small></article>
+    <article><span>Consumo real</span><strong>${displayValue(summary.apiRequests, 0)} API</strong><small>${displayValue(summary.cacheHits, 0)} respuestas desde caché</small></article>
   </div>
   ${snapshot.warnings?.length ? `<div class="data-picks-warnings">${snapshot.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
-  <section class="collection-block"><h3>Datos recopilados</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Módulo</th><th>Resultado</th><th>Prob.</th><th>Muestra</th><th>Fuente</th><th>Confianza</th><th>Estado</th><th>Advertencias</th></tr></thead><tbody>${moduleRows}</tbody></table></div></section>
+  <section class="collection-block"><h3>Datos recopilados</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Módulo</th><th>Resultado</th><th>Prob.</th><th>Muestra</th><th>Fuente</th><th>Confianza</th><th>Estado</th><th>Alimenta</th><th>Advertencias</th></tr></thead><tbody>${moduleRows}</tbody></table></div></section>
   <section class="collection-grid"><article><h3>Coincidencias analíticas</h3><div class="collection-mini-list">${consensus || '<p class="muted-text">Sin coincidencias suficientes entre módulos independientes.</p>'}</div></article><article><h3>Contradicciones y faltantes</h3><ul>${[...(snapshot.contradictions || []), ...(snapshot.missingData || []).map((item) => `Falta o es insuficiente: ${item}`)].map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>Sin contradicciones graves detectadas.</li>"}</ul></article></section>
   <section class="collection-block"><h3>Mercados candidatos</h3>${candidates || '<div class="research-empty">No se encontró un pick recomendado: los datos disponibles no alcanzan los criterios mínimos de calidad, consenso y valor esperado.</div>'}</section>`;
 }
 
 function collectionPickLeg(index) {
   const snapshot = state.pickCollectionByFixture.get(selectedFixture()?.id);
-  return snapshot?.candidateMarkets?.[Number(index)] || null;
+  const pick = snapshot?.candidateMarkets?.[Number(index)] || null;
+  return pick?.canAdd ? pick : null;
 }
 
 function addCollectionPick(index) {
@@ -2409,12 +2384,14 @@ function renderOutcomeScenarios(result) {
       <header><span>${escapeHtml(item.label)}</span><strong>${displayValue(item.probabilityPct)}%</strong></header>
       <div class="outcome-bar"><i style="width:${Math.min(100, Number(item.probabilityPct || 0))}%"></i></div>
       <dl><div><dt>Confianza futbolistica</dt><dd>${displayValue(item.footballConfidenceScore, 0)}/100</dd></div><div><dt>Cuota</dt><dd>${item.decimalOdds ? `${displayValue(item.decimalOdds)} (${escapeHtml(item.bookmaker)})` : "No disponible"}</dd></div><div><dt>EV</dt><dd>${item.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(item.expectedValuePct)}%`}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(item.decisionLabel)}</dd></div></dl>
-      <p><b>Apoya:</b> ${escapeHtml(support)}</p><p><b>Contradice:</b> ${escapeHtml(contradictions)}</p>
+      <p><b>Apoya:</b> ${escapeHtml(support)}</p><p><b>Contradice:</b> ${escapeHtml(contradictions)}</p><p><b>Lectura final:</b> ${escapeHtml(item.notSelectedReason || "Sin explicación adicional.")}</p>
     </article>`;
   }).join("");
-  elements.outcomeContent.innerHTML = `<div class="outcome-summary">
+  const tournament = result.tournamentContext || {};
+  const tournamentSummary = tournament.isShortTournament ? `<div class="data-picks-warnings"><span><strong>Mundial / torneo corto:</strong> Fase ${escapeHtml(tournament.phase || "No disponible")} · muestra ${displayValue(tournament.sampleSize, 0)} · alcance 90 minutos. ${escapeHtml((tournament.warnings || []).join(" ") || "Confianza ajustada por muestra y contexto competitivo.")}</span></div>` : "";
+  elements.outcomeContent.innerHTML = `${tournamentSummary}<div class="outcome-summary">
     <article><span>Resultado mas probable</span><strong>${escapeHtml(result.resultMostLikely || "No disponible")}</strong><small>${escapeHtml(result.decisionLabel || "No bet")}</small></article>
-    <article><span>Confianza</span><strong>${displayValue(result.confidenceScore, 0)}/100</strong><small>Riesgo ${escapeHtml(result.risk || "medium")}</small></article>
+    <article><span>Confianza</span><strong>${displayValue(result.confidenceScore, 0)}/100</strong><small>${escapeHtml(result.confidenceLabel || "No disponible")} · Riesgo ${escapeHtml(result.risk || "medium")}</small></article>
     <article><span>Fuentes</span><strong>${escapeHtml((result.supportingData || []).join(" + ") || "Modelo interno")}</strong><small>${escapeHtml((result.missingData || []).slice(0, 2).join(" | "))}</small></article>
   </div><div class="outcome-grid">${scenarioCards}</div><p class="market-disclaimer">${escapeHtml(warningText)}</p>`;
 }
@@ -2762,6 +2739,7 @@ function renderPlayerGoalCandidatesLegacy(result) {
 
 function renderPlayerGoalCandidates(result) {
   const candidates = result?.candidates || [];
+  const individualForm = result?.individualForm || [];
   const statusLabels = {
     available: ["Disponible", "available"], insufficient_data: ["Datos insuficientes", "partial"],
     no_player_coverage: ["Sin cobertura", "unavailable"], not_available: ["No disponible", "unavailable"], error: ["Error", "unavailable"]
@@ -2769,9 +2747,11 @@ function renderPlayerGoalCandidates(result) {
   const [label, status] = statusLabels[result?.status] || statusLabels.not_available;
   elements.playerGoalStatus.className = `status-badge status-badge--${status}`;
   elements.playerGoalStatus.textContent = label;
+  const formRows = individualForm.map((player) => `<tr><td>${escapeHtml(player.playerName)}</td><td>${escapeHtml(player.teamName)}</td><td>${displayValue(player.score, 0)}/100</td><td>${displayValue(player.threatScore, 0)}/100</td><td>${displayValue(player.appearances, 0)}/${displayValue(player.matchesEvaluated, 0)}</td><td>${displayValue(player.minutes, 0)}</td><td>${displayValue(player.goals, 0)} + ${displayValue(player.assists, 0)}</td><td>${displayValue(player.shots, 0)} / ${displayValue(player.shotsOnTarget, 0)}</td><td>${player.xg === null ? "No disp." : displayValue(player.xg)}</td><td>${escapeHtml(player.trend || "estable")}</td><td>${player.isProbableStarter === null ? "No confirmado" : player.isProbableStarter ? "Sí" : "No confirmado"}</td></tr>`).join("");
+  const formTable = formRows ? `<section class="collection-block"><h3>Forma individual agregada</h3><p class="muted-text">Combina participación, minutos, producción ofensiva, tiros, regularidad y calidad de muestra.</p><div class="table-scroll"><table class="compact-table"><thead><tr><th>Jugador</th><th>Equipo</th><th>Forma</th><th>Amenaza</th><th>Partidos</th><th>Min.</th><th>G+A</th><th>Tiros/Arco</th><th>xG</th><th>Tendencia</th><th>Titular probable</th></tr></thead><tbody>${formRows}</tbody></table></div></section>` : "";
   if (!candidates.length) {
     const coverage = result?.coverage ? ` Jugadores evaluados: ${displayValue(result.playersEvaluated, 0)}. Fixtures con jugadores: local ${displayValue(result.coverage.homePlayerFixtures, 0)}, visitante ${displayValue(result.coverage.awayPlayerFixtures, 0)}.` : "";
-    elements.playerGoalContent.innerHTML = `<div class="research-empty"><strong>${escapeHtml(label)}</strong><p>${escapeHtml(result?.message || "Datos insuficientes para sugerir jugador con posible gol.")}${escapeHtml(coverage)}</p></div>`;
+    elements.playerGoalContent.innerHTML = `<div class="research-empty"><strong>${escapeHtml(label)}</strong><p>${escapeHtml(result?.message || "Datos insuficientes para sugerir jugador con posible gol.")}${escapeHtml(coverage)}</p></div>${formTable}`;
     return;
   }
   const warningText = (candidate) => (candidate.warnings?.length ? candidate.warnings.join(" ") : "Sin advertencias criticas.");
@@ -2790,7 +2770,7 @@ function renderPlayerGoalCandidates(result) {
     <dl><div><dt>Mercado</dt><dd>${escapeHtml(candidate.market)}</dd></div><div><dt>Cuota</dt><dd>${candidate.odds ? `${displayValue(candidate.odds)} - ${escapeHtml(candidate.bookmaker || "API-Football")}` : "No disponible"}</dd></div><div><dt>Muestra</dt><dd>${displayValue(candidate.stats?.appearancesLast5, 0)}/${displayValue(candidate.stats?.matchesEvaluated, 0)} partidos - ${displayValue(candidate.stats?.minutesLast5, 0)} min</dd></div><div><dt>Amenaza</dt><dd>${displayValue(candidate.stats?.shotsPer90)} tiros/90 - ${displayValue(candidate.stats?.shotsOnTargetPer90)} a puerta/90</dd></div><div><dt>Prob. estimada</dt><dd>${displayValue(candidate.conservativeGoalProbability, 1)}%</dd></div><div><dt>Calidad muestra</dt><dd>${escapeHtml(candidate.sampleQuality || "No disponible")}</dd></div></dl>
     <p>${escapeHtml(candidate.explanation)}</p><small class="player-goal-warnings">${escapeHtml(warningText(candidate))}</small>${candidate.odds ? "" : '<small class="player-goal-pending">Cuota no disponible - pick pendiente de cuota.</small>'}
     <div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-player-goal="${index}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-player-goal="${index}">Agregar pick</button></div>
-  </article>`).join("")}</div><div class="table-scroll player-goal-table-wrap"><table class="compact-table player-goal-table"><thead><tr><th>Jugador</th><th>Equipo</th><th>Partidos</th><th>Min.</th><th>Goles</th><th>Tiros</th><th>Arco</th><th>xG</th><th>Prob.</th><th>Conf.</th><th>Advertencias</th></tr></thead><tbody>${candidateRows}</tbody></table></div>`;
+  </article>`).join("")}</div><div class="table-scroll player-goal-table-wrap"><table class="compact-table player-goal-table"><thead><tr><th>Jugador</th><th>Equipo</th><th>Partidos</th><th>Min.</th><th>Goles</th><th>Tiros</th><th>Arco</th><th>xG</th><th>Prob.</th><th>Conf.</th><th>Advertencias</th></tr></thead><tbody>${candidateRows}</tbody></table></div>${formTable}`;
 }
 
 function playerGoalPickLeg(index) {

@@ -1,3 +1,5 @@
+import { buildShortTournamentContext } from "./short-tournament-context.service.js";
+
 const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const MAX_MATCHES = 5;
@@ -13,6 +15,7 @@ const round = (value, digits = 2) => Number(Number(value || 0).toFixed(digits));
 const normalizedText = (value = "") => String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const fixtureTime = (row) => Date.parse(row?.fixture?.date || "") || 0;
 const ratioPct = (part, total) => total > 0 ? round((part / total) * 100, 1) : 0;
+const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== "" && Number.isFinite(Number.parseFloat(String(value).replace("%", "")));
 
 export function selectPlayerHistoryFixtures(rows = [], currentMatchDate, limit = MAX_MATCHES) {
   const cutoff = Date.parse(currentMatchDate || "");
@@ -76,13 +79,18 @@ function findPlayerOdd(rawOdds = [], playerName) {
 function offensiveExpectation(teamContext = {}) {
   const lambda = safeNumber(teamContext.lambda);
   const goalProbability = safeNumber(teamContext.goalProbability);
-  if (lambda > 0) return Math.min(100, lambda / 2 * 100);
-  if (goalProbability > 0) return Math.min(100, goalProbability);
+  const opponentXga = safeNumber(teamContext.opponentXga);
+  const signals = [];
+  if (lambda > 0) signals.push(Math.min(100, lambda / 2 * 100));
+  if (goalProbability > 0) signals.push(Math.min(100, goalProbability));
+  if (opponentXga > 0) signals.push(Math.min(100, opponentXga / 2 * 100));
+  if (signals.length) return signals.reduce((sum, value) => sum + value, 0) / signals.length;
   return 40;
 }
 
 function extractPlayerXg(stats = {}) {
-  return safeNumber(stats.goals?.expected ?? stats.goals?.xg ?? stats.shots?.xg ?? stats.xg ?? stats.expectedGoals);
+  const value = stats.goals?.expected ?? stats.goals?.xg ?? stats.shots?.xg ?? stats.xg ?? stats.expectedGoals;
+  return hasValue(value) ? safeNumber(value) : null;
 }
 
 function sampleQualityLabel(appearances, matchesEvaluated) {
@@ -112,18 +120,38 @@ function playerWarnings(player) {
 }
 
 export function calculateGoalThreatScore(player, teamContext = {}) {
-  const availability = Math.min(100, ((player.appearancesLast5 / 5) * 45) + (Math.min(player.avgMinutes, 90) / 90 * 35) + ((player.startsLast5 / 5) * 20));
+  const sample = Math.max(1, player.matchesEvaluated || 5);
+  const availability = Math.min(100, ((player.appearancesLast5 / sample) * 45) + (Math.min(player.avgMinutes, 90) / 90 * 35) + ((player.startsLast5 / sample) * 20));
   const shots = Math.min(100, player.shotsPer90 / 4 * 100);
   const shotsOnTarget = Math.min(100, player.shotsOnTargetPer90 / 2 * 100);
-  const goals = Math.min(100, player.goalsLast5 / 3 * 100);
+  const goals = Math.min(100, player.goalsLast5 / Math.max(1, Math.min(3, sample)) * 100);
+  const xg = player.metricCoverage?.xg ? Math.min(100, safeNumber(player.xgLast5) / Math.max(1, sample) / .6 * 100) : null;
+  const finishing = xg === null ? goals : (goals * .55) + (xg * .45);
+  const involvement = Math.min(100, ((player.goalsLast5 + player.assistsLast5) / Math.max(90, player.minutesLast5) * 90) / .8 * 100);
   const penalties = player.penaltiesScoredLast5 > 0 ? 100 : player.penaltiesMissedLast5 > 0 ? 55 : 0;
   const teamAttack = offensiveExpectation(teamContext);
-  return round((availability * .25) + (shots * .25) + (shotsOnTarget * .20) + (goals * .15) + (penalties * .10) + (teamAttack * .05), 0);
+  const position = Math.min(100, safeNumber(player.positionPriority) / 5 * 100);
+  const coverageRatio = [player.metricCoverage?.shots, player.metricCoverage?.shotsOnTarget, player.metricCoverage?.goals, player.metricCoverage?.minutes]
+    .filter(Boolean).length / 4;
+  const raw = (availability * .20) + (shots * .20) + (shotsOnTarget * .20) + (finishing * .15)
+    + (involvement * .10) + (penalties * .05) + (position * .05) + (teamAttack * .05);
+  return round(raw * (.8 + coverageRatio * .2), 0);
+}
+
+export function calculateIndividualFormScore(player = {}) {
+  const sample = Math.max(1, player.matchesEvaluated || 1);
+  const participation = Math.min(100, (player.appearancesLast5 / sample * 60) + (Math.min(90, player.avgMinutes) / 90 * 40));
+  const production = Math.min(100, ((safeNumber(player.goalsLast5) + safeNumber(player.assistsLast5)) / Math.max(90, safeNumber(player.minutesLast5)) * 90) / .8 * 100);
+  const shooting = Math.min(100, (safeNumber(player.shotsPer90) / 4 * 55) + (safeNumber(player.shotsOnTargetPer90) / 2 * 45));
+  const regularity = Math.min(100, player.startsLast5 / sample * 100);
+  const sampleQuality = player.appearancesLast5 >= 4 ? 100 : player.appearancesLast5 >= 3 ? 70 : player.appearancesLast5 >= 2 ? 40 : 20;
+  return round(participation * .25 + production * .25 + shooting * .25 + regularity * .15 + sampleQuality * .10, 0);
 }
 
 function confidenceFor(player, teamContext) {
   const goodTeamAttack = offensiveExpectation(teamContext) >= 55;
-  if (player.appearancesLast5 >= 4 && player.avgMinutes >= 60 && player.shotsLast5 > 0 && player.shotsOnTargetLast5 > 0 && goodTeamAttack) {
+  const tournamentSampleLimited = teamContext.tournament?.isShortTournament && player.matchesEvaluated < 4;
+  if (!tournamentSampleLimited && player.appearancesLast5 >= 4 && player.avgMinutes >= 60 && player.shotsLast5 > 0 && player.shotsOnTargetLast5 > 0 && goodTeamAttack) {
     return { confidence: "Alta", color: "green" };
   }
   if (player.goalThreatScore >= 45 && player.shotsLast5 > 0) return { confidence: "Media", color: "orange" };
@@ -148,9 +176,11 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
         playerId, playerName: playerRow?.player?.name || "Jugador", teamId: String(teamId), teamName,
         position: stats.games?.position || lineupPositions.get(playerId) || "", appearancesLast5: 0, startsLast5: 0,
         minutesLast5: 0, goalsLast5: 0, assistsLast5: 0, shotsLast5: 0, shotsOnTargetLast5: 0,
-        xgLast5: 0, penaltiesScoredLast5: 0, penaltiesMissedLast5: 0, redCardsLast5: 0, fixturesPlayed: []
+        xgLast5: 0, penaltiesScoredLast5: 0, penaltiesMissedLast5: 0, redCardsLast5: 0, fixturesPlayed: [],
+        matchHistory: [], metricCoverage: { minutes: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, xg: 0 }
       };
       const eventStats = eventTotals(row.events, teamId, playerId);
+      const xgValue = extractPlayerXg(stats);
       current.appearancesLast5 += 1;
       current.startsLast5 += starters.has(playerId) ? 1 : 0;
       current.minutesLast5 += minutes;
@@ -158,11 +188,22 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
       current.assistsLast5 += safeNumber(stats.goals?.assists);
       current.shotsLast5 += safeNumber(stats.shots?.total);
       current.shotsOnTargetLast5 += safeNumber(stats.shots?.on);
-      current.xgLast5 += extractPlayerXg(stats);
+      current.xgLast5 += xgValue || 0;
       current.penaltiesScoredLast5 += Math.max(safeNumber(stats.penalty?.scored), eventStats.penaltiesScored);
       current.penaltiesMissedLast5 += Math.max(safeNumber(stats.penalty?.missed), eventStats.penaltiesMissed);
       current.redCardsLast5 += safeNumber(stats.cards?.red);
       current.position ||= lineupPositions.get(playerId) || "";
+      current.metricCoverage.minutes += hasValue(stats.games?.minutes) ? 1 : 0;
+      current.metricCoverage.goals += hasValue(stats.goals?.total) || eventStats.goals > 0 ? 1 : 0;
+      current.metricCoverage.assists += hasValue(stats.goals?.assists) ? 1 : 0;
+      current.metricCoverage.shots += hasValue(stats.shots?.total) ? 1 : 0;
+      current.metricCoverage.shotsOnTarget += hasValue(stats.shots?.on) ? 1 : 0;
+      current.metricCoverage.xg += xgValue !== null ? 1 : 0;
+      current.matchHistory.push({
+        fixtureId: String(row.fixture?.id || ""), date: row.fixture?.date || "", minutes,
+        goals: Math.max(safeNumber(stats.goals?.total), eventStats.goals), assists: safeNumber(stats.goals?.assists),
+        shots: safeNumber(stats.shots?.total), shotsOnTarget: safeNumber(stats.shots?.on), xg: xgValue
+      });
       current.fixturesPlayed.push({
         fixtureId: String(row.fixture?.id || ""),
         date: row.fixture?.date || "",
@@ -194,6 +235,7 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
       teamGoalProbability: safeNumber(teamContext.goalProbability) || null
     };
     normalized.goalThreatScore = calculateGoalThreatScore(normalized, teamContext);
+    normalized.individualFormScore = calculateIndividualFormScore(normalized);
     Object.assign(normalized, confidenceFor(normalized, teamContext));
     normalized.sampleQuality = sampleQualityLabel(normalized.appearancesLast5, matchesEvaluated);
     normalized.conservativeGoalProbability = conservativeGoalProbability(normalized, teamContext);
@@ -201,7 +243,8 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
     const odd = findPlayerOdd(odds, normalized.playerName);
     normalized.odds = odd.odds;
     normalized.bookmaker = odd.bookmaker;
-    normalized.explanation = `${normalized.playerName} suma ${normalized.minutesLast5} minutos, ${normalized.shotsLast5} tiros y ${normalized.shotsOnTargetLast5} a puerta en ${normalized.appearancesLast5}/${normalized.matchesEvaluated} partidos utiles.${normalized.penaltiesScoredLast5 ? " Registra participacion reciente en penales." : ""}`;
+    const opponentContext = safeNumber(teamContext.opponentXga) > 0 ? ` La defensa rival registra xGA ${round(teamContext.opponentXga)}.` : " La dificultad defensiva rival no está disponible.";
+    normalized.explanation = `${normalized.playerName} suma ${normalized.minutesLast5} minutos, ${normalized.shotsLast5} tiros y ${normalized.shotsOnTargetLast5} a puerta en ${normalized.appearancesLast5}/${normalized.matchesEvaluated} partidos utiles.${normalized.penaltiesScoredLast5 ? " Registra participacion reciente en penales." : ""}${opponentContext}`;
     return normalized;
   });
 }
@@ -241,9 +284,13 @@ export function buildPlayerGoalCandidates(match, homeTeamData = [], awayTeamData
 function teamContextFromDataset(dataset, teamId, side) {
   const poisson = dataset.poissonModel || {};
   const teamGoals = dataset.teamGoalProbability || {};
+  const xg = dataset.researchData?.xgXga || {};
+  const tournament = buildShortTournamentContext(dataset);
   return {
     lambda: side === "home" ? poisson.lambdaHome ?? poisson.homeLambda : poisson.lambdaAway ?? poisson.awayLambda,
     goalProbability: teamGoals.teams?.[side]?.scoreOver05ProbabilityPct ?? teamGoals.teams?.[side]?.over05ProbabilityPct,
+    opponentXga: side === "home" ? xg.awayXGA : xg.homeXGA,
+    tournament,
     teamId
   };
 }
@@ -285,11 +332,29 @@ export async function getPlayerGoalCandidates(dataset, dependencies, { forceRefr
     const rawOdds = dataset.confirmed?.odds || [];
     const homePlayers = normalizeTeamPlayerHistory({ teamId: fixture.homeTeamId, teamName: fixture.home, fixtureRows: homeLoaded, injuries, teamContext: contexts[String(fixture.homeTeamId)], odds: rawOdds });
     const awayPlayers = normalizeTeamPlayerHistory({ teamId: fixture.awayTeamId, teamName: fixture.away, fixtureRows: awayLoaded, injuries, teamContext: contexts[String(fixture.awayTeamId)], odds: rawOdds });
+    const currentLineups = dataset.confirmed?.lineups || [];
+    const currentStarters = new Set(currentLineups.flatMap((row) => (row.startXI || []).map((item) => String(item?.player?.id || ""))).filter(Boolean));
+    const lineupAvailable = currentStarters.size > 0;
+    for (const player of [...homePlayers, ...awayPlayers]) player.isProbableStarter = lineupAvailable ? currentStarters.has(player.playerId) : null;
     const built = buildPlayerGoalCandidates(fixture, homePlayers, awayPlayers, contexts);
+    const tournamentContext = buildShortTournamentContext(dataset);
+    const individualForm = [...homePlayers, ...awayPlayers]
+      .filter((player) => !player.isGoalkeeper && player.minutesLast5 >= 90)
+      .sort((a, b) => b.individualFormScore - a.individualFormScore || b.goalThreatScore - a.goalThreatScore)
+      .slice(0, 10)
+      .map((player) => ({
+        playerId: player.playerId, playerName: player.playerName, teamId: player.teamId, teamName: player.teamName,
+        score: player.individualFormScore, threatScore: player.goalThreatScore, confidence: player.sampleQuality,
+        trend: player.matchHistory.length >= 3 && player.matchHistory[0].shots + player.matchHistory[1].shots > player.shotsLast5 / player.appearancesLast5 * 2 ? "positiva" : "estable",
+        appearances: player.appearancesLast5, matchesEvaluated: player.matchesEvaluated, minutes: player.minutesLast5,
+        goals: player.goalsLast5, assists: player.assistsLast5, shots: player.shotsLast5, shotsOnTarget: player.shotsOnTargetLast5,
+        xg: player.metricCoverage.xg ? round(player.xgLast5) : null, isProbableStarter: player.isProbableStarter,
+        warnings: player.warnings
+      }));
     const value = {
       status: built.candidates.length ? "available" : "insufficient_data", fixtureId: key, candidates: built.candidates,
       coverage, message: built.candidates.length ? "" : "Datos insuficientes para sugerir jugador con posible gol.",
-      playersEvaluated: homePlayers.length + awayPlayers.length, source: "api-football + modelo interno",
+      playersEvaluated: homePlayers.length + awayPlayers.length, individualForm, tournamentContext, source: "api-football + modelo interno",
       updateReason: "historical_snapshot_calculated_from_api_football",
       cached: false, generatedAt: new Date(now).toISOString()
     };

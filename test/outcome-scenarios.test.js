@@ -8,7 +8,8 @@ function dataset(overrides = {}) {
       id: 77,
       home: "Portugal",
       away: "Uzbekistan",
-      favorite: { probabilities: overrides.probabilities || { home: 45, draw: 28, away: 27 } }
+      favorite: { probabilities: overrides.probabilities || { home: 45, draw: 28, away: 27 } },
+      ...(overrides.fixture || {})
     },
     dataQuality: { score: overrides.quality ?? 78 },
     marketAnalysis: overrides.odds || [],
@@ -63,4 +64,17 @@ test("sin datos suficientes regresa estado controlado", () => {
   assert.equal(result.status, "not_available");
   assert.equal(result.decision, "datos_insuficientes");
   assert.equal(result.scenarios.length, 0);
+});
+
+test("Mundial con muestra corta limita confianza y conserva alcance de 90 minutos", () => {
+  const result = buildOutcomeScenarios(dataset({
+    fixture: { leagueSlug: "world-cup", leagueName: "Copa Mundial FIFA", phase: "Quarter-finals", neutralVenue: true },
+    xgXga: { homeXG: 1.5, homeXGA: 1, awayXG: 1.1, awayXGA: 1.4, homeSampleSize: 2, awaySampleSize: 2 }
+  }));
+  assert.equal(result.scenarios.length, 3);
+  assert.equal(result.tournamentContext.isKnockout, true);
+  assert.equal(result.resultScope, "regular_time_90_minutes");
+  assert.ok(result.confidenceScore <= 45);
+  assert.notEqual(result.decision, "apuesta_recomendada");
+  assert.equal(result.whyNotOthers.length, 2);
 });

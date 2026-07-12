@@ -146,6 +146,12 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/outcome-1x2${query}`, { method: "POST" });
   },
 
+  async getPickCollection(fixture) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", candidateMarkets: [], warnings: ["La recopilación requiere datos reales normalizados."] };
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/picks/collection`, { method: "POST" });
+  },
+
   async getTeamGoalProbability(fixture) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", picks: [], warning: "La probabilidad de gol requiere datos reales normalizados." };

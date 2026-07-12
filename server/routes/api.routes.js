@@ -20,6 +20,7 @@ import { runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/
 import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
 import { getPlayerGoalCandidates } from "../services/player-goal-candidates.service.js";
+import { buildPickAnalysisCollection } from "../services/pick-analysis-collection.service.js";
 import { compareTeamsWithHistoricalStats } from "../services/simulation-comparator.service.js";
 import { runAdvancedSimulation } from "../services/advanced-simulation.service.js";
 import {
@@ -272,6 +273,42 @@ apiRouter.post("/fixtures/:fixtureId/models/corners", requireLiveMode, asyncRout
   const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
   const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
   res.json(dataset.cornersModel || calculateCornersModel(dataset));
+}));
+
+apiRouter.post("/fixtures/:fixtureId/picks/collection", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const before = getApiFootballObservability();
+  const dataset = await getFixtureDataset(fixtureId);
+  dataset.poissonModel ||= calculatePoissonModel(dataset);
+  dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
+  dataset.cornersModel ||= calculateCornersModel(dataset);
+  const [teamPerformance, playerGoals] = await Promise.all([
+    getTeamPerformanceForFixture(dataset.fixture, { getPreviousFixtures: getPreviousFixturesForTeam, getFixturePlayers }),
+    getPlayerGoalCandidates(dataset, playerGoalDependencies)
+  ]);
+  const teamPerformanceWithPicks = {
+    ...teamPerformance,
+    picks: buildTeamPerformancePicks(dataset.fixture, teamPerformance.equipo_local, teamPerformance.equipo_visitante, { odds: dataset.researchData?.odds?.markets || [] })
+  };
+  dataset.playerGoalCandidates = playerGoals;
+  const results = {
+    dataPicks: generateDataPicks(dataset),
+    outcome: buildOutcomeScenarios(dataset),
+    poisson: dataset.poissonModel,
+    teamGoals: dataset.teamGoalProbability,
+    corners: dataset.cornersModel,
+    teamPerformance: teamPerformanceWithPicks,
+    playerGoals,
+    specificMarkets: buildSpecificMarkets(dataset)
+  };
+  const after = getApiFootballObservability();
+  const apiUsage = {
+    networkRequests: Math.max(0, after.networkRequests - before.networkRequests),
+    cacheHits: Math.max(0, after.cacheHits - before.cacheHits),
+    cacheMisses: Math.max(0, after.cacheMisses - before.cacheMisses),
+    failures: Math.max(0, after.failures - before.failures)
+  };
+  res.json(buildPickAnalysisCollection(dataset, results, apiUsage));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/models/outcome-1x2", requireLiveMode, asyncRoute(async (req, res) => {
