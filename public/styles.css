@@ -549,6 +549,16 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .alert-item small, .alert-item time { color: var(--muted); font-size: .61rem; }
 .missed-badge { padding: 2px 5px; color: var(--primary-dark); font-size: .56rem; background: var(--primary-soft); border-radius: 4px; }
 .account-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.account-cloud { display: grid; gap: 14px; margin-bottom: 10px; }
+.account-cloud__heading, .account-cloud__connected { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.account-cloud__heading h3, .account-cloud__heading p { margin: 0; }
+.account-cloud__heading p, .account-cloud__connected span, .account-cloud__connected small { color: var(--muted); font-size: .7rem; }
+.account-cloud__auth { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 10px; }
+.account-cloud__auth label { display: grid; gap: 5px; color: var(--text); font-size: .72rem; font-weight: 700; }
+.account-cloud__auth input { width: 100%; min-height: 40px; padding: 8px 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.account-cloud__connected > div:first-child { display: grid; gap: 3px; }
+.account-cloud__connected strong { font-size: .84rem; overflow-wrap: anywhere; }
+.account-cloud__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .account-grid .panel { display: grid; gap: 12px; }
 .account-grid h3 { margin: 0; }
 .account-grid label { display: grid; gap: 5px; }
@@ -1339,6 +1349,9 @@ body {
   .selected-match__details { justify-content: flex-start; }
   .utility-heading, .alert-settings { align-items: stretch; flex-direction: column; }
   .account-grid { grid-template-columns: 1fr; }
+  .account-cloud__auth { grid-template-columns: 1fr; }
+  .account-cloud__heading, .account-cloud__connected { align-items: stretch; flex-direction: column; }
+  .account-cloud__actions .button { flex: 1; }
   .account-responsible { grid-column: auto; }
   .account-grid > .button { width: 100%; }
   .notification-popover { position: fixed; top: 72px; right: 8px; left: 8px; width: auto; max-height: calc(100vh - 90px); }
@@ -1787,6 +1800,7 @@ body {
 :root[data-theme="dark"] .field select,
 :root[data-theme="dark"] .account-grid input,
 :root[data-theme="dark"] .account-grid select,
+:root[data-theme="dark"] .account-cloud__auth input,
 :root[data-theme="dark"] #audit-fixture,
 :root[data-theme="dark"] #parlay-name {
   color: var(--text);

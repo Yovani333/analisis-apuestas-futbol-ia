@@ -484,7 +484,20 @@
     </main>
 
     <main class="utility-view" data-view-panel="account" hidden>
-      <section class="utility-heading"><div><p class="eyebrow">Preferencias locales</p><h2>Mi cuenta</h2><p>Configuración guardada únicamente en este navegador.</p></div><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></section>
+      <section class="utility-heading"><div><p class="eyebrow">Cuenta y sincronización</p><h2>Mi cuenta</h2><p>Accede con el mismo correo para consultar tus datos desde cualquier dispositivo.</p></div><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></section>
+      <section id="cloud-account-panel" class="panel account-cloud" aria-labelledby="cloud-account-title">
+        <div class="account-cloud__heading"><div><h3 id="cloud-account-title">Sincronización en línea</h3><p>Guarda picks, parlays, evidencias, alertas y preferencias en tu cuenta.</p></div><span id="cloud-account-status" class="status-badge status-badge--processing">Comprobando</span></div>
+        <div id="cloud-auth-fields" class="account-cloud__auth">
+          <label>Correo electrónico<input id="cloud-email-input" type="email" autocomplete="email" maxlength="160" placeholder="correo@ejemplo.com" /></label>
+          <label>Contraseña<input id="cloud-password-input" type="password" autocomplete="current-password" minlength="8" maxlength="128" placeholder="Mínimo 8 caracteres" /></label>
+          <div class="account-cloud__actions"><button id="cloud-sign-in" class="button button--primary" type="button">Iniciar sesión</button><button id="cloud-sign-up" class="button button--secondary" type="button">Crear cuenta</button></div>
+        </div>
+        <div id="cloud-connected" class="account-cloud__connected" hidden>
+          <div><span>Cuenta conectada</span><strong id="cloud-email">—</strong><small id="cloud-last-sync">Todavía no sincronizada</small></div>
+          <div class="account-cloud__actions"><button id="cloud-sync-now" class="button button--primary" type="button">Sincronizar ahora</button><button id="cloud-sign-out" class="button button--secondary" type="button">Cerrar sesión</button></div>
+        </div>
+        <p id="cloud-account-message" class="account-note" role="status">La copia local permanece disponible cuando no hay conexión.</p>
+      </section>
       <form id="account-form" class="account-grid">
         <section class="panel"><h3>Perfil</h3><label>Nombre visible<input id="account-name" type="text" maxlength="50" placeholder="Tu nombre" /></label><label>Zona horaria<input type="text" value="Hora del Pacífico (America/Tijuana)" disabled /></label></section>
         <section class="panel"><h3>Preferencias</h3><label><input id="account-dark-mode" type="checkbox" /> Usar modo oscuro</label><p class="account-note">Los datos en vivo se actualizan manualmente desde el botón "Actualizar ahora" para reducir consumo de API.</p><label>Límite responsable diario<select id="account-daily-limit"><option value="none">Sin configurar</option><option value="1">1 análisis</option><option value="3">3 análisis</option><option value="5">5 análisis</option></select></label></section>
@@ -542,6 +555,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260712-collapsed-match-groups-v1"></script>
+    <script type="module" src="app.js?v=20260712-cloud-sync-v1"></script>
   </body>
 </html>

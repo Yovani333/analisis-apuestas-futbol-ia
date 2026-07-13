@@ -23,7 +23,9 @@ export const env = Object.freeze({
   fbrefSearchModel: process.env.FBREF_SEARCH_MODEL || "",
   weatherAccessMode: process.env.WEATHER_ACCESS_MODE || "open_meteo",
   soccerwayAccessMode: process.env.SOCCERWAY_ACCESS_MODE || "disabled",
-  soccerwaySearchModel: process.env.SOCCERWAY_SEARCH_MODEL || ""
+  soccerwaySearchModel: process.env.SOCCERWAY_SEARCH_MODEL || "",
+  supabaseUrl: process.env.SUPABASE_URL || "",
+  supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || ""
 });
 
 export function requireLiveConfiguration() {

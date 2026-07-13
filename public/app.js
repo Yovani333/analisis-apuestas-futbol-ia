@@ -5,22 +5,25 @@ import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
 } from "./parlay-store.js?v=20260705-team-performance-picks-v1";
-import { createEvidenceSnapshot, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260702-evidence-v2";
+import { createEvidenceSnapshot, EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260712-cloud-sync-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260705-player-goal-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260712-cloud-sync-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
 const ANALYSIS_USAGE_KEY = "football-ai.analysis-usage.v1";
 const TEAM_PERFORMANCE_VISIBILITY_KEY = "football-ai.team-performance-visible.v1";
 const PICK_COLLECTION_CACHE_KEY = "football-ai.pick-collection-cache.v1";
+let cloudSyncTimer = null;
 const readLocalJson = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 };
 const writeLocalJson = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* La app funciona aunque el almacenamiento esté bloqueado. */ }
+  if ([ALERTS_KEY, PREFERENCES_KEY, ANALYSIS_USAGE_KEY].includes(key)) queueCloudSync();
 };
 
 const state = {
@@ -66,7 +69,9 @@ const state = {
   isCollectingPickInfo: false,
   lastLiveRefreshAt: null,
   simulationTeamOptionByValue: new Map(),
-  simulationCompetitionOptionByValue: new Map()
+  simulationCompetitionOptionByValue: new Map(),
+  cloud: { enabled: false, ready: false, syncing: false, dirty: false, lastSyncedAt: null, error: "", notice: "" },
+  cloudApplying: false
 };
 
 const elements = {
@@ -176,7 +181,13 @@ Object.assign(elements, {
   alertLive: document.querySelector("#alert-live"), alertScore: document.querySelector("#alert-score"), alertData: document.querySelector("#alert-data"),
   accountForm: document.querySelector("#account-form"), accountName: document.querySelector("#account-name"),
   accountDarkMode: document.querySelector("#account-dark-mode"),
-  accountDailyLimit: document.querySelector("#account-daily-limit")
+  accountDailyLimit: document.querySelector("#account-daily-limit"),
+  cloudAccountStatus: document.querySelector("#cloud-account-status"), cloudAuthFields: document.querySelector("#cloud-auth-fields"),
+  cloudConnected: document.querySelector("#cloud-connected"), cloudEmail: document.querySelector("#cloud-email"),
+  cloudLastSync: document.querySelector("#cloud-last-sync"), cloudEmailInput: document.querySelector("#cloud-email-input"),
+  cloudPasswordInput: document.querySelector("#cloud-password-input"), cloudSignIn: document.querySelector("#cloud-sign-in"),
+  cloudSignUp: document.querySelector("#cloud-sign-up"), cloudSyncNow: document.querySelector("#cloud-sync-now"),
+  cloudSignOut: document.querySelector("#cloud-sign-out"), cloudAccountMessage: document.querySelector("#cloud-account-message")
 });
 Object.assign(elements, {
   auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results")
@@ -201,6 +212,186 @@ function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
   })[character]);
+}
+
+function localCloudState() {
+  return {
+    preferences: state.preferences,
+    parlayDraft: state.parlayDraft,
+    savedPicks: state.savedPicks,
+    savedParlays: state.savedParlays,
+    evidenceSnapshots: state.evidenceSnapshots,
+    alerts: state.alerts,
+    analysisUsage: readLocalJson(ANALYSIS_USAGE_KEY, {})
+  };
+}
+
+function renderCloudAccount() {
+  const session = cloudSyncClient.session;
+  const connected = Boolean(session?.accessToken);
+  elements.cloudAuthFields.hidden = connected || !state.cloud.enabled;
+  elements.cloudConnected.hidden = !connected;
+  elements.cloudSignIn.disabled = state.cloud.syncing;
+  elements.cloudSignUp.disabled = state.cloud.syncing;
+  elements.cloudSyncNow.disabled = state.cloud.syncing;
+  elements.cloudSignOut.disabled = state.cloud.syncing;
+  if (!state.cloud.enabled) {
+    elements.cloudAccountStatus.className = "status-badge status-badge--unavailable";
+    elements.cloudAccountStatus.textContent = "No configurada";
+    elements.cloudAccountMessage.textContent = "Faltan SUPABASE_URL o SUPABASE_PUBLISHABLE_KEY en Render.";
+    return;
+  }
+  if (state.cloud.syncing) {
+    elements.cloudAccountStatus.className = "status-badge status-badge--processing";
+    elements.cloudAccountStatus.textContent = "Sincronizando";
+  } else if (connected && !state.cloud.error) {
+    elements.cloudAccountStatus.className = "status-badge status-badge--available";
+    elements.cloudAccountStatus.textContent = "Conectada";
+  } else if (state.cloud.error) {
+    elements.cloudAccountStatus.className = "status-badge status-badge--partial";
+    elements.cloudAccountStatus.textContent = "Revisar";
+  } else {
+    elements.cloudAccountStatus.className = "status-badge status-badge--partial";
+    elements.cloudAccountStatus.textContent = "Sin sesión";
+  }
+  elements.cloudEmail.textContent = session?.user?.email || "Cuenta autenticada";
+  elements.cloudLastSync.textContent = state.cloud.lastSyncedAt
+    ? `Última sincronización: ${formatSiteRelease(state.cloud.lastSyncedAt)} PT`
+    : "Todavía no sincronizada";
+  elements.cloudAccountMessage.textContent = state.cloud.error
+    ? state.cloud.error
+    : state.cloud.notice ? state.cloud.notice
+    : connected ? "Los cambios se guardan en línea y mantienen una copia local para trabajar sin conexión."
+      : "Inicia sesión con el mismo correo en tu teléfono y computadora.";
+}
+
+function applyCloudState(remoteState) {
+  state.cloudApplying = true;
+  try {
+    state.preferences = { ...state.preferences, ...(remoteState.preferences || {}) };
+    state.parlayDraft = remoteState.parlayDraft || [];
+    state.savedPicks = remoteState.savedPicks || [];
+    state.savedParlays = remoteState.savedParlays || [];
+    state.evidenceSnapshots = remoteState.evidenceSnapshots || [];
+    state.alerts = remoteState.alerts || [];
+    saveParlayDraft(state.parlayDraft);
+    saveSavedPicks(state.savedPicks);
+    saveSavedParlays(state.savedParlays);
+    writeLocalJson(EVIDENCE_SNAPSHOTS_KEY, state.evidenceSnapshots);
+    writeLocalJson(PREFERENCES_KEY, state.preferences);
+    writeLocalJson(ALERTS_KEY, state.alerts);
+    writeLocalJson(ANALYSIS_USAGE_KEY, remoteState.analysisUsage || {});
+    elements.accountName.value = state.preferences.name || "";
+    elements.accountDailyLimit.value = state.preferences.dailyLimit || "none";
+    elements.alertLive.checked = state.preferences.alertLive !== false;
+    elements.alertScore.checked = state.preferences.alertScore !== false;
+    elements.alertData.checked = state.preferences.alertData !== false;
+    applyTheme(state.preferences.theme || "dark");
+    renderParlayDraft();
+    renderSavedPicks();
+    renderSavedParlays();
+    renderAlerts();
+    renderAuditFixtureOptions();
+  } finally {
+    state.cloudApplying = false;
+  }
+}
+
+async function connectCloudAccount({ firstConnection = null } = {}) {
+  const session = cloudSyncClient.session;
+  if (!session?.accessToken) return;
+  state.cloud.syncing = true;
+  state.cloud.error = "";
+  state.cloud.notice = "";
+  renderCloudAccount();
+  try {
+    const remote = await cloudSyncClient.loadState();
+    const userId = session.user?.id || "";
+    const migrateLocal = firstConnection ?? !cloudSyncClient.isInitialized(userId);
+    const nextState = remote
+      ? mergeCloudState(migrateLocal ? localCloudState() : {}, remote)
+      : mergeCloudState(localCloudState(), {});
+    applyCloudState(nextState);
+    const saved = (!remote || migrateLocal) ? await cloudSyncClient.saveState(nextState) : remote;
+    state.cloud.lastSyncedAt = saved?.updated_at || nextState.updatedAt || new Date().toISOString();
+    state.cloud.dirty = false;
+    if (userId) cloudSyncClient.markInitialized(userId);
+    state.cloud.ready = true;
+  } catch (error) {
+    state.cloud.error = error.message;
+    state.cloud.ready = true;
+  } finally {
+    state.cloud.syncing = false;
+    renderCloudAccount();
+  }
+}
+
+async function syncCloudState({ announce = false, refreshFirst = false } = {}) {
+  if (!state.cloud.ready || state.cloudApplying || state.cloud.syncing || !cloudSyncClient.session?.accessToken) return;
+  state.cloud.syncing = true;
+  state.cloud.error = "";
+  state.cloud.notice = "";
+  renderCloudAccount();
+  try {
+    if (refreshFirst && !state.cloud.dirty) {
+      const remote = await cloudSyncClient.loadState();
+      if (remote) applyCloudState(remote);
+      state.cloud.lastSyncedAt = remote?.updated_at || state.cloud.lastSyncedAt || new Date().toISOString();
+      if (announce) showNotice("Datos actualizados desde tu cuenta en línea.");
+    } else {
+      const saved = await cloudSyncClient.saveState(localCloudState());
+      state.cloud.lastSyncedAt = saved?.updated_at || new Date().toISOString();
+      state.cloud.dirty = false;
+      if (announce) showNotice("Datos sincronizados con tu cuenta.");
+    }
+  } catch (error) {
+    state.cloud.error = `${error.message} La copia local se conserva.`;
+    if (announce) showNotice(state.cloud.error);
+  } finally {
+    state.cloud.syncing = false;
+    renderCloudAccount();
+  }
+}
+
+function queueCloudSync() {
+  if (!state?.cloud?.ready || state.cloudApplying || !cloudSyncClient.session?.accessToken) return;
+  state.cloud.dirty = true;
+  window.clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = window.setTimeout(() => void syncCloudState(), 500);
+}
+
+function clearLocalAccountData() {
+  state.cloudApplying = true;
+  try {
+    state.parlayDraft = [];
+    state.savedPicks = [];
+    state.savedParlays = [];
+    state.evidenceSnapshots = [];
+    state.alerts = [];
+    state.preferences = { theme: state.preferences.theme || "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true };
+    saveParlayDraft([]);
+    saveSavedPicks([]);
+    saveSavedParlays([]);
+    localStorage.removeItem(EVIDENCE_SNAPSHOTS_KEY);
+    localStorage.removeItem(ANALYSIS_USAGE_KEY);
+    localStorage.setItem(ALERTS_KEY, "[]");
+    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(state.preferences));
+    elements.accountName.value = "";
+    elements.accountDailyLimit.value = "none";
+    renderParlayDraft(); renderSavedPicks(); renderSavedParlays(); renderAlerts(); renderAuditFixtureOptions();
+  } finally { state.cloudApplying = false; }
+}
+
+async function initializeCloudAccount() {
+  try {
+    const config = await cloudSyncClient.configuration();
+    state.cloud.enabled = Boolean(config.enabled);
+  } catch (error) {
+    state.cloud.error = error.message;
+  }
+  if (state.cloud.enabled && cloudSyncClient.session?.accessToken) await connectCloudAccount();
+  else state.cloud.ready = true;
+  renderCloudAccount();
 }
 
 function statusClass(status) {
@@ -1474,14 +1665,17 @@ const resultLabels = Object.freeze({ pending: "Pendiente", won: "Ganado", lost: 
 
 function persistParlayDraft() {
   saveParlayDraft(state.parlayDraft);
+  queueCloudSync();
 }
 
 function persistSavedParlays() {
   saveSavedParlays(state.savedParlays);
+  queueCloudSync();
 }
 
 function persistSavedPicks() {
   saveSavedPicks(state.savedPicks);
+  queueCloudSync();
 }
 
 function normalizedSavedStatus(value) {
@@ -2287,6 +2481,7 @@ async function capturePreMatchEvidence() {
     state.cornersByFixture.set(fixture.id, corners);
     const snapshot = createEvidenceSnapshot({ fixture, dataPicks, poisson, teamGoals, corners });
     state.evidenceSnapshots = saveEvidenceSnapshot(snapshot);
+    queueCloudSync();
     showNotice("Evidencia prepartido guardada. No se utilizó OpenAI.");
   } catch (error) {
     showNotice(error.message || "No fue posible guardar la evidencia prepartido.");
@@ -3463,7 +3658,59 @@ elements.accountForm.addEventListener("submit", (event) => {
   state.preferences.dailyLimit = elements.accountDailyLimit.value;
   applyTheme(elements.accountDarkMode.checked ? "dark" : "light");
   writeLocalJson(PREFERENCES_KEY, state.preferences);
-  showNotice("Preferencias guardadas en este navegador.");
+  showNotice(cloudSyncClient.session?.accessToken ? "Preferencias guardadas y preparadas para sincronizar." : "Preferencias guardadas en este navegador.");
+});
+
+async function handleCloudCredentials(mode) {
+  const email = elements.cloudEmailInput.value.trim();
+  const password = elements.cloudPasswordInput.value;
+  if (!email || password.length < 8) return showNotice("Escribe tu correo y una contraseña de al menos 8 caracteres.");
+  state.cloud.syncing = true;
+  state.cloud.error = "";
+  state.cloud.notice = "";
+  renderCloudAccount();
+  try {
+    if (mode === "sign-up") {
+      const result = await cloudSyncClient.signUp(email, password);
+      if (!result.session) {
+        state.cloud.notice = "Cuenta creada. Revisa tu correo para confirmarla y después inicia sesión.";
+        showNotice("Cuenta creada. Revisa el correo de confirmación enviado por Supabase.");
+        return;
+      }
+    } else {
+      await cloudSyncClient.signIn(email, password);
+    }
+    elements.cloudPasswordInput.value = "";
+    state.cloud.syncing = false;
+    await connectCloudAccount();
+    showNotice("Cuenta conectada. Tus datos locales fueron sincronizados.");
+  } catch (error) {
+    state.cloud.error = error.message;
+    showNotice(error.message);
+  } finally {
+    state.cloud.syncing = false;
+    renderCloudAccount();
+  }
+}
+
+elements.cloudSignIn.addEventListener("click", () => void handleCloudCredentials("sign-in"));
+elements.cloudSignUp.addEventListener("click", () => void handleCloudCredentials("sign-up"));
+elements.cloudPasswordInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); void handleCloudCredentials("sign-in"); }
+});
+elements.cloudSyncNow.addEventListener("click", () => void syncCloudState({ announce: true, refreshFirst: true }));
+elements.cloudSignOut.addEventListener("click", async () => {
+  await syncCloudState();
+  await cloudSyncClient.signOut();
+  clearLocalAccountData();
+  state.cloud.lastSyncedAt = null;
+  state.cloud.error = "";
+  state.cloud.notice = "";
+  state.cloud.ready = true;
+  elements.cloudEmailInput.value = "";
+  elements.cloudPasswordInput.value = "";
+  renderCloudAccount();
+  showNotice("Sesión cerrada. La copia personal se retiró de este navegador.");
 });
 
 document.querySelectorAll("[data-nav-label]").forEach((button) => {
@@ -3494,6 +3741,7 @@ async function initializeApp() {
   renderSavedPicks();
   renderSavedParlays();
   applyTeamPerformanceVisibility(teamPerformanceVisible());
+  await initializeCloudAccount();
   const runtime = await footballDataService.getRuntime();
   const releaseElement = document.querySelector("#site-last-update");
   const releaseDate = runtime.release?.deployedAt || document.lastModified;

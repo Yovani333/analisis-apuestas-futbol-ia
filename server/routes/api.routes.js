@@ -29,6 +29,9 @@ import {
   listSimulationAuditRecords,
   saveSimulationAuditRecord
 } from "../services/simulation-audit-store.service.js";
+import {
+  cloudConfiguration, getCloudState, refreshCloudSession, saveCloudState, signInCloudUser, signOutCloudUser, signUpCloudUser
+} from "../services/cloud-sync.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -52,12 +55,22 @@ apiRouter.get("/health", (req, res) => {
         configured: Boolean(env.apiFootballKey),
         observability: getApiFootballObservability()
       },
-      openai: { configured: Boolean(env.openaiApiKey && env.openaiModelDefault && env.openaiModelPremium) }
+      openai: { configured: Boolean(env.openaiApiKey && env.openaiModelDefault && env.openaiModelPremium) },
+      cloudSync: { configured: Boolean(env.supabaseUrl && env.supabasePublishableKey), provider: "supabase" }
     },
     liveReady: missing.length === 0,
     missing
   });
 });
+
+const cloudAuthLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: "draft-8", legacyHeaders: false });
+apiRouter.get("/cloud/config", (req, res) => res.json(cloudConfiguration()));
+apiRouter.post("/cloud/auth/sign-up", cloudAuthLimiter, asyncRoute(async (req, res) => res.json(await signUpCloudUser(req.body || {}))));
+apiRouter.post("/cloud/auth/sign-in", cloudAuthLimiter, asyncRoute(async (req, res) => res.json(await signInCloudUser(req.body || {}))));
+apiRouter.post("/cloud/auth/refresh", cloudAuthLimiter, asyncRoute(async (req, res) => res.json(await refreshCloudSession(req.body?.refreshToken))));
+apiRouter.post("/cloud/auth/sign-out", asyncRoute(async (req, res) => res.json(await signOutCloudUser(req.headers.authorization))));
+apiRouter.get("/cloud/state", asyncRoute(async (req, res) => res.json({ state: await getCloudState(req.headers.authorization) })));
+apiRouter.put("/cloud/state", asyncRoute(async (req, res) => res.json({ state: await saveCloudState(req.headers.authorization, req.body || {}) })));
 
 apiRouter.get("/leagues", asyncRoute(async (req, res) => {
   if (env.dataMode !== "live") {
