@@ -111,6 +111,18 @@ export class CloudSyncClient {
     return (await requestJson("/api/cloud/state", { method: "PUT", token, body: state })).state;
   }
 
+  async watchEvidence(fixtures) {
+    const token = await this.accessToken();
+    if (!token) return null;
+    return requestJson("/api/cloud/evidence/watch", { method: "POST", token, body: { fixtures } });
+  }
+
+  async evidenceAutomationStatus() {
+    const token = await this.accessToken();
+    if (!token) return null;
+    return requestJson("/api/cloud/evidence/status", { token });
+  }
+
   async signOut() {
     const token = await this.accessToken().catch(() => "");
     if (token) await requestJson("/api/cloud/auth/sign-out", { method: "POST", token }).catch(() => null);

@@ -30,3 +30,12 @@ test("normaliza y limita el estado sincronizable", () => {
   assert.equal(state.preferences.theme, "dark");
   assert.deepEqual(state.analysis_usage, {});
 });
+
+test("combina evidencias manuales y automaticas sin duplicar snapshots", () => {
+  const rows = cloudSyncInternals.mergeEvidenceSnapshots(
+    [{ id: "manual", capturedAt: "2026-07-12T16:00:00Z" }, { id: "same", capturedAt: "2026-07-12T15:00:00Z", source: "manual" }],
+    [{ snapshot: { id: "auto", capturedAt: "2026-07-12T18:00:00Z" } }, { snapshot: { id: "same", capturedAt: "2026-07-12T17:00:00Z", source: "automatic" } }]
+  );
+  assert.deepEqual(rows.map((row) => row.id), ["auto", "same", "manual"]);
+  assert.equal(rows.find((row) => row.id === "same").source, "automatic");
+});

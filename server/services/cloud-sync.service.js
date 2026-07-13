@@ -2,9 +2,14 @@ import { env } from "../config/env.js";
 import { AppError } from "../errors.js";
 
 const MAX_SYNC_BYTES = 1_500_000;
+const MAX_WATCHLIST_FIXTURES = 100;
 
 function configured() {
   return Boolean(env.supabaseUrl && env.supabasePublishableKey);
+}
+
+export function evidenceAutomationConfigured() {
+  return Boolean(configured() && env.supabaseSecretKey && env.dataMode === "live");
 }
 
 function baseUrl() {
@@ -78,8 +83,79 @@ async function supabaseRequest(path, { method = "GET", token = "", body, prefer 
   return payload;
 }
 
+async function supabaseAdminRequest(path, { method = "GET", body, prefer = "" } = {}) {
+  if (!evidenceAutomationConfigured()) {
+    throw new AppError("La captura automatica requiere SUPABASE_SECRET_KEY en el backend.", 503, "EVIDENCE_AUTOMATION_NOT_CONFIGURED");
+  }
+  const secret = env.supabaseSecretKey;
+  let response;
+  try {
+    response = await fetch(`${baseUrl()}${path}`, {
+      method,
+      headers: {
+        apikey: secret,
+        "Content-Type": "application/json",
+        ...(secret.startsWith("eyJ") ? { Authorization: `Bearer ${secret}` } : {}),
+        ...(prefer ? { Prefer: prefer } : {})
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+    });
+  } catch {
+    throw new AppError("No fue posible conectar con Supabase para automatizar evidencias.", 503, "EVIDENCE_AUTOMATION_UNREACHABLE");
+  }
+  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new AppError(payload?.message || payload?.error || "Supabase rechazo la automatizacion.", response.status, "EVIDENCE_AUTOMATION_PROVIDER_ERROR");
+  }
+  return payload;
+}
+
+function mergeEvidenceSnapshots(manualRows, automaticRows) {
+  const rows = new Map();
+  for (const row of Array.isArray(manualRows) ? manualRows : []) if (row?.id) rows.set(String(row.id), row);
+  for (const row of Array.isArray(automaticRows) ? automaticRows : []) if (row?.snapshot?.id) rows.set(String(row.snapshot.id), row.snapshot);
+  return [...rows.values()].sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0)).slice(0, 50);
+}
+
+function normalizeWatchedFixture(fixture, userId, now = new Date()) {
+  const fixtureId = String(fixture?.id || "");
+  const fixtureDate = new Date(fixture?.utcDateTime || "");
+  if (!/^\d+$/.test(fixtureId) || Number.isNaN(fixtureDate.getTime()) || fixtureDate <= now || fixture?.status !== "scheduled") return null;
+  return {
+    user_id: userId,
+    fixture_id: fixtureId,
+    fixture_date: fixtureDate.toISOString(),
+    capture_due_at: new Date(fixtureDate.getTime() - 60 * 60 * 1000).toISOString(),
+    fixture: {
+      id: fixtureId,
+      utcDateTime: fixtureDate.toISOString(),
+      date: fixture.date || null,
+      time: fixture.time || null,
+      status: "scheduled",
+      statusLabel: fixture.statusLabel || "Programado",
+      leagueName: fixture.leagueName || null,
+      leagueSlug: fixture.leagueSlug || null,
+      leagueId: fixture.leagueId ?? null,
+      season: fixture.season ?? null,
+      country: fixture.country || null,
+      home: fixture.home || null,
+      away: fixture.away || null,
+      homeTeamId: fixture.homeTeamId ?? null,
+      awayTeamId: fixture.awayTeamId ?? null
+    },
+    status: "scheduled",
+    updated_at: now.toISOString()
+  };
+}
+
 export function cloudConfiguration() {
-  return { enabled: configured(), provider: "supabase", synchronization: "account-scoped" };
+  return {
+    enabled: configured(),
+    provider: "supabase",
+    synchronization: "account-scoped",
+    automaticEvidence: evidenceAutomationConfigured(),
+    automaticEvidenceLeadMinutes: 60
+  };
 }
 
 export async function signUpCloudUser(input) {
@@ -104,7 +180,19 @@ export async function signOutCloudUser(authorization) {
 export async function getCloudState(authorization) {
   const token = bearerToken(authorization);
   const rows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage,updated_at&limit=1", { token });
-  return Array.isArray(rows) ? rows[0] || null : null;
+  const state = Array.isArray(rows) ? rows[0] || null : null;
+  let automaticRows = [];
+  try {
+    const payload = await supabaseRequest("/rest/v1/automatic_evidence_snapshots?select=snapshot,captured_at&order=captured_at.desc&limit=50", { token });
+    automaticRows = Array.isArray(payload) ? payload : [];
+  } catch (error) {
+    if (!/automatic_evidence_snapshots|schema cache/i.test(error.message)) throw error;
+  }
+  if (!state && !automaticRows.length) return null;
+  return {
+    ...(state || { preferences: {}, parlay_draft: [], saved_picks: [], saved_parlays: [], alerts: [], analysis_usage: {} }),
+    evidence_snapshots: mergeEvidenceSnapshots(state?.evidence_snapshots, automaticRows)
+  };
 }
 
 export async function saveCloudState(authorization, input) {
@@ -117,4 +205,85 @@ export async function saveCloudState(authorization, input) {
   return Array.isArray(rows) ? rows[0] || payload : payload;
 }
 
-export const cloudSyncInternals = { bearerToken, normalizedState, userIdFromToken, validateCredentials };
+export async function registerEvidenceWatchlist(authorization, input = {}) {
+  const token = bearerToken(authorization);
+  const userId = userIdFromToken(token);
+  const now = new Date();
+  const requestedFixtures = (Array.isArray(input.fixtures) ? input.fixtures : [])
+    .slice(0, MAX_WATCHLIST_FIXTURES)
+    .map((fixture) => normalizeWatchedFixture(fixture, userId, now))
+    .filter(Boolean);
+  const future = encodeURIComponent(now.toISOString());
+  const activeRows = await supabaseRequest(`/rest/v1/evidence_watchlist?select=fixture_id&status=eq.scheduled&fixture_date=gt.${future}&limit=${MAX_WATCHLIST_FIXTURES}`, { token });
+  const activeIds = new Set((Array.isArray(activeRows) ? activeRows : []).map((row) => String(row.fixture_id)));
+  let availableSlots = Math.max(0, MAX_WATCHLIST_FIXTURES - activeIds.size);
+  const fixtures = requestedFixtures.filter((fixture) => {
+    if (activeIds.has(fixture.fixture_id)) return true;
+    if (availableSlots <= 0) return false;
+    availableSlots -= 1;
+    return true;
+  });
+  if (fixtures.length) {
+    await supabaseRequest("/rest/v1/evidence_watchlist?on_conflict=user_id,fixture_id", {
+      method: "POST",
+      token,
+      body: fixtures,
+      prefer: "resolution=ignore-duplicates,return=minimal"
+    });
+  }
+  return getEvidenceAutomationStatus(authorization, {
+    registered: fixtures.length,
+    ignoredByLimit: Math.max(0, requestedFixtures.length - fixtures.length)
+  });
+}
+
+export async function getEvidenceAutomationStatus(authorization, extra = {}) {
+  const token = bearerToken(authorization);
+  const rows = await supabaseRequest("/rest/v1/evidence_watchlist?select=fixture_id,fixture_date,status,captured_at,last_error&order=fixture_date.asc&limit=100", { token });
+  const watched = Array.isArray(rows) ? rows : [];
+  const counts = watched.reduce((result, row) => ({ ...result, [row.status]: (result[row.status] || 0) + 1 }), {});
+  return {
+    configured: evidenceAutomationConfigured(),
+    leadMinutes: 60,
+    watched: watched.length,
+    scheduled: counts.scheduled || 0,
+    captured: counts.captured || 0,
+    failed: counts.failed || 0,
+    ...extra
+  };
+}
+
+export async function listDueEvidenceWatchlist(now = new Date(), limit = 10) {
+  const safeLimit = Math.max(1, Math.min(25, Number(limit) || 10));
+  const timestamp = encodeURIComponent(now.toISOString());
+  const rows = await supabaseAdminRequest(`/rest/v1/evidence_watchlist?select=*&status=eq.scheduled&capture_due_at=lte.${timestamp}&order=capture_due_at.asc&limit=${safeLimit}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function saveAutomaticEvidence(row, snapshot, now = new Date()) {
+  const capturedAt = snapshot.capturedAt || now.toISOString();
+  await supabaseAdminRequest("/rest/v1/automatic_evidence_snapshots?on_conflict=user_id,fixture_id", {
+    method: "POST",
+    body: { user_id: row.user_id, fixture_id: String(row.fixture_id), captured_at: capturedAt, snapshot },
+    prefer: "resolution=merge-duplicates,return=minimal"
+  });
+  return updateEvidenceWatchlist(row, {
+    status: "captured",
+    captured_at: capturedAt,
+    last_error: null,
+    attempts: Number(row.attempts || 0) + 1,
+    updated_at: now.toISOString()
+  });
+}
+
+export async function updateEvidenceWatchlist(row, changes) {
+  const userId = encodeURIComponent(String(row.user_id));
+  const fixtureId = encodeURIComponent(String(row.fixture_id));
+  await supabaseAdminRequest(`/rest/v1/evidence_watchlist?user_id=eq.${userId}&fixture_id=eq.${fixtureId}`, {
+    method: "PATCH",
+    body: changes,
+    prefer: "return=minimal"
+  });
+}
+
+export const cloudSyncInternals = { bearerToken, mergeEvidenceSnapshots, normalizedState, normalizeWatchedFixture, userIdFromToken, validateCredentials };

@@ -6,23 +6,40 @@ La aplicacion mantiene una copia local y sincroniza por cuenta los picks, parlay
 
 1. Abre el proyecto en Supabase.
 2. En **SQL Editor**, ejecuta completo `supabase/migrations/001_user_sync_state.sql`.
-3. En **Authentication > URL Configuration**, configura como Site URL la URL publica de Render y agrega esa misma URL a Redirect URLs.
-4. En Render deben existir:
+3. Para evidencias automáticas, ejecuta también `supabase/migrations/002_automatic_evidence.sql`.
+4. En **Authentication > URL Configuration**, configura como Site URL la URL publica de Render y agrega esa misma URL a Redirect URLs.
+5. En Render deben existir:
 
 ```text
 SUPABASE_URL=https://proyecto.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
+EVIDENCE_AUTOMATION_SECRET=una-cadena-aleatoria-larga
+EVIDENCE_AUTOMATION_INTERVAL_MS=300000
 ```
 
-5. Despliega de nuevo el servicio.
+6. Despliega de nuevo el servicio.
 
-No se debe agregar `service_role`, `secret key` ni la contrasena de PostgreSQL al frontend. La clave publicable solo permite operaciones autorizadas por las politicas RLS.
+`SUPABASE_SECRET_KEY` se usa exclusivamente dentro del backend de Render para procesar encuentros de todas las cuentas. Nunca debe agregarse a HTML, JavaScript publico ni GitHub. La clave publicable solo permite operaciones autorizadas por las politicas RLS.
 
 ## Uso
 
 En **Mi cuenta > Sincronizacion en linea**, crea una cuenta o inicia sesion. Si Supabase exige confirmacion de correo, abre el enlace recibido y despues inicia sesion.
 
 La primera conexion de cada cuenta en un navegador combina los datos locales y remotos. Las conexiones posteriores descargan el estado remoto antes de habilitar la sincronizacion automatica. Cerrar sesion elimina la copia personal de ese navegador, pero no borra la informacion de Supabase.
+
+## Evidencia automatica una hora antes
+
+Cuando una cuenta ha iniciado sesion, cada busqueda registra sus fixtures programados en `evidence_watchlist`. El backend revisa la cola cada cinco minutos y captura una sola evidencia por usuario y fixture cuando faltan aproximadamente 60 minutos. La captura usa API-Football y los modelos internos; no llama a OpenAI y no usa estadisticas del fixture actual. Un error temporal se reintenta hasta tres veces antes de marcar la captura como fallida. Si varias cuentas vigilan el mismo fixture en un ciclo, la respuesta deportiva se consulta una vez y se reutiliza sin mezclar los datos privados de las cuentas.
+
+La tarea interna funciona mientras el servicio de Render esta activo. Si el plan permite suspender el servicio, configura un monitor o cron externo para enviar cada cinco minutos:
+
+```text
+POST https://TU-SERVICIO.onrender.com/api/automation/evidence/run
+X-Automation-Secret: el mismo valor de EVIDENCE_AUTOMATION_SECRET
+```
+
+El endpoint esta protegido y no debe invocarse desde el navegador. Las evidencias automaticas se descargan al iniciar sesion, recargar o pulsar **Sincronizar ahora**.
 
 ## Datos y seguridad
 

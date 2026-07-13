@@ -1,5 +1,6 @@
 import { app } from "./app.js";
 import { env, requireLiveConfiguration } from "./config/env.js";
+import { startAutomaticEvidenceScheduler } from "./services/automatic-evidence.service.js";
 
 const host = process.env.HOST || "0.0.0.0";
 
@@ -9,8 +10,10 @@ const server = app.listen(env.port, host, () => {
   console.log(`Modo de datos: ${env.dataMode}`);
   if (env.dataMode === "live" && missing.length) console.warn(`Configuración pendiente: ${missing.join(", ")}`);
 });
+const stopAutomaticEvidenceScheduler = startAutomaticEvidenceScheduler();
 
 function shutdown() {
+  stopAutomaticEvidenceScheduler();
   server.close(() => process.exit(0));
 }
 process.on("SIGINT", shutdown);

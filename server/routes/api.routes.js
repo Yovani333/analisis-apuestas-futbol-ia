@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { rateLimit } from "express-rate-limit";
 import { env, requireLiveConfiguration } from "../config/env.js";
 import { ALLOWED_LEAGUES } from "../config/leagues.js";
@@ -30,8 +31,10 @@ import {
   saveSimulationAuditRecord
 } from "../services/simulation-audit-store.service.js";
 import {
-  cloudConfiguration, getCloudState, refreshCloudSession, saveCloudState, signInCloudUser, signOutCloudUser, signUpCloudUser
+  cloudConfiguration, getCloudState, getEvidenceAutomationStatus, refreshCloudSession, registerEvidenceWatchlist,
+  saveCloudState, signInCloudUser, signOutCloudUser, signUpCloudUser
 } from "../services/cloud-sync.service.js";
+import { runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -39,6 +42,11 @@ const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req,
 const requireLiveMode = (req, res, next) => {
   if (env.dataMode !== "live") return next(new AppError("Activa DATA_MODE=live para consultar datos reales.", 409, "LIVE_MODE_DISABLED"));
   next();
+};
+const validAutomationSecret = (value) => {
+  const expected = Buffer.from(String(env.evidenceAutomationSecret || ""));
+  const received = Buffer.from(String(value || ""));
+  return expected.length > 0 && expected.length === received.length && timingSafeEqual(expected, received);
 };
 
 apiRouter.get("/health", (req, res) => {
@@ -56,7 +64,11 @@ apiRouter.get("/health", (req, res) => {
         observability: getApiFootballObservability()
       },
       openai: { configured: Boolean(env.openaiApiKey && env.openaiModelDefault && env.openaiModelPremium) },
-      cloudSync: { configured: Boolean(env.supabaseUrl && env.supabasePublishableKey), provider: "supabase" }
+      cloudSync: {
+        configured: Boolean(env.supabaseUrl && env.supabasePublishableKey),
+        automaticEvidence: cloudConfiguration().automaticEvidence,
+        provider: "supabase"
+      }
     },
     liveReady: missing.length === 0,
     missing
@@ -71,6 +83,14 @@ apiRouter.post("/cloud/auth/refresh", cloudAuthLimiter, asyncRoute(async (req, r
 apiRouter.post("/cloud/auth/sign-out", asyncRoute(async (req, res) => res.json(await signOutCloudUser(req.headers.authorization))));
 apiRouter.get("/cloud/state", asyncRoute(async (req, res) => res.json({ state: await getCloudState(req.headers.authorization) })));
 apiRouter.put("/cloud/state", asyncRoute(async (req, res) => res.json({ state: await saveCloudState(req.headers.authorization, req.body || {}) })));
+apiRouter.get("/cloud/evidence/status", asyncRoute(async (req, res) => res.json(await getEvidenceAutomationStatus(req.headers.authorization))));
+apiRouter.post("/cloud/evidence/watch", asyncRoute(async (req, res) => res.json(await registerEvidenceWatchlist(req.headers.authorization, req.body || {}))));
+
+const automationLimiter = rateLimit({ windowMs: 60 * 1000, limit: 3, standardHeaders: "draft-8", legacyHeaders: false });
+apiRouter.post("/automation/evidence/run", requireLiveMode, automationLimiter, asyncRoute(async (req, res) => {
+  if (!validAutomationSecret(req.headers["x-automation-secret"])) throw new AppError("Automatizacion no autorizada.", 401, "AUTOMATION_UNAUTHORIZED");
+  res.json(await runAutomaticEvidenceCycle());
+}));
 
 apiRouter.get("/leagues", asyncRoute(async (req, res) => {
   if (env.dataMode !== "live") {

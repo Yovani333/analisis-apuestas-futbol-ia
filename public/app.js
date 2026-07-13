@@ -10,7 +10,7 @@ import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-to
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260705-player-goal-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260712-cloud-sync-v1";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260712-automatic-evidence-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -70,7 +70,10 @@ const state = {
   lastLiveRefreshAt: null,
   simulationTeamOptionByValue: new Map(),
   simulationCompetitionOptionByValue: new Map(),
-  cloud: { enabled: false, ready: false, syncing: false, dirty: false, lastSyncedAt: null, error: "", notice: "" },
+  cloud: {
+    enabled: false, ready: false, syncing: false, dirty: false, lastSyncedAt: null, error: "", notice: "",
+    automaticEvidence: false, watchedFixtures: 0, scheduledEvidence: 0, capturedEvidence: 0, evidenceFailures: 0
+  },
   cloudApplying: false
 };
 
@@ -187,7 +190,8 @@ Object.assign(elements, {
   cloudLastSync: document.querySelector("#cloud-last-sync"), cloudEmailInput: document.querySelector("#cloud-email-input"),
   cloudPasswordInput: document.querySelector("#cloud-password-input"), cloudSignIn: document.querySelector("#cloud-sign-in"),
   cloudSignUp: document.querySelector("#cloud-sign-up"), cloudSyncNow: document.querySelector("#cloud-sync-now"),
-  cloudSignOut: document.querySelector("#cloud-sign-out"), cloudAccountMessage: document.querySelector("#cloud-account-message")
+  cloudSignOut: document.querySelector("#cloud-sign-out"), cloudAccountMessage: document.querySelector("#cloud-account-message"),
+  automaticEvidenceStatus: document.querySelector("#automatic-evidence-status")
 });
 Object.assign(elements, {
   auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results")
@@ -239,6 +243,7 @@ function renderCloudAccount() {
     elements.cloudAccountStatus.className = "status-badge status-badge--unavailable";
     elements.cloudAccountStatus.textContent = "No configurada";
     elements.cloudAccountMessage.textContent = "Faltan SUPABASE_URL o SUPABASE_PUBLISHABLE_KEY en Render.";
+    elements.automaticEvidenceStatus.textContent = "Evidencia automática: sincronización en línea no configurada.";
     return;
   }
   if (state.cloud.syncing) {
@@ -263,6 +268,55 @@ function renderCloudAccount() {
     : state.cloud.notice ? state.cloud.notice
     : connected ? "Los cambios se guardan en línea y mantienen una copia local para trabajar sin conexión."
       : "Inicia sesión con el mismo correo en tu teléfono y computadora.";
+  elements.automaticEvidenceStatus.textContent = !state.cloud.automaticEvidence
+    ? "Evidencia automática: pendiente de configurar en el servidor."
+    : !connected ? "Evidencia automática: inicia sesión para vigilar los partidos encontrados."
+    : `Evidencia automática activa · ${state.cloud.scheduledEvidence} pendiente(s) · ${state.cloud.capturedEvidence} capturada(s)${state.cloud.evidenceFailures ? ` · ${state.cloud.evidenceFailures} con error` : ""}.`;
+}
+
+function automaticEvidenceFixtures(fixtures = state.fixtures) {
+  return fixtures.filter((fixture) => fixture.status === "scheduled" && fixture.utcDateTime).map((fixture) => ({
+    id: fixture.id,
+    utcDateTime: fixture.utcDateTime,
+    date: fixture.date,
+    time: fixture.time,
+    status: fixture.status,
+    statusLabel: fixture.statusLabel,
+    leagueName: fixture.leagueName,
+    leagueSlug: fixture.leagueSlug,
+    leagueId: fixture.leagueId,
+    season: fixture.season,
+    country: fixture.country,
+    home: fixture.home,
+    away: fixture.away,
+    homeTeamId: fixture.homeTeamId,
+    awayTeamId: fixture.awayTeamId
+  }));
+}
+
+function applyEvidenceAutomationStatus(status) {
+  if (!status) return;
+  state.cloud.watchedFixtures = Number(status.watched || 0);
+  state.cloud.scheduledEvidence = Number(status.scheduled || 0);
+  state.cloud.capturedEvidence = Number(status.captured || 0);
+  state.cloud.evidenceFailures = Number(status.failed || 0);
+  renderCloudAccount();
+}
+
+async function registerAutomaticEvidence(fixtures = state.fixtures) {
+  if (!state.cloud.automaticEvidence || !cloudSyncClient.session?.accessToken) return null;
+  const scheduled = automaticEvidenceFixtures(fixtures);
+  try {
+    const status = scheduled.length
+      ? await cloudSyncClient.watchEvidence(scheduled)
+      : await cloudSyncClient.evidenceAutomationStatus();
+    applyEvidenceAutomationStatus(status);
+    return status;
+  } catch (error) {
+    state.cloud.notice = `Evidencia automática pendiente: ${error.message}`;
+    renderCloudAccount();
+    return null;
+  }
 }
 
 function applyCloudState(remoteState) {
@@ -324,6 +378,7 @@ async function connectCloudAccount({ firstConnection = null } = {}) {
     state.cloud.syncing = false;
     renderCloudAccount();
   }
+  await registerAutomaticEvidence();
 }
 
 async function syncCloudState({ announce = false, refreshFirst = false } = {}) {
@@ -351,6 +406,7 @@ async function syncCloudState({ announce = false, refreshFirst = false } = {}) {
     state.cloud.syncing = false;
     renderCloudAccount();
   }
+  if (refreshFirst) await registerAutomaticEvidence();
 }
 
 function queueCloudSync() {
@@ -386,6 +442,7 @@ async function initializeCloudAccount() {
   try {
     const config = await cloudSyncClient.configuration();
     state.cloud.enabled = Boolean(config.enabled);
+    state.cloud.automaticEvidence = Boolean(config.automaticEvidence);
   } catch (error) {
     state.cloud.error = error.message;
   }
@@ -945,7 +1002,9 @@ function renderFixtureData() {
   elements.downloadEvidenceTxt.disabled = fixture.status !== "scheduled" || !evidence;
   elements.evidenceStatus.textContent = evidence
     ? `Evidencia guardada: ${formatUpdatedAt(evidence.capturedAt)} · Lista para auditoría después del resultado final.`
-    : fixture.status === "scheduled" ? "Sin evidencia prepartido guardada." : "La evidencia solo puede guardarse antes del inicio.";
+    : fixture.status === "scheduled" && state.cloud.automaticEvidence && cloudSyncClient.session?.accessToken
+      ? "Vigilancia automática activa: se guardará alrededor de una hora antes del inicio."
+      : fixture.status === "scheduled" ? "Sin evidencia prepartido guardada." : "La evidencia solo puede guardarse antes del inicio.";
   elements.guideOddsContent.innerHTML = renderOddsDetail(fixture.confirmedData?.odds || []);
   renderGuideCoverageSummary(fixture);
   renderCoverageTable(fixture);
@@ -3344,6 +3403,7 @@ async function searchFixtures(event) {
       elements.filterError.textContent = searchWarnings.map((warning) => `${warning.slug}: Datos no disponibles en la API`).join(" · ");
     }
     renderMatches();
+    void registerAutomaticEvidence(state.fixtures);
   } catch (error) {
     elements.filterError.hidden = false;
     elements.filterError.textContent = error.message;

@@ -25,7 +25,10 @@ export const env = Object.freeze({
   soccerwayAccessMode: process.env.SOCCERWAY_ACCESS_MODE || "disabled",
   soccerwaySearchModel: process.env.SOCCERWAY_SEARCH_MODEL || "",
   supabaseUrl: process.env.SUPABASE_URL || "",
-  supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || ""
+  supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || "",
+  supabaseSecretKey: process.env.SUPABASE_SECRET_KEY || "",
+  evidenceAutomationSecret: process.env.EVIDENCE_AUTOMATION_SECRET || "",
+  evidenceAutomationIntervalMs: Math.max(60_000, Number(process.env.EVIDENCE_AUTOMATION_INTERVAL_MS || 300_000))
 });
 
 export function requireLiveConfiguration() {
