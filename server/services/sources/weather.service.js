@@ -1,7 +1,10 @@
 import { SOURCE_STATUS } from "../../constants/source-catalog.js";
 import { createSourceResult } from "./source-adapter.js";
 
-const CACHE_TTL = 30 * 60 * 1000;
+const LIVE_CACHE_TTL = 5 * 60 * 1000;
+const NEAR_FORECAST_CACHE_TTL = 15 * 60 * 1000;
+const FORECAST_CACHE_TTL = 60 * 60 * 1000;
+const HISTORICAL_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
 const GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search";
@@ -90,6 +93,14 @@ function normalizeWeather(raw, location, retrieval, sourceUrl) {
   };
 }
 
+function weatherCacheTtl(fixture, target, now, useCurrentConditions) {
+  if (useCurrentConditions || fixture.status === "live") return LIVE_CACHE_TTL;
+  if (fixture.status === "finished" || target.getTime() < now.getTime()) return HISTORICAL_CACHE_TTL;
+  return target.getTime() - now.getTime() <= 24 * 60 * 60 * 1000
+    ? NEAR_FORECAST_CACHE_TTL
+    : FORECAST_CACHE_TTL;
+}
+
 export async function getWeatherContextData(matchData, {
   accessMode = "open_meteo", fetchImpl = globalThis.fetch, now = new Date(), forceRefresh = false
 } = {}) {
@@ -107,7 +118,10 @@ export async function getWeatherContextData(matchData, {
   if (fixture.status === "scheduled" && target.getTime() - now.getTime() > 16 * 24 * 60 * 60 * 1000) {
     return createSourceResult({ source: "weather", status: SOURCE_STATUS.NOT_AVAILABLE, notes: ["Clima no disponible: el partido está fuera del alcance de pronóstico de Open-Meteo."], data: null });
   }
-  const cacheKey = `${fixture.id}:${fixture.status}:${target.toISOString()}:${fixture.city}:${fixture.stadium}`;
+  const cacheKey = [
+    fixture.id, fixture.status, target.toISOString(), fixture.city, fixture.country, fixture.stadium,
+    fixture.latitude, fixture.longitude
+  ].join(":");
   const cached = cache.get(cacheKey);
   if (!forceRefresh && cached?.expiresAt > Date.now()) return cached.value;
 
@@ -121,13 +135,23 @@ export async function getWeatherContextData(matchData, {
     let raw;
     let retrieval;
     let sourceUrl;
-    if (fixture.status === "live") {
-      const params = new URLSearchParams({ ...baseParams, current: "temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m" });
+    const millisecondsFromKickoff = now.getTime() - target.getTime();
+    const useCurrentConditions = fixture.status === "live"
+      || (fixture.status === "scheduled" && millisecondsFromKickoff >= 0 && millisecondsFromKickoff <= 3 * 60 * 60 * 1000);
+    if (useCurrentConditions) {
+      const params = new URLSearchParams({
+        ...baseParams,
+        current: "temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m",
+        hourly: "precipitation_probability"
+      });
       sourceUrl = `${FORECAST_URL}?${params}`;
       const payload = await requestJson(sourceUrl, fetchImpl);
+      const currentValue = payload.current?.time || "";
+      const currentTime = currentValue ? new Date(currentValue.endsWith("Z") ? currentValue : `${currentValue}Z`) : now;
+      const hourly = nearestHourly(payload.hourly, currentTime);
       raw = {
         time: payload.current?.time || now.toISOString(), temperature: payload.current?.temperature_2m ?? null,
-        humidity: payload.current?.relative_humidity_2m ?? null, rainProbability: null,
+        humidity: payload.current?.relative_humidity_2m ?? null, rainProbability: hourly?.rainProbability ?? null,
         precipitation: payload.current?.precipitation ?? null, windSpeed: payload.current?.wind_speed_10m ?? null,
         weatherCode: payload.current?.weather_code ?? null
       };
@@ -150,7 +174,7 @@ export async function getWeatherContextData(matchData, {
       source: "weather", status: SOURCE_STATUS.PARTIAL, updatedAt: new Date().toISOString(),
       notes: ["Clima obtenido de Open-Meteo sin API key.", data.pitchNotes], data
     });
-    cache.set(cacheKey, { value, expiresAt: Date.now() + CACHE_TTL });
+    cache.set(cacheKey, { value, expiresAt: Date.now() + weatherCacheTtl(fixture, target, now, useCurrentConditions) });
     return value;
   } catch {
     return createSourceResult({ source: "weather", status: SOURCE_STATUS.FAILED, updatedAt: new Date().toISOString(), notes: ["Open-Meteo no respondió; no se inventaron datos meteorológicos."], data: null });

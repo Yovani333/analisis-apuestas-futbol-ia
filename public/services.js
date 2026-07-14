@@ -182,6 +182,13 @@ export const footballDataService = {
     return payload.researchData || null;
   },
 
+  async getWeatherData(fixtureId, refresh = true) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return null;
+    const query = refresh ? "?refresh=true" : "?refresh=false";
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/weather${query}`);
+  },
+
   async getTeamPerformance(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") {
@@ -247,6 +254,7 @@ export const backendApi = {
   fixtures: (query) => fetch(`/api/fixtures?${new URLSearchParams(query)}`),
   fixture: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}`),
   research: (fixtureId, refresh = false) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/research${refresh ? "?refresh=true" : ""}`),
+  weather: (fixtureId, refresh = true) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/weather?refresh=${refresh}`),
   fixtureResult: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`),
   standings: (query) => fetch(`/api/standings?${new URLSearchParams(query)}`),
   statistics: (fixtureId) => fetch(`/api/fixtures/${encodeURIComponent(fixtureId)}/statistics`),

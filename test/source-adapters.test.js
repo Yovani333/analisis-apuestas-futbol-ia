@@ -278,14 +278,61 @@ test("Open-Meteo normaliza un pronóstico horario programado", async () => {
 });
 
 test("Open-Meteo usa clima actual para un partido en vivo", async () => {
-  const fetchImpl = async () => ({ ok: true, json: async () => ({ current: { time: "2026-06-25T20:00", temperature_2m: 24, relative_humidity_2m: 60, precipitation: 0.4, weather_code: 61, wind_speed_10m: 11 } }) });
+  const fetchImpl = async () => ({ ok: true, json: async () => ({
+    current: { time: "2026-06-25T20:00", temperature_2m: 24, relative_humidity_2m: 60, precipitation: 0.4, weather_code: 61, wind_speed_10m: 11 },
+    hourly: { time: ["2026-06-25T20:00"], precipitation_probability: [65] }
+  }) });
   const result = await getWeatherContextData({
     fixture: { id: 43, status: "live", utcDateTime: "2026-06-25T20:00:00Z", city: "Los Angeles", latitude: 34.05, longitude: -118.24 }
   }, { fetchImpl, forceRefresh: true });
   assert.equal(result.status, SOURCE_STATUS.PARTIAL);
   assert.equal(result.data.temperature, 24);
+  assert.equal(result.data.rainProbability, 65);
   assert.equal(result.data.retrieval, "open_meteo_current");
   assert.match(result.data.pitchNotes, /húmeda/i);
+});
+
+test("Open-Meteo permite reemplazar un pronostico cacheado cuando cambia el clima", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    const temperature = calls === 1 ? 19 : 23;
+    return { ok: true, json: async () => ({ hourly: {
+      time: ["2026-07-20T20:00"], temperature_2m: [temperature], relative_humidity_2m: [58],
+      precipitation_probability: [calls === 1 ? 15 : 70], precipitation: [calls === 1 ? 0 : 2.2],
+      weather_code: [calls === 1 ? 2 : 61], wind_speed_10m: [12]
+    } }) };
+  };
+  const matchData = { fixture: {
+    id: 4501, status: "scheduled", utcDateTime: "2026-07-20T20:00:00Z",
+    city: "Los Angeles", country: "USA", latitude: 34.05, longitude: -118.24
+  } };
+  const now = new Date("2026-07-20T12:00:00Z");
+  const first = await getWeatherContextData(matchData, { fetchImpl, now, forceRefresh: true });
+  const cached = await getWeatherContextData(matchData, { fetchImpl, now });
+  const refreshed = await getWeatherContextData(matchData, { fetchImpl, now, forceRefresh: true });
+  assert.equal(first.data.temperature, 19);
+  assert.equal(cached.data.temperature, 19);
+  assert.equal(refreshed.data.temperature, 23);
+  assert.equal(refreshed.data.rainProbability, 70);
+  assert.match(refreshed.data.pitchNotes, /mojada/i);
+  assert.equal(calls, 2);
+});
+
+test("Open-Meteo usa condiciones actuales si el fixture programado ya comenzo", async () => {
+  const fetchImpl = async (url) => {
+    assert.match(url, /current=/);
+    return { ok: true, json: async () => ({
+      current: { time: "2026-07-20T20:30", temperature_2m: 25, relative_humidity_2m: 50, precipitation: 0, weather_code: 0, wind_speed_10m: 8 },
+      hourly: { time: ["2026-07-20T20:00"], precipitation_probability: [5] }
+    }) };
+  };
+  const result = await getWeatherContextData({ fixture: {
+    id: 4502, status: "scheduled", utcDateTime: "2026-07-20T20:00:00Z",
+    city: "Los Angeles", latitude: 34.05, longitude: -118.24
+  } }, { fetchImpl, now: new Date("2026-07-20T20:30:00Z"), forceRefresh: true });
+  assert.equal(result.data.retrieval, "open_meteo_current");
+  assert.equal(result.data.temperature, 25);
 });
 
 test("Open-Meteo usa archivo histórico sin inventar probabilidad de lluvia", async () => {

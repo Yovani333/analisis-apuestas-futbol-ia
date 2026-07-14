@@ -6,7 +6,7 @@ import { ALLOWED_LEAGUES } from "../config/leagues.js";
 import { AppError } from "../errors.js";
 import { parseFixtureId, parseFixtureQuery } from "../middleware/validate.js";
 import {
-  getFixtureDataset, getFixtureEvents, getFixtureLineups, getFixturePlayers, getFixtureResult, getFixtureStatistics, getPlayerGoalFixtureDataset, getPreviousFixturesForTeam, resolveLeague, searchFixtures
+  getFixtureDataset, getFixtureEvents, getFixtureLineups, getFixturePlayers, getFixtureResult, getFixtureStatistics, getPlayerGoalFixtureDataset, getPreviousFixturesForTeam, refreshFixtureWeather, resolveLeague, searchFixtures
 } from "../services/api-football.service.js";
 import { generateAnalysis } from "../services/openai.service.js";
 import { generateRuleBasedAnalysis } from "../services/rule-analysis.service.js";
@@ -127,6 +127,12 @@ apiRouter.get("/fixtures/:fixtureId/research", requireLiveMode, researchLimiter,
     cacheInfo: dataset.cacheInfo || null,
     researchData: dataset.researchData
   });
+}));
+
+const weatherLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });
+apiRouter.get("/fixtures/:fixtureId/weather", requireLiveMode, weatherLimiter, asyncRoute(async (req, res) => {
+  const forceRefresh = !["0", "false"].includes(String(req.query.refresh || "true").toLowerCase());
+  res.json(await refreshFixtureWeather(parseFixtureId(req.params.fixtureId), { forceRefresh }));
 }));
 
 apiRouter.get("/fixtures/:fixtureId/result", requireLiveMode, asyncRoute(async (req, res) => {

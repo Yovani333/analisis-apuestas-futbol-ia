@@ -23,6 +23,7 @@ import { calculatePoissonModel } from "./poisson-model.service.js";
 import { calculateTeamGoalProbability } from "./team-goal-probability.service.js";
 import { resolveModuleQuality } from "./module-quality.service.js";
 import { buildCompetitionContext } from "./competition-context.service.js";
+import { getWeatherContextData } from "./sources/weather.service.js";
 
 const leagueCache = new Map();
 const leagueCacheExpiry = new Map();
@@ -664,6 +665,43 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
   })().finally(() => pendingDatasetRequests.delete(key));
   pendingDatasetRequests.set(key, request);
   return request;
+}
+
+export async function refreshFixtureWeather(fixtureId, { forceRefresh = true } = {}) {
+  const key = String(fixtureId);
+  const cachedEntry = datasetCache.get(key) || datasetCache.get(Number(fixtureId));
+  const dataset = cachedEntry?.value || await getFixtureDataset(key);
+  const weather = await getWeatherContextData(dataset, {
+    accessMode: env.weatherAccessMode,
+    forceRefresh
+  });
+  dataset.externalSources = { ...(dataset.externalSources || {}), weather };
+
+  const normalized = normalizeMatchResearchData(dataset);
+  const weatherCoverage = normalized.sourceCoverage.find((row) => row.moduleKey === "weatherPitch") || null;
+  const previousCoverage = dataset.researchData?.sourceCoverage || [];
+  const researchData = {
+    ...(dataset.researchData || normalized),
+    weatherPitch: normalized.weatherPitch,
+    sources: { ...(dataset.researchData?.sources || normalized.sources), weather: normalized.sources.weather },
+    sourceCoverage: [
+      ...previousCoverage.filter((row) => row.moduleKey !== "weatherPitch"),
+      ...(weatherCoverage ? [weatherCoverage] : [])
+    ],
+    lastUpdated: weather.updatedAt || new Date().toISOString()
+  };
+  dataset.researchData = researchData;
+  dataset.fixture.dataAvailability.weather = weather.data ? "Necesita revisiÃ³n" : "No disponible";
+
+  if (cachedEntry) cachedEntry.value = dataset;
+  return {
+    source: "open-meteo",
+    fixtureId: dataset.fixture.id,
+    weatherPitch: researchData.weatherPitch,
+    weatherSource: weather,
+    researchData,
+    updatedAt: weather.updatedAt || new Date().toISOString()
+  };
 }
 
 export async function getFixtureResult(fixtureId) {

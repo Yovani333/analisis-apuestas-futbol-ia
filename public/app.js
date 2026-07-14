@@ -17,7 +17,9 @@ const PREFERENCES_KEY = "football-ai.preferences.v1";
 const ANALYSIS_USAGE_KEY = "football-ai.analysis-usage.v1";
 const TEAM_PERFORMANCE_VISIBILITY_KEY = "football-ai.team-performance-visible.v1";
 const PICK_COLLECTION_CACHE_KEY = "football-ai.pick-collection-cache.v1";
+const WEATHER_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 let cloudSyncTimer = null;
+let weatherRefreshTimer = null;
 const readLocalJson = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 };
@@ -63,6 +65,7 @@ const state = {
   teamPerformanceLoadingFixtures: new Set(),
   playerGoalLoadingFixtures: new Set(),
   isRefreshingResearch: false,
+  isRefreshingWeather: false,
   isRefreshingStatuses: false,
   isRefreshingLive: false,
   isCapturingEvidence: false,
@@ -2119,6 +2122,7 @@ function switchView(view) {
     renderPickCollection(state.pickCollectionByFixture.get(selectedFixture()?.id));
   }
   if (["transparency", "guide", "markets"].includes(view)) void refreshCurrentViewData(view);
+  syncWeatherRefreshTimer();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -3249,6 +3253,7 @@ async function selectFixture(fixtureId, analysisMode = null) {
     renderMatches();
     renderFixtureData();
     void loadSpecificMarkets();
+    syncWeatherRefreshTimer();
     if (!analysisMode) showFixtureReadyDialog();
   } catch (error) {
     elements.filterError.hidden = false;
@@ -3385,6 +3390,54 @@ async function refreshResearchData() {
     elements.refreshCoverage.disabled = !selectedFixture();
     elements.refreshResearch.textContent = "Actualizar datos";
     elements.refreshCoverage.textContent = "Actualizar";
+  }
+}
+
+function weatherCanChange(fixture = selectedFixture(), now = Date.now()) {
+  if (!fixture || fixture.status === "finished") return false;
+  const kickoff = Date.parse(fixture.utcDateTime || `${fixture.date || ""}T${fixture.time || "00:00"}`);
+  if (!Number.isFinite(kickoff)) return fixture.status === "live";
+  return fixture.status === "live" || (kickoff - now <= 16 * 24 * 60 * 60 * 1000 && now - kickoff <= 3 * 60 * 60 * 1000);
+}
+
+function syncWeatherRefreshTimer() {
+  if (weatherRefreshTimer) clearInterval(weatherRefreshTimer);
+  weatherRefreshTimer = null;
+  if (state.currentView !== "transparency" || !weatherCanChange()) return;
+  weatherRefreshTimer = setInterval(() => {
+    if (document.visibilityState === "visible") void refreshWeatherData({ silent: true });
+  }, WEATHER_REFRESH_INTERVAL_MS);
+}
+
+async function refreshWeatherData({ silent = false } = {}) {
+  const fixture = selectedFixture();
+  if (!fixture || state.isRefreshingWeather || !weatherCanChange(fixture)) return;
+  state.isRefreshingWeather = true;
+  try {
+    const payload = await footballDataService.getWeatherData(fixture.id, true);
+    if (!payload?.researchData || String(state.selectedFixtureId) !== String(fixture.id)) return;
+    const fixtureIndex = state.fixtures.findIndex((item) => String(item.id) === String(fixture.id));
+    if (fixtureIndex < 0) return;
+    const updatedFixture = {
+      ...state.fixtures[fixtureIndex],
+      researchData: payload.researchData,
+      dataAvailability: {
+        ...(state.fixtures[fixtureIndex].dataAvailability || {}),
+        weather: payload.weatherPitch?.status === "partial" ? "Necesita revisiÃ³n" : "No disponible"
+      }
+    };
+    state.fixtures[fixtureIndex] = updatedFixture;
+    renderResearchData(updatedFixture.researchData);
+    renderCoverageTable(updatedFixture);
+    renderGuideCoverageSummary(updatedFixture);
+    if (elements.dataDialog.open && elements.dataDialogTitle.textContent === "Clima / cancha") {
+      elements.dataDialogContent.innerHTML = `${fixtureProgressBanner(updatedFixture)}${renderResearchModuleDetail("weatherPitch", updatedFixture.researchData)}`;
+    }
+    if (!silent) showNotice("Clima del estadio actualizado desde Open-Meteo.");
+  } catch (error) {
+    if (!silent) showNotice(error.message || "No fue posible actualizar el clima del estadio.");
+  } finally {
+    state.isRefreshingWeather = false;
   }
 }
 
@@ -3850,6 +3903,12 @@ document.querySelectorAll("[data-nav-label]").forEach((button) => {
 });
 
 initializeInfoTooltips();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && state.currentView === "transparency" && weatherCanChange()) {
+    void refreshWeatherData({ silent: true });
+  }
+});
 
 async function initializeApp() {
   renderLeagueOptions();
