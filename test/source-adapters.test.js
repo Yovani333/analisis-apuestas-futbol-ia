@@ -260,6 +260,48 @@ test("Open-Meteo explica cuando falta ubicación del estadio", async () => {
   assert.equal(calls, 0);
 });
 
+test("Open-Meteo rechaza Mundial como ubicación geográfica", async () => {
+  let calls = 0;
+  const result = await getWeatherContextData({ fixture: {
+    id: 4101, status: "scheduled", utcDateTime: "2026-07-14T19:00:00Z",
+    stadium: "No disponible", city: "", country: "Mundial"
+  } }, { fetchImpl: async () => { calls += 1; }, now: new Date("2026-07-13T12:00:00Z"), forceRefresh: true });
+  assert.equal(result.status, SOURCE_STATUS.NOT_AVAILABLE);
+  assert.match(result.notes[0], /falta ubicación del estadio/i);
+  assert.equal(calls, 0);
+});
+
+test("Open-Meteo distingue un estadio geocodificado", async () => {
+  const requested = [];
+  const fetchImpl = async (url) => {
+    requested.push(url);
+    if (url.includes("nominatim.openstreetmap.org")) {
+      return { ok: true, json: async () => [{
+        name: "MetLife Stadium", display_name: "MetLife Stadium, East Rutherford, New Jersey, United States",
+        lat: "40.8135", lon: "-74.0745", type: "stadium", category: "leisure"
+      }] };
+    }
+    return { ok: true, json: async () => ({ hourly: {
+      time: ["2026-07-14T19:00"], temperature_2m: [27], relative_humidity_2m: [61],
+      precipitation_probability: [20], precipitation: [0], weather_code: [1], wind_speed_10m: [13]
+    } }) };
+  };
+  const result = await getWeatherContextData({ fixture: {
+    id: 4102, status: "scheduled", utcDateTime: "2026-07-14T19:00:00Z",
+    stadium: "MetLife Stadium", city: "East Rutherford", country: "USA"
+  } }, { fetchImpl, now: new Date("2026-07-13T12:00:00Z"), forceRefresh: true });
+  assert.equal(result.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.data.locationPrecision, "stadium_coordinates");
+  assert.equal(result.data.locationVerified, true);
+  assert.equal(result.data.locationAttribution, "© OpenStreetMap contributors");
+  assert.match(new URL(requested[0]).searchParams.get("q"), /MetLife Stadium/);
+  await getWeatherContextData({ fixture: {
+    id: 4102, status: "scheduled", utcDateTime: "2026-07-14T19:00:00Z",
+    stadium: "MetLife Stadium", city: "East Rutherford", country: "USA"
+  } }, { fetchImpl, now: new Date("2026-07-13T12:05:00Z"), forceRefresh: true });
+  assert.equal(requested.filter((url) => url.includes("nominatim.openstreetmap.org")).length, 1);
+});
+
 test("Open-Meteo normaliza un pronóstico horario programado", async () => {
   let requestedUrl = "";
   const fetchImpl = async (url) => {

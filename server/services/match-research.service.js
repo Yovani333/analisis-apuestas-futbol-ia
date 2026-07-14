@@ -443,6 +443,9 @@ export function getWeatherPitchData(dataset) {
       humidity: weather.data.humidity,
       condition: weather.data.condition || "",
       matchedLocation: weather.data.matchedLocation || "",
+      locationPrecision: weather.data.locationPrecision || "unknown",
+      locationVerified: weather.data.locationVerified === true,
+      locationAttribution: weather.data.locationAttribution || "",
       forecastTime: weather.data.forecastTime || "",
       sourceUrl: weather.data.sourceUrl || "",
       pitchNotes: weather.data.pitchNotes || "Sin reporte reciente de estado de cancha."
@@ -452,7 +455,8 @@ export function getWeatherPitchData(dataset) {
     ...moduleBase(DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, "",
       weather?.notes?.[0] || "Clima no disponible: falta ubicación del estadio."),
     temperature: null, rainProbability: null, windSpeed: null, humidity: null,
-    condition: "", pitchNotes: weather?.notes?.[0] || "Clima no disponible: falta ubicación del estadio."
+    condition: "", matchedLocation: "", locationPrecision: "unknown", locationVerified: false, locationAttribution: "",
+    pitchNotes: weather?.notes?.[0] || "Clima no disponible: falta ubicación del estadio."
   };
 }
 

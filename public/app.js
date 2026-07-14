@@ -1286,7 +1286,10 @@ function renderResearchModuleDetail(moduleKey, research) {
       : "";
     content = `${metadata}${teams}${diagnostics}${rawStats}${fixtures}`;
   } else if (moduleKey === "weatherPitch") {
-    content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación verificada", module.matchedLocation], ["Cancha estimada", module.pitchNotes]])}`;
+    const precision = module.locationPrecision === "stadium_coordinates" ? "Coordenadas del estadio"
+      : module.locationPrecision === "stadium_geocoding" ? "Estadio geocodificado"
+        : module.locationPrecision === "city_geocoding" ? "Zona de la ciudad (aproximada)" : "No verificada";
+    content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación", module.matchedLocation], ["Precisión geográfica", precision], ["Atribución de ubicación", module.locationAttribution], ["Cancha estimada", module.pitchNotes]])}`;
   }
   return `${researchMeta(moduleKey, module)}${content || emptyDetail("No hay detalle adicional disponible.")}`;
 }

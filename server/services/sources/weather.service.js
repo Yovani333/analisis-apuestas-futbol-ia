@@ -8,8 +8,11 @@ const HISTORICAL_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
 const GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search";
+const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const HOURLY_FIELDS = "temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m";
 const cache = new Map();
+const locationCache = new Map();
+const LOCATION_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
 
 function weatherCondition(code) {
   code = code === null || code === undefined || code === "" ? Number.NaN : Number(code);
@@ -36,7 +39,7 @@ function estimatedPitch({ precipitation, rainProbability }) {
 }
 
 async function requestJson(url, fetchImpl) {
-  const response = await fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": "football-analysis-dashboard/1.0" } });
+  const response = await fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": "football-analysis-dashboard/1.0", Referer: "https://analisis-apuestas-futbol-ia.onrender.com/" } });
   if (!response.ok) throw new Error(`Open-Meteo HTTP ${response.status}`);
   const payload = await response.json();
   if (payload?.error) throw new Error(payload.reason || "Open-Meteo error");
@@ -49,19 +52,89 @@ function finiteCoordinate(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function locationText(value, { allowCompetitionRegion = false } = {}) {
+  const text = String(value || "").trim();
+  if (!text || /^(no disponible|por confirmar|desconocid[oa]|n\/a|null)$/i.test(text)) return "";
+  if (!allowCompetitionRegion && /^(world|mundial|fifa|uefa|conmebol|international)$/i.test(text)) return "";
+  return text;
+}
+
+function normalizedLocation(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function geocodingMatches(result, expected) {
+  const needle = normalizedLocation(expected);
+  if (!needle) return false;
+  const haystack = normalizedLocation([result.name, result.admin1, result.admin2, result.admin3, result.country].filter(Boolean).join(" "));
+  const resultName = normalizedLocation(result.name);
+  return haystack.includes(needle) || (resultName && needle.includes(resultName));
+}
+
+async function geocodeLocation(query, expected, fetchImpl) {
+  const params = new URLSearchParams({ name: query, count: "5", language: "es", format: "json" });
+  const payload = await requestJson(`${GEOCODING_URL}?${params}`, fetchImpl);
+  return (payload.results || []).find((result) =>
+    Number.isFinite(result.latitude) && Number.isFinite(result.longitude) && geocodingMatches(result, expected)
+  ) || null;
+}
+
+async function geocodeStadium(stadium, city, country, fetchImpl) {
+  const query = [stadium, city, country].filter(Boolean).join(", ");
+  const params = new URLSearchParams({ q: query, format: "jsonv2", addressdetails: "1", limit: "5" });
+  const rows = await requestJson(`${NOMINATIM_URL}?${params}`, fetchImpl);
+  const expectedName = normalizedLocation(stadium);
+  const result = (Array.isArray(rows) ? rows : []).find((row) => {
+    const latitude = Number(row.lat);
+    const longitude = Number(row.lon);
+    const name = normalizedLocation([row.name, row.display_name].filter(Boolean).join(" "));
+    const stadiumType = /stadium|sports_centre|arena/.test(normalizedLocation([row.type, row.category, row.class].join(" ")));
+    return Number.isFinite(latitude) && Number.isFinite(longitude) && stadiumType && name.includes(expectedName);
+  });
+  if (!result) return null;
+  return {
+    latitude: Number(result.lat), longitude: Number(result.lon),
+    name: result.display_name || stadium,
+    source: "openstreetmap-nominatim", precision: "stadium_coordinates", verified: true,
+    attribution: "© OpenStreetMap contributors"
+  };
+}
+
 async function resolveCoordinates(fixture, fetchImpl) {
   const latitude = finiteCoordinate(fixture.latitude ?? fixture.coordinates?.latitude);
   const longitude = finiteCoordinate(fixture.longitude ?? fixture.coordinates?.longitude);
   if (latitude !== null && longitude !== null) {
-    return { latitude, longitude, name: [fixture.stadium, fixture.city, fixture.country].filter(Boolean).join(", "), source: "api-football" };
+    return {
+      latitude, longitude,
+      name: [locationText(fixture.stadium, { allowCompetitionRegion: true }), locationText(fixture.city, { allowCompetitionRegion: true }), locationText(fixture.country)].filter(Boolean).join(", "),
+      source: "api-football", precision: "stadium_coordinates", verified: true
+    };
   }
-  const search = [fixture.city, fixture.country].filter(Boolean).join(", ") || fixture.stadium || "";
-  if (!search) return null;
-  const params = new URLSearchParams({ name: search, count: "1", language: "es", format: "json" });
-  const payload = await requestJson(`${GEOCODING_URL}?${params}`, fetchImpl);
-  const result = payload.results?.[0];
-  if (!result || !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) return null;
-  return { latitude: result.latitude, longitude: result.longitude, name: [result.name, result.admin1, result.country].filter(Boolean).join(", "), source: "open-meteo-geocoding" };
+  const stadium = locationText(fixture.stadium, { allowCompetitionRegion: true });
+  const city = locationText(fixture.city, { allowCompetitionRegion: true });
+  const country = locationText(fixture.country);
+  if (!stadium && !city) return null;
+  const locationKey = normalizedLocation([stadium, city, country].join("|"));
+  const cachedLocation = locationCache.get(locationKey);
+  if (cachedLocation?.expiresAt > Date.now()) return cachedLocation.value;
+
+  if (stadium) {
+    const stadiumResult = await geocodeStadium(stadium, city, country, fetchImpl);
+    if (stadiumResult) {
+      locationCache.set(locationKey, { value: stadiumResult, expiresAt: Date.now() + LOCATION_CACHE_TTL });
+      return stadiumResult;
+    }
+  }
+  if (!city) return null;
+  const cityResult = await geocodeLocation(city, city, fetchImpl);
+  if (!cityResult) return null;
+  const location = {
+    latitude: cityResult.latitude, longitude: cityResult.longitude,
+    name: [cityResult.name, cityResult.admin1, cityResult.country].filter(Boolean).join(", "),
+    source: "open-meteo-geocoding", precision: "city_geocoding", verified: true
+  };
+  locationCache.set(locationKey, { value: location, expiresAt: Date.now() + LOCATION_CACHE_TTL });
+  return location;
 }
 
 function nearestHourly(hourly, target) {
@@ -89,7 +162,9 @@ function normalizeWeather(raw, location, retrieval, sourceUrl) {
     precipitation: raw.precipitation ?? null, condition, matchedLocation: location.name,
     latitude: location.latitude, longitude: location.longitude, forecastTime: raw.time || "",
     sourceUrl, observedAt: new Date().toISOString(), pitchNotes: estimatedPitch(raw),
-    retrieval, locationSource: location.source
+    retrieval, locationSource: location.source,
+    locationPrecision: location.precision || "unknown", locationVerified: location.verified === true,
+    locationAttribution: location.attribution || ""
   };
 }
 
@@ -108,7 +183,11 @@ export async function getWeatherContextData(matchData, {
     return createSourceResult({ source: "weather", status: SOURCE_STATUS.NOT_CONFIGURED, notes: ["Open-Meteo está desactivado."], data: null });
   }
   const fixture = matchData?.fixture || {};
-  if (!fixture.city && !fixture.stadium && finiteCoordinate(fixture.latitude) === null) {
+  const hasCoordinates = finiteCoordinate(fixture.latitude ?? fixture.coordinates?.latitude) !== null
+    && finiteCoordinate(fixture.longitude ?? fixture.coordinates?.longitude) !== null;
+  const hasNamedLocation = locationText(fixture.city, { allowCompetitionRegion: true })
+    || locationText(fixture.stadium, { allowCompetitionRegion: true });
+  if (!hasCoordinates && !hasNamedLocation) {
     return createSourceResult({ source: "weather", status: SOURCE_STATUS.NOT_AVAILABLE, notes: ["Clima no disponible: falta ubicación del estadio."], data: null });
   }
   const target = fixture.utcDateTime ? new Date(fixture.utcDateTime) : null;
@@ -170,9 +249,12 @@ export async function getWeatherContextData(matchData, {
       return createSourceResult({ source: "weather", status: SOURCE_STATUS.NOT_AVAILABLE, updatedAt: new Date().toISOString(), notes: ["Open-Meteo no devolvió datos para la hora del partido."], data: null });
     }
     const data = normalizeWeather(raw, location, retrieval, sourceUrl);
+    const locationNote = data.locationPrecision === "city_geocoding"
+      ? "Ubicación meteorológica aproximada al centro de la ciudad; no son coordenadas exactas del estadio."
+      : "Ubicación del estadio verificada mediante coordenadas o geocodificación puntual.";
     const value = createSourceResult({
       source: "weather", status: SOURCE_STATUS.PARTIAL, updatedAt: new Date().toISOString(),
-      notes: ["Clima obtenido de Open-Meteo sin API key.", data.pitchNotes], data
+      notes: ["Clima obtenido de Open-Meteo sin API key.", locationNote, data.pitchNotes], data
     });
     cache.set(cacheKey, { value, expiresAt: Date.now() + weatherCacheTtl(fixture, target, now, useCurrentConditions) });
     return value;
