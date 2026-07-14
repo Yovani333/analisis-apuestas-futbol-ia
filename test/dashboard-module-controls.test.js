@@ -14,6 +14,19 @@ test("Actualizar datos conserva controladores separados para Selector 1X2 y Corn
   assert.match(app, /refreshCorners\.addEventListener\("click", \(\) => loadCorners\(true\)\)/);
 });
 
+test("seleccionar un encuentro difiere los modulos historicos pesados hasta mostrarlos", () => {
+  const selectFixtureBody = app.match(/async function selectFixture[\s\S]+?async function analyzeSelectedFixture/)[0];
+  assert.doesNotMatch(selectFixtureBody, /loadTeamPerformance\(detailedFixture/);
+  assert.doesNotMatch(selectFixtureBody, /loadPlayerGoalCandidates\(detailedFixture/);
+  assert.match(app, /!state\.teamPerformanceByFixture\.has\(fixture\.id\)[\s\S]+?loadTeamPerformance\(fixture, false, true\)/);
+  assert.match(app, /!state\.playerGoalByFixture\.has\(fixture\.id\)[\s\S]+?loadPlayerGoalCandidates\(fixture, false, true\)/);
+});
+
+test("mostrar mercados especificos no se interpreta como actualizacion forzada", () => {
+  assert.match(app, /showSpecificMarkets\.addEventListener\("click", \(\) => loadSpecificMarkets\(false\)\)/);
+  assert.doesNotMatch(app, /showSpecificMarkets\.addEventListener\("click", loadSpecificMarkets\)/);
+});
+
 test("Selector 1X2 ofrece un boton para agregar cada escenario al cupon", () => {
   assert.match(app, /data-add-outcome=/);
   assert.match(app, /outcomeScenarioLeg/);

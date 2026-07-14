@@ -3,7 +3,9 @@ const state = {
   cacheHits: 0,
   cacheMisses: 0,
   pendingHits: 0,
+  negativeCacheHits: 0,
   failures: 0,
+  endpoints: Object.create(null),
   lastRequestAt: "",
   lastEndpoint: "",
   lastErrorCode: "",
@@ -14,6 +16,12 @@ const state = {
     minuteRemaining: null
   }
 };
+
+function endpointMetrics(endpoint = "") {
+  const key = endpoint || "unknown";
+  state.endpoints[key] ||= { networkRequests: 0, cacheHits: 0, cacheMisses: 0, pendingHits: 0, negativeCacheHits: 0, failures: 0 };
+  return state.endpoints[key];
+}
 
 function headerNumber(headers, name) {
   const value = headers?.get?.(name);
@@ -34,20 +42,29 @@ function updateRateLimit(headers) {
   }
 }
 
-export function recordApiFootballCacheHit() {
+export function recordApiFootballCacheHit({ endpoint } = {}) {
   state.cacheHits += 1;
+  endpointMetrics(endpoint).cacheHits += 1;
 }
 
-export function recordApiFootballCacheMiss() {
+export function recordApiFootballCacheMiss({ endpoint } = {}) {
   state.cacheMisses += 1;
+  endpointMetrics(endpoint).cacheMisses += 1;
 }
 
-export function recordApiFootballPendingHit() {
+export function recordApiFootballPendingHit({ endpoint } = {}) {
   state.pendingHits += 1;
+  endpointMetrics(endpoint).pendingHits += 1;
+}
+
+export function recordApiFootballNegativeCacheHit({ endpoint } = {}) {
+  state.negativeCacheHits += 1;
+  endpointMetrics(endpoint).negativeCacheHits += 1;
 }
 
 export function recordApiFootballResponse({ endpoint, headers }) {
   state.networkRequests += 1;
+  endpointMetrics(endpoint).networkRequests += 1;
   state.lastRequestAt = new Date().toISOString();
   state.lastEndpoint = endpoint || "";
   state.lastErrorCode = "";
@@ -56,6 +73,7 @@ export function recordApiFootballResponse({ endpoint, headers }) {
 
 export function recordApiFootballFailure({ endpoint, code, headers }) {
   state.failures += 1;
+  endpointMetrics(endpoint).failures += 1;
   state.lastRequestAt = new Date().toISOString();
   state.lastEndpoint = endpoint || "";
   state.lastErrorCode = code || "API_FOOTBALL_REQUEST_FAILED";
@@ -69,11 +87,13 @@ export function getApiFootballObservability() {
     cacheHits: state.cacheHits,
     cacheMisses: state.cacheMisses,
     pendingHits: state.pendingHits,
+    negativeCacheHits: state.negativeCacheHits,
     cacheHitRatePct: totalCacheLookups ? Number(((state.cacheHits / totalCacheLookups) * 100).toFixed(1)) : 0,
     failures: state.failures,
     lastRequestAt: state.lastRequestAt,
     lastEndpoint: state.lastEndpoint,
     lastErrorCode: state.lastErrorCode,
+    endpoints: Object.fromEntries(Object.entries(state.endpoints).map(([endpoint, metrics]) => [endpoint, { ...metrics }])),
     rateLimit: { ...state.rateLimit }
   };
 }
@@ -83,10 +103,12 @@ export function resetApiFootballObservability() {
   state.cacheHits = 0;
   state.cacheMisses = 0;
   state.pendingHits = 0;
+  state.negativeCacheHits = 0;
   state.failures = 0;
   state.lastRequestAt = "";
   state.lastEndpoint = "";
   state.lastErrorCode = "";
+  state.endpoints = Object.create(null);
   Object.assign(state.rateLimit, {
     dailyLimit: null,
     dailyRemaining: null,

@@ -340,6 +340,8 @@ apiRouter.post("/fixtures/:fixtureId/picks/collection", requireLiveMode, asyncRo
     networkRequests: Math.max(0, after.networkRequests - before.networkRequests),
     cacheHits: Math.max(0, after.cacheHits - before.cacheHits),
     cacheMisses: Math.max(0, after.cacheMisses - before.cacheMisses),
+    pendingHits: Math.max(0, after.pendingHits - before.pendingHits),
+    negativeCacheHits: Math.max(0, after.negativeCacheHits - before.negativeCacheHits),
     failures: Math.max(0, after.failures - before.failures)
   };
   res.json(buildPickAnalysisCollection(dataset, results, apiUsage));

@@ -3249,7 +3249,6 @@ async function selectFixture(fixtureId, analysisMode = null) {
     renderMatches();
     renderFixtureData();
     void loadSpecificMarkets();
-    void loadTeamPerformance(detailedFixture, false, false).then(() => loadPlayerGoalCandidates(detailedFixture, false, false));
     if (!analysisMode) showFixtureReadyDialog();
   } catch (error) {
     elements.filterError.hidden = false;
@@ -3564,7 +3563,7 @@ elements.teamGoalsContent.addEventListener("click", (event) => {
 });
 elements.showCorners.addEventListener("click", () => toggleReadyModule(elements.showCorners, elements.cornersContent));
 elements.cornersContent.addEventListener("click", (event) => { const add = event.target.closest("[data-add-corners]"); const save = event.target.closest("[data-save-corners]"); if (add) addCornerPick(add.dataset.addCorners); if (save) saveCornerPick(save.dataset.saveCorners); });
-elements.showSpecificMarkets.addEventListener("click", loadSpecificMarkets);
+elements.showSpecificMarkets.addEventListener("click", () => loadSpecificMarkets(false));
 elements.specificMarketsContent.addEventListener("click", (event) => {
   const add = event.target.closest("[data-add-specific]");
   const save = event.target.closest("[data-save-specific]");
@@ -3726,8 +3725,24 @@ elements.matchesList.addEventListener("keydown", async (event) => {
 });
 
 elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark", { userInitiated: true }));
-elements.toggleTeamPerformance.addEventListener("click", () => applyTeamPerformanceVisibility(elements.teamPerformanceContent.hidden));
-elements.togglePlayerGoal.addEventListener("click", () => toggleReadyModule(elements.togglePlayerGoal, elements.playerGoalContent));
+elements.toggleTeamPerformance.addEventListener("click", () => {
+  const fixture = selectedFixture();
+  if (!fixture) return;
+  if (!state.teamPerformanceByFixture.has(fixture.id)) {
+    void loadTeamPerformance(fixture, false, true);
+    return;
+  }
+  applyTeamPerformanceVisibility(elements.teamPerformanceContent.hidden);
+});
+elements.togglePlayerGoal.addEventListener("click", () => {
+  const fixture = selectedFixture();
+  if (!fixture) return;
+  if (!state.playerGoalByFixture.has(fixture.id)) {
+    void loadPlayerGoalCandidates(fixture, false, true);
+    return;
+  }
+  toggleReadyModule(elements.togglePlayerGoal, elements.playerGoalContent);
+});
 elements.playerGoalContent.addEventListener("click", (event) => {
   const add = event.target.closest("[data-add-player-goal]");
   const save = event.target.closest("[data-save-player-goal]");

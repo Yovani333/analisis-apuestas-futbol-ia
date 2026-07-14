@@ -5,6 +5,7 @@ import {
   recordApiFootballCacheHit,
   recordApiFootballCacheMiss,
   recordApiFootballFailure,
+  recordApiFootballNegativeCacheHit,
   recordApiFootballPendingHit,
   recordApiFootballResponse,
   resetApiFootballObservability
@@ -18,14 +19,19 @@ function headers(values = {}) {
 test("registra aciertos de caché sin exponer URL ni credenciales", () => {
   resetApiFootballObservability();
   recordApiFootballCacheHit();
-  recordApiFootballCacheHit();
-  recordApiFootballCacheMiss();
-  recordApiFootballPendingHit();
+  recordApiFootballCacheHit({ endpoint: "/fixtures" });
+  recordApiFootballCacheMiss({ endpoint: "/fixtures" });
+  recordApiFootballPendingHit({ endpoint: "/fixtures" });
+  recordApiFootballNegativeCacheHit({ endpoint: "/fixtures/players" });
   const metrics = getApiFootballObservability();
   assert.equal(metrics.cacheHits, 2);
   assert.equal(metrics.cacheMisses, 1);
   assert.equal(metrics.pendingHits, 1);
+  assert.equal(metrics.negativeCacheHits, 1);
   assert.equal(metrics.cacheHitRatePct, 66.7);
+  assert.equal(metrics.endpoints["/fixtures"].cacheHits, 1);
+  assert.equal(metrics.endpoints["/fixtures"].pendingHits, 1);
+  assert.equal(metrics.endpoints["/fixtures/players"].negativeCacheHits, 1);
   assert.doesNotMatch(JSON.stringify(metrics), /api[_-]?key|x-apisports-key/i);
 });
 
@@ -43,6 +49,7 @@ test("conserva límites seguros reportados por API-Football", () => {
   const metrics = getApiFootballObservability();
   assert.equal(metrics.networkRequests, 1);
   assert.equal(metrics.lastEndpoint, "/fixtures/statistics");
+  assert.equal(metrics.endpoints["/fixtures/statistics"].networkRequests, 1);
   assert.equal(metrics.rateLimit.dailyRemaining, 7420);
   assert.equal(metrics.rateLimit.minuteRemaining, 288);
 });
@@ -56,6 +63,7 @@ test("registra fallos con código sanitizado", () => {
   });
   const metrics = getApiFootballObservability();
   assert.equal(metrics.failures, 1);
+  assert.equal(metrics.endpoints["/fixtures/events"].failures, 1);
   assert.equal(metrics.lastErrorCode, "API_FOOTBALL_RATE_LIMIT");
   assert.equal(metrics.rateLimit.dailyRemaining, 0);
 });

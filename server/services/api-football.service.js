@@ -13,6 +13,7 @@ import {
   recordApiFootballCacheHit,
   recordApiFootballCacheMiss,
   recordApiFootballFailure,
+  recordApiFootballNegativeCacheHit,
   recordApiFootballPendingHit,
   recordApiFootballResponse
 } from "./api-football-observability.service.js";
@@ -26,14 +27,17 @@ import { buildCompetitionContext } from "./competition-context.service.js";
 const leagueCache = new Map();
 const leagueCacheExpiry = new Map();
 const requestCache = new Map();
+const negativeRequestCache = new Map();
+const pendingApiRequests = new Map();
 const datasetCache = new Map();
 const pendingDatasetRequests = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
+const NEGATIVE_CACHE_TTL = 5 * 60 * 1000;
 const LIVE_CACHE_TTL = 60 * 1000;
 const PREDICTION_CACHE_TTL = 30 * 60 * 1000;
-const HISTORICAL_CACHE_TTL = 24 * 60 * 60 * 1000;
+const HISTORICAL_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 const SCHEDULED_DATASET_CACHE_TTL = 30 * 60 * 1000;
-const FINISHED_DATASET_CACHE_TTL = 12 * 60 * 60 * 1000;
+const FINISHED_DATASET_CACHE_TTL = 24 * 60 * 60 * 1000;
 const LEAGUE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
@@ -41,6 +45,27 @@ function getCached(key) {
   const item = requestCache.get(key);
   if (!item || item.expiresAt < Date.now()) return null;
   return item.value;
+}
+
+function getNegativeCached(key) {
+  const item = negativeRequestCache.get(key);
+  if (!item) return null;
+  if (item.expiresAt < Date.now()) {
+    negativeRequestCache.delete(key);
+    return null;
+  }
+  return item.error;
+}
+
+function cacheRequestError(key, error, ttlMs = NEGATIVE_CACHE_TTL) {
+  negativeRequestCache.set(key, {
+    error: { message: error.message, status: error.status, code: error.code, details: error.details },
+    expiresAt: Date.now() + ttlMs
+  });
+}
+
+function restoreCachedError(error) {
+  return new AppError(error.message, error.status, error.code, error.details);
 }
 
 function cacheMeta({ status, source, ttlMs, expiresAt, reason }) {
@@ -62,11 +87,21 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
   const cacheKey = url.toString();
   const cached = getCached(cacheKey);
   if (cached) {
-    recordApiFootballCacheHit();
+    recordApiFootballCacheHit({ endpoint: url.pathname });
     return cached;
   }
-  recordApiFootballCacheMiss();
+  const negativeCached = getNegativeCached(cacheKey);
+  if (negativeCached) {
+    recordApiFootballNegativeCacheHit({ endpoint: url.pathname });
+    throw restoreCachedError(negativeCached);
+  }
+  if (pendingApiRequests.has(cacheKey)) {
+    recordApiFootballPendingHit({ endpoint: url.pathname });
+    return pendingApiRequests.get(cacheKey);
+  }
+  recordApiFootballCacheMiss({ endpoint: url.pathname });
 
+  const request = (async () => {
   let response;
   try {
     response = await fetch(url, {
@@ -97,7 +132,19 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
   }
   const value = payload.response || [];
   requestCache.set(cacheKey, { value, expiresAt: Date.now() + cacheTtl });
+  negativeRequestCache.delete(cacheKey);
   return value;
+  })().catch((error) => {
+    if (error instanceof AppError) {
+      const ttlMs = error.code === "API_FOOTBALL_RATE_LIMIT" || error.code === "API_FOOTBALL_NETWORK_ERROR"
+        ? 30 * 1000
+        : NEGATIVE_CACHE_TTL;
+      cacheRequestError(cacheKey, error, ttlMs);
+    }
+    throw error;
+  }).finally(() => pendingApiRequests.delete(cacheKey));
+  pendingApiRequests.set(cacheKey, request);
+  return request;
 }
 
 export async function getPreviousFixturesForTeam(teamId, limit = 5) {
@@ -359,11 +406,13 @@ export function invalidateFixtureCache(fixtureId) {
   const relatedTeamIds = new Set([cachedDataset?.fixture?.homeTeamId, cachedDataset?.fixture?.awayTeamId].filter(Boolean).map(String));
   datasetCache.delete(key);
   datasetCache.delete(fixtureId);
-  for (const cacheKey of requestCache.keys()) {
-    const url = new URL(cacheKey);
-    const sameFixture = url.searchParams.get("fixture") === String(fixtureId) || url.searchParams.get("id") === String(fixtureId);
-    const sameTeam = relatedTeamIds.has(url.searchParams.get("team"));
-    if (sameFixture || sameTeam) requestCache.delete(cacheKey);
+  for (const cache of [requestCache, negativeRequestCache]) {
+    for (const cacheKey of cache.keys()) {
+      const url = new URL(cacheKey);
+      const sameFixture = url.searchParams.get("fixture") === String(fixtureId) || url.searchParams.get("id") === String(fixtureId);
+      const sameTeam = relatedTeamIds.has(url.searchParams.get("team"));
+      if (sameFixture || sameTeam) cache.delete(cacheKey);
+    }
   }
 }
 
