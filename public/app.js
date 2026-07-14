@@ -1289,7 +1289,9 @@ function renderResearchModuleDetail(moduleKey, research) {
     const precision = module.locationPrecision === "stadium_coordinates" ? "Coordenadas del estadio"
       : module.locationPrecision === "stadium_geocoding" ? "Estadio geocodificado"
         : module.locationPrecision === "city_geocoding" ? "Zona de la ciudad (aproximada)" : "No verificada";
-    content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación", module.matchedLocation], ["Precisión geográfica", precision], ["Atribución de ubicación", module.locationAttribution], ["Cancha estimada", module.pitchNotes]])}`;
+    const advantage = module.weatherAdvantage || {};
+    const teamWeatherCard = (side, name) => researchTeamStats(name, [["Impacto estimado", advantage.favoredSide === side ? "Posible ventaja climática" : "Sin ventaja identificada"]]);
+    content = `${researchTeamStats("Clima y cancha", [["Temperatura (°C)", module.temperature], ["Probabilidad de lluvia (%)", module.rainProbability], ["Viento (km/h)", module.windSpeed], ["Humedad (%)", module.humidity], ["Condición", module.condition], ["Ubicación", module.matchedLocation], ["Precisión geográfica", precision], ["Atribución de ubicación", module.locationAttribution], ["Cancha estimada", module.pitchNotes]])}<div class="team-stat-grid">${teamWeatherCard("home", research.homeTeam.name)}${teamWeatherCard("away", research.awayTeam.name)}</div><div class="detail-note"><strong>${escapeHtml(advantage.label || "Sin ventaja verificable")}</strong><span>${escapeHtml(advantage.reason || "No hay evidencia suficiente para atribuir una ventaja climática.")}</span></div>`;
   }
   return `${researchMeta(moduleKey, module)}${content || emptyDetail("No hay detalle adicional disponible.")}`;
 }

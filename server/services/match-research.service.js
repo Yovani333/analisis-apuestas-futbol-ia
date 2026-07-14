@@ -2,6 +2,7 @@ import { DATA_STATUS, MODULE_LABELS, MODULE_WEIGHTS } from "../constants/match-r
 import { MODULE_SOURCE_PLAN, SOURCE_DEFINITIONS } from "../constants/source-catalog.js";
 import { calculateMatchConfidenceScore } from "./match-confidence.service.js";
 import { buildTeamPerformancePromptContext } from "./team-performance.service.js";
+import { evaluateWeatherAdvantage } from "./weather-advantage.service.js";
 
 const SOURCE = "api-football";
 const nowIso = () => new Date().toISOString();
@@ -434,6 +435,11 @@ export function getXgXgaData(dataset) {
 export function getWeatherPitchData(dataset) {
   const weather = dataset.externalSources?.weather;
   if (weather?.data) {
+    const weatherAdvantage = evaluateWeatherAdvantage({
+      fixture: dataset.fixture,
+      weather: weather.data,
+      historicalEstimatedXg: dataset.historicalEstimatedXg
+    });
     return {
       ...moduleBase(DATA_STATUS.PARTIAL, weather.updatedAt || dataset.fetchedAt, "weather",
         "Clima obtenido de Open-Meteo; la cancha es una estimación meteorológica, no una inspección oficial."),
@@ -441,6 +447,7 @@ export function getWeatherPitchData(dataset) {
       rainProbability: weather.data.rainProbability,
       windSpeed: weather.data.windSpeed,
       humidity: weather.data.humidity,
+      precipitation: weather.data.precipitation,
       condition: weather.data.condition || "",
       matchedLocation: weather.data.matchedLocation || "",
       locationPrecision: weather.data.locationPrecision || "unknown",
@@ -448,7 +455,8 @@ export function getWeatherPitchData(dataset) {
       locationAttribution: weather.data.locationAttribution || "",
       forecastTime: weather.data.forecastTime || "",
       sourceUrl: weather.data.sourceUrl || "",
-      pitchNotes: weather.data.pitchNotes || "Sin reporte reciente de estado de cancha."
+      pitchNotes: weather.data.pitchNotes || "Sin reporte reciente de estado de cancha.",
+      weatherAdvantage
     };
   }
   return {
@@ -456,6 +464,7 @@ export function getWeatherPitchData(dataset) {
       weather?.notes?.[0] || "Clima no disponible: falta ubicación del estadio."),
     temperature: null, rainProbability: null, windSpeed: null, humidity: null,
     condition: "", matchedLocation: "", locationPrecision: "unknown", locationVerified: false, locationAttribution: "",
+    weatherAdvantage: evaluateWeatherAdvantage({ fixture: dataset.fixture }),
     pitchNotes: weather?.notes?.[0] || "Clima no disponible: falta ubicación del estadio."
   };
 }
