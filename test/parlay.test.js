@@ -16,6 +16,20 @@ test("ordena el rendimiento de picks concluidos por origen", () => {
   assert.equal(rows[1].winRate, 50);
 });
 
+test("resultados por origen incluye selecciones concluidas de parlays activos", () => {
+  const rows = calculateOriginPerformance(
+    [{ sourceModule: "data_picks", result: "won" }, { sourceModule: "data_picks", result: "pending" }],
+    [
+      { id: "active", legs: [{ sourceModule: "data_picks", result: "lost" }, { sourceModule: "poisson", result: "won" }, { sourceModule: "poisson", result: "pending" }] },
+      { id: "trash", trashed: true, legs: [{ sourceModule: "poisson", result: "lost" }] }
+    ]
+  );
+  const data = rows.find((row) => row.origin === "data_picks");
+  const poisson = rows.find((row) => row.origin === "poisson");
+  assert.deepEqual({ evaluated: data.evaluated, won: data.won, lost: data.lost, individual: data.individual, parlayLegs: data.parlayLegs }, { evaluated: 2, won: 1, lost: 1, individual: 1, parlayLegs: 1 });
+  assert.deepEqual({ evaluated: poisson.evaluated, won: poisson.won, lost: poisson.lost, individual: poisson.individual, parlayLegs: poisson.parlayLegs }, { evaluated: 1, won: 1, lost: 0, individual: 0, parlayLegs: 1 });
+});
+
 test("marca perdido si cualquier selección pierde", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "lost" }]), "lost");
   assert.equal(calculateParlayResult([{ result: "pending" }, { result: "lost" }]), "lost");

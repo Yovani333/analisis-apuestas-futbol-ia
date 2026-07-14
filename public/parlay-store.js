@@ -168,14 +168,17 @@ export function createSavedPick(leg, now = new Date()) {
   };
 }
 
-export function calculateOriginPerformance(picks = []) {
+export function calculateOriginPerformance(picks = [], parlays = []) {
   const groups = new Map();
-  for (const pick of picks) {
+  const parlayLegs = parlays.filter((parlay) => !parlay?.trashed).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
+  for (const pick of [...picks, ...parlayLegs]) {
     if (!['won', 'lost'].includes(pick?.result)) continue;
     const origin = pick.sourceModule || "odds";
-    const current = groups.get(origin) || { origin, evaluated: 0, won: 0, lost: 0, winRate: 0 };
+    const current = groups.get(origin) || { origin, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0 };
     current.evaluated += 1;
     current[pick.result] += 1;
+    if (parlayLegs.includes(pick)) current.parlayLegs += 1;
+    else current.individual += 1;
     current.winRate = Number((current.won / current.evaluated * 100).toFixed(1));
     groups.set(origin, current);
   }

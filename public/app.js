@@ -4,7 +4,7 @@ import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js
 import {
   calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
-} from "./parlay-store.js?v=20260713-dashboard-fixes-v2";
+} from "./parlay-store.js?v=20260713-origin-results-v3";
 import { createEvidenceSnapshot, EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260712-cloud-sync-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -1974,12 +1974,12 @@ function renderSavedPicks() {
 
 function renderOriginPerformance() {
   if (!elements.originPerformance) return;
-  const rows = calculateOriginPerformance(state.savedPicks);
+  const rows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
   if (!rows.length) {
-    elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen</h3><p>El conteo aparecerá cuando existan picks individuales concluidos como ganados o perdidos.</p></div>';
+    elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen</h3><p>El conteo aparecerá cuando existan picks individuales o selecciones de parlays concluidas como ganadas o perdidas.</p></div>';
     return;
   }
-  elements.originPerformance.innerHTML = `<header><div><span>Comparación automática</span><h3>Resultados por origen</h3></div><small>Solo picks individuales concluidos; anulados y pendientes no cuentan.</small></header><div class="origin-performance__grid">${rows.map((row) => `<article><span>${escapeHtml(pickOriginLabel(row.origin))}</span><strong>${displayValue(row.winRate)}%</strong><small>${row.won} ganados · ${row.lost} perdidos · ${row.evaluated} evaluados</small></article>`).join("")}</div>`;
+  elements.originPerformance.innerHTML = `<header><div><span>Comparación automática</span><h3>Resultados por origen</h3></div><small>Incluye picks individuales y selecciones de parlays activos. Pendientes y anulados no cuentan.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Origen</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th></tr></thead><tbody>${rows.map((row) => `<tr><td data-label="Origen"><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive">${row.won}</td><td data-label="Perdidos" class="value-negative">${row.lost}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${displayValue(row.winRate)}%</strong></td></tr>`).join("")}</tbody></table></div>`;
 }
 
 function renderSavedParlays() {
