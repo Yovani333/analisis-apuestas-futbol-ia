@@ -4,13 +4,13 @@ import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js
 import {
   calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
-} from "./parlay-store.js?v=20260705-team-performance-picks-v1";
+} from "./parlay-store.js?v=20260713-lossless-sync-v1";
 import { createEvidenceSnapshot, EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260712-cloud-sync-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260705-player-goal-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260712-automatic-evidence-v1";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260713-lossless-sync-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -351,7 +351,7 @@ function applyCloudState(remoteState) {
   }
 }
 
-async function connectCloudAccount({ firstConnection = null } = {}) {
+async function connectCloudAccount() {
   const session = cloudSyncClient.session;
   if (!session?.accessToken) return;
   state.cloud.syncing = true;
@@ -361,12 +361,9 @@ async function connectCloudAccount({ firstConnection = null } = {}) {
   try {
     const remote = await cloudSyncClient.loadState();
     const userId = session.user?.id || "";
-    const migrateLocal = firstConnection ?? !cloudSyncClient.isInitialized(userId);
-    const nextState = remote
-      ? mergeCloudState(migrateLocal ? localCloudState() : {}, remote)
-      : mergeCloudState(localCloudState(), {});
+    const nextState = mergeCloudState(localCloudState(), remote || {});
     applyCloudState(nextState);
-    const saved = (!remote || migrateLocal) ? await cloudSyncClient.saveState(nextState) : remote;
+    const saved = await cloudSyncClient.saveState(nextState);
     state.cloud.lastSyncedAt = saved?.updated_at || nextState.updatedAt || new Date().toISOString();
     state.cloud.dirty = false;
     if (userId) cloudSyncClient.markInitialized(userId);
@@ -388,17 +385,13 @@ async function syncCloudState({ announce = false, refreshFirst = false } = {}) {
   state.cloud.notice = "";
   renderCloudAccount();
   try {
-    if (refreshFirst && !state.cloud.dirty) {
-      const remote = await cloudSyncClient.loadState();
-      if (remote) applyCloudState(remote);
-      state.cloud.lastSyncedAt = remote?.updated_at || state.cloud.lastSyncedAt || new Date().toISOString();
-      if (announce) showNotice("Datos actualizados desde tu cuenta en línea.");
-    } else {
-      const saved = await cloudSyncClient.saveState(localCloudState());
-      state.cloud.lastSyncedAt = saved?.updated_at || new Date().toISOString();
-      state.cloud.dirty = false;
-      if (announce) showNotice("Datos sincronizados con tu cuenta.");
-    }
+    const remote = await cloudSyncClient.loadState();
+    const merged = mergeCloudState(localCloudState(), remote || {});
+    applyCloudState(merged);
+    const saved = await cloudSyncClient.saveState(merged);
+    state.cloud.lastSyncedAt = saved?.updated_at || new Date().toISOString();
+    state.cloud.dirty = false;
+    if (announce) showNotice("Datos combinados y sincronizados sin eliminar picks ni parlays.");
   } catch (error) {
     state.cloud.error = `${error.message} La copia local se conserva.`;
     if (announce) showNotice(state.cloud.error);
@@ -943,7 +936,7 @@ function renderFixtureData() {
   else {
     elements.outcomeStatus.className = "status-badge status-badge--unavailable";
     elements.outcomeStatus.textContent = "No disponible";
-    elements.outcomeContent.innerHTML = '<div class="research-empty">Pulsa "Mostrar" para revisar local, empate y visitante.</div>';
+    elements.outcomeContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar datos” para calcular local, empate y visitante; después usa Mostrar u Ocultar.</div>';
   }
   elements.outcomeContent.hidden = true;
   if (savedOutcome) { elements.showOutcome.textContent = "Mostrar"; elements.showOutcome.classList.remove("button--ready"); }
@@ -981,7 +974,7 @@ function renderFixtureData() {
   elements.showCorners.disabled = state.isLoadingCorners;
   const savedCorners = state.cornersByFixture.get(fixture.id);
   if (savedCorners) renderCorners(savedCorners);
-  else { elements.cornersStatus.className = "status-badge status-badge--unavailable"; elements.cornersStatus.textContent = "No disponible"; elements.cornersContent.innerHTML = '<div class="research-empty">Pulsa “Mostrar” para analizar corners oficiales.</div>'; }
+  else { elements.cornersStatus.className = "status-badge status-badge--unavailable"; elements.cornersStatus.textContent = "No disponible"; elements.cornersContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar datos” para analizar corners oficiales; después usa Mostrar u Ocultar.</div>'; }
   elements.cornersContent.hidden = true;
   if (savedCorners) { elements.showCorners.textContent = "Mostrar"; elements.showCorners.classList.remove("button--ready"); }
   elements.showCorners.setAttribute("aria-expanded", "false");
@@ -2065,6 +2058,7 @@ async function updateSavedParlayResults() {
       if (hasNumber(currentMarket?.estimatedProbabilityPct)) leg.modelProbability = Number(currentMarket.estimatedProbabilityPct);
       if (hasNumber(currentMarket?.expectedValuePct)) leg.expectedValue = Number(currentMarket.expectedValuePct);
       leg.lastUpdatedAt = new Date().toISOString();
+      leg.updatedAt = leg.lastUpdatedAt;
       Object.assign(leg, applyAnalysisTiming(leg));
       if (leg.result !== "pending") return;
       const nextResult = settleLegResult(leg.selectionCode, fixtureResult);
@@ -2080,6 +2074,7 @@ async function updateSavedParlayResults() {
       parlay.legs.forEach(updateLeg);
       parlay.result = calculateParlayResult(parlay.legs);
       parlay.lastCheckedAt = new Date().toISOString();
+      parlay.updatedAt = parlay.lastCheckedAt;
     });
     persistSavedParlays();
     persistSavedPicks();
@@ -2701,7 +2696,8 @@ function renderOutcomeScenarios(result) {
 async function loadOutcomeScenarios(forceRefresh = false) {
   const fixture = selectedFixture();
   if (!fixture || state.isLoadingOutcome) return;
-  if (!forceRefresh && state.outcomeByFixture.has(fixture.id)) return toggleReadyModule(elements.showOutcome, elements.outcomeContent);
+  if (!forceRefresh && state.outcomeByFixture.has(fixture.id)) return showModuleReady(elements.showOutcome, elements.outcomeContent);
+  const wasHidden = elements.outcomeContent.hidden;
   state.isLoadingOutcome = true;
   elements.showOutcome.disabled = true;
   elements.refreshOutcome.disabled = true;
@@ -2712,7 +2708,8 @@ async function loadOutcomeScenarios(forceRefresh = false) {
     const result = await footballDataService.getOutcomeScenarios(fixture, forceRefresh);
     state.outcomeByFixture.set(fixture.id, result);
     renderOutcomeScenarios(result);
-    showModuleReady(elements.showOutcome, elements.outcomeContent);
+    if (forceRefresh) elements.outcomeContent.hidden = wasHidden;
+    else showModuleReady(elements.showOutcome, elements.outcomeContent);
     if (forceRefresh) showNotice("Selector 1X2 actualizado.");
   } catch (error) {
     renderOutcomeScenarios({ status: "error", scenarios: [], warning: error.message, decisionLabel: "Error" });
@@ -2857,10 +2854,11 @@ function renderCorners(result) {
 
 async function loadCorners(forceRefresh = false) {
   const fixture = selectedFixture(); if (!fixture || state.isLoadingCorners) return;
-  if (!forceRefresh && state.cornersByFixture.has(fixture.id)) return toggleReadyModule(elements.showCorners, elements.cornersContent);
+  if (!forceRefresh && state.cornersByFixture.has(fixture.id)) return showModuleReady(elements.showCorners, elements.cornersContent);
+  const wasHidden = elements.cornersContent.hidden;
   state.isLoadingCorners = true; elements.showCorners.disabled = true; elements.refreshCorners.disabled = true; elements.showCorners.textContent = forceRefresh ? "Actualizando…" : "Calculando…";
-  try { const result = await footballDataService.getCornersModel(fixture, forceRefresh); state.cornersByFixture.set(fixture.id, result); renderCorners(result); showModuleReady(elements.showCorners, elements.cornersContent); if (forceRefresh) showNotice("Corners actualizados."); }
-  catch (error) { renderCorners({ status: "not_available", warning: error.message, picks: [] }); elements.cornersContent.hidden = false; }
+  try { const result = await footballDataService.getCornersModel(fixture, forceRefresh); state.cornersByFixture.set(fixture.id, result); renderCorners(result); if (forceRefresh) elements.cornersContent.hidden = wasHidden; else showModuleReady(elements.showCorners, elements.cornersContent); if (forceRefresh) showNotice("Corners actualizados."); }
+  catch (error) { renderCorners({ status: "not_available", warning: error.message, picks: [] }); elements.cornersContent.hidden = forceRefresh ? wasHidden : false; }
   finally { state.isLoadingCorners = false; elements.showCorners.disabled = !selectedFixture(); elements.refreshCorners.disabled = !selectedFixture(); elements.showCorners.textContent = elements.cornersContent.hidden ? "Mostrar" : "Ocultar"; }
 }
 
@@ -3503,7 +3501,7 @@ elements.dataPicksContent.addEventListener("click", (event) => {
   if (addButton) addDataPickToParlay(addButton.dataset.addDataPick);
   if (saveButton) saveDataPick(saveButton.dataset.saveDataPick);
 });
-elements.showOutcome.addEventListener("click", loadOutcomeScenarios);
+elements.showOutcome.addEventListener("click", () => toggleReadyModule(elements.showOutcome, elements.outcomeContent));
 elements.showPoisson.addEventListener("click", loadPoisson);
 elements.poissonContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-poisson]");
@@ -3517,7 +3515,7 @@ elements.teamGoalsContent.addEventListener("click", (event) => {
   if (addButton) addTeamGoalPick(addButton.dataset.addTeamGoal);
   if (saveButton) saveTeamGoalPick(saveButton.dataset.saveTeamGoal);
 });
-elements.showCorners.addEventListener("click", loadCorners);
+elements.showCorners.addEventListener("click", () => toggleReadyModule(elements.showCorners, elements.cornersContent));
 elements.cornersContent.addEventListener("click", (event) => { const add = event.target.closest("[data-add-corners]"); const save = event.target.closest("[data-save-corners]"); if (add) addCornerPick(add.dataset.addCorners); if (save) saveCornerPick(save.dataset.saveCorners); });
 elements.showSpecificMarkets.addEventListener("click", loadSpecificMarkets);
 elements.specificMarketsContent.addEventListener("click", (event) => {
@@ -3577,7 +3575,9 @@ elements.savedParlaysList.addEventListener("change", (event) => {
   const leg = parlay?.legs.find((item) => item.id === legRow.dataset.legId);
   if (!leg) return;
   leg.result = select.value;
+  leg.updatedAt = new Date().toISOString();
   parlay.result = calculateParlayResult(parlay.legs);
+  parlay.updatedAt = leg.updatedAt;
   persistSavedParlays();
   renderSavedParlays();
 });
@@ -3588,6 +3588,7 @@ elements.savedParlaysList.addEventListener("input", (event) => {
   const parlay = state.savedParlays.find((item) => item.id === card.dataset.parlayId);
   if (parlay) {
     parlay.notes = notes.value;
+    parlay.updatedAt = new Date().toISOString();
     persistSavedParlays();
   }
 });

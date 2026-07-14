@@ -58,6 +58,29 @@ function normalizedState(value = {}) {
   return state;
 }
 
+function mergeRowsById(existingRows, incomingRows, limit) {
+  const rows = new Map();
+  for (const row of Array.isArray(existingRows) ? existingRows : []) if (row?.id) rows.set(String(row.id), row);
+  for (const row of Array.isArray(incomingRows) ? incomingRows : []) if (row?.id) rows.set(String(row.id), row);
+  return [...rows.values()].slice(0, limit);
+}
+
+function mergeNormalizedState(existing = {}, incoming = {}) {
+  const merged = {
+    preferences: { ...(existing.preferences || {}), ...(incoming.preferences || {}) },
+    parlay_draft: mergeRowsById(existing.parlay_draft, incoming.parlay_draft, 12),
+    saved_picks: mergeRowsById(existing.saved_picks, incoming.saved_picks, 500),
+    saved_parlays: mergeRowsById(existing.saved_parlays, incoming.saved_parlays, 200),
+    evidence_snapshots: mergeRowsById(existing.evidence_snapshots, incoming.evidence_snapshots, 50),
+    alerts: mergeRowsById(existing.alerts, incoming.alerts, 500),
+    analysis_usage: { ...(existing.analysis_usage || {}), ...(incoming.analysis_usage || {}) }
+  };
+  if (Buffer.byteLength(JSON.stringify(merged), "utf8") > MAX_SYNC_BYTES) {
+    throw new AppError("Los datos combinados exceden el limite de sincronizacion.", 413, "CLOUD_STATE_TOO_LARGE");
+  }
+  return merged;
+}
+
 async function supabaseRequest(path, { method = "GET", token = "", body, prefer = "" } = {}) {
   if (!configured()) throw new AppError("La sincronizacion en linea no esta configurada.", 503, "CLOUD_NOT_CONFIGURED");
   let response;
@@ -198,7 +221,29 @@ export async function getCloudState(authorization) {
 export async function saveCloudState(authorization, input) {
   const token = bearerToken(authorization);
   const state = normalizedState(input);
-  const payload = { user_id: userIdFromToken(token), ...state, updated_at: new Date().toISOString() };
+  const userId = userIdFromToken(token);
+  try {
+    const rows = await supabaseRequest("/rest/v1/rpc/merge_user_sync_state", {
+      method: "POST",
+      token,
+      body: {
+        p_preferences: state.preferences,
+        p_parlay_draft: state.parlay_draft,
+        p_saved_picks: state.saved_picks,
+        p_saved_parlays: state.saved_parlays,
+        p_evidence_snapshots: state.evidence_snapshots,
+        p_alerts: state.alerts,
+        p_analysis_usage: state.analysis_usage
+      }
+    });
+    return Array.isArray(rows) ? rows[0] || state : rows;
+  } catch (error) {
+    if (!/merge_user_sync_state|schema cache|could not find the function/i.test(error.message)) throw error;
+  }
+  const existingRows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage&limit=1", { token });
+  const existing = Array.isArray(existingRows) ? existingRows[0] || {} : {};
+  const merged = mergeNormalizedState(existing, state);
+  const payload = { user_id: userId, ...merged, updated_at: new Date().toISOString() };
   const rows = await supabaseRequest("/rest/v1/user_sync_state?on_conflict=user_id", {
     method: "POST", token, body: payload, prefer: "resolution=merge-duplicates,return=representation"
   });
@@ -286,4 +331,4 @@ export async function updateEvidenceWatchlist(row, changes) {
   });
 }
 
-export const cloudSyncInternals = { bearerToken, mergeEvidenceSnapshots, normalizedState, normalizeWatchedFixture, userIdFromToken, validateCredentials };
+export const cloudSyncInternals = { bearerToken, mergeEvidenceSnapshots, mergeNormalizedState, normalizedState, normalizeWatchedFixture, userIdFromToken, validateCredentials };

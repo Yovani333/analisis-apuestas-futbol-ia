@@ -7,8 +7,9 @@ La aplicacion mantiene una copia local y sincroniza por cuenta los picks, parlay
 1. Abre el proyecto en Supabase.
 2. En **SQL Editor**, ejecuta completo `supabase/migrations/001_user_sync_state.sql`.
 3. Para evidencias automáticas, ejecuta también `supabase/migrations/002_automatic_evidence.sql`.
-4. En **Authentication > URL Configuration**, configura como Site URL la URL publica de Render y agrega esa misma URL a Redirect URLs.
-5. En Render deben existir:
+4. Para sincronización acumulativa entre dispositivos, ejecuta `supabase/migrations/003_lossless_cloud_sync.sql`.
+5. En **Authentication > URL Configuration**, configura como Site URL la URL publica de Render y agrega esa misma URL a Redirect URLs.
+6. En Render deben existir:
 
 ```text
 SUPABASE_URL=https://proyecto.supabase.co
@@ -18,7 +19,7 @@ EVIDENCE_AUTOMATION_SECRET=una-cadena-aleatoria-larga
 EVIDENCE_AUTOMATION_INTERVAL_MS=300000
 ```
 
-6. Despliega de nuevo el servicio.
+7. Despliega de nuevo el servicio.
 
 `SUPABASE_SECRET_KEY` se usa exclusivamente dentro del backend de Render para procesar encuentros de todas las cuentas. Nunca debe agregarse a HTML, JavaScript publico ni GitHub. La clave publicable solo permite operaciones autorizadas por las politicas RLS.
 
@@ -26,7 +27,7 @@ EVIDENCE_AUTOMATION_INTERVAL_MS=300000
 
 En **Mi cuenta > Sincronizacion en linea**, crea una cuenta o inicia sesion. Si Supabase exige confirmacion de correo, abre el enlace recibido y despues inicia sesion.
 
-La primera conexion de cada cuenta en un navegador combina los datos locales y remotos. Las conexiones posteriores descargan el estado remoto antes de habilitar la sincronizacion automatica. Cerrar sesion elimina la copia personal de ese navegador, pero no borra la informacion de Supabase.
+Cada conexión y cada uso de **Sincronizar ahora** combina primero los datos locales y remotos por identificador. La función SQL de la migración 003 hace la unión de forma atómica para que dos dispositivos no reemplacen sus picks o parlays entre sí. Cerrar sesión elimina la copia personal de ese navegador, pero no borra la información de Supabase.
 
 ## Evidencia automatica una hora antes
 

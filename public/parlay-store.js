@@ -143,6 +143,7 @@ export function createSavedParlay(name, legs, now = new Date()) {
     id,
     name: name.trim() || `Parlay ${now.toLocaleDateString("es-MX")}`,
     createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
     result: "pending",
     notes: "",
     collapsed: true,
@@ -162,16 +163,17 @@ export function createSavedPick(leg, now = new Date()) {
     updatedOdds: leg.updatedOdds ?? null,
     fixtureStatus: leg.fixtureStatus || "No disponible",
     result: leg.result || "pending",
-    savedAt: now.toISOString()
+    savedAt: now.toISOString(),
+    updatedAt: now.toISOString()
   };
 }
 
 export function moveParlayToTrash(parlay, now = new Date()) {
-  return { ...parlay, trashed: true, deletedAt: now.toISOString() };
+  return { ...parlay, trashed: true, deletedAt: now.toISOString(), updatedAt: now.toISOString() };
 }
 
-export function restoreParlayFromTrash(parlay) {
-  const restored = { ...parlay, trashed: false };
+export function restoreParlayFromTrash(parlay, now = new Date()) {
+  const restored = { ...parlay, trashed: false, updatedAt: now.toISOString() };
   delete restored.deletedAt;
   return restored;
 }

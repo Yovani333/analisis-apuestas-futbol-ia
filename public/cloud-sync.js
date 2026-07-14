@@ -36,10 +36,32 @@ function normalizeSession(payload) {
   };
 }
 
+function rowTimestamp(row = {}) {
+  return Math.max(0, ...[
+    row.updatedAt, row.lastCheckedAt, row.deletedAt, row.resolvedAt,
+    row.savedAt, row.createdAt, row.addedAt, row.capturedAt
+  ].map((value) => Date.parse(value || "") || 0));
+}
+
+function mergeRow(localRow, remoteRow) {
+  if (!localRow) return remoteRow;
+  if (!remoteRow) return localRow;
+  const localIsNewer = rowTimestamp(localRow) > rowTimestamp(remoteRow);
+  const older = localIsNewer ? remoteRow : localRow;
+  const newer = localIsNewer ? localRow : remoteRow;
+  const merged = { ...older, ...newer };
+  if (Array.isArray(localRow.legs) || Array.isArray(remoteRow.legs)) {
+    merged.legs = mergeById(localRow.legs, remoteRow.legs);
+  }
+  return merged;
+}
+
 function mergeById(localRows, remoteRows) {
   const rows = new Map();
   for (const row of Array.isArray(localRows) ? localRows : []) if (row?.id) rows.set(String(row.id), row);
-  for (const row of Array.isArray(remoteRows) ? remoteRows : []) if (row?.id) rows.set(String(row.id), row);
+  for (const row of Array.isArray(remoteRows) ? remoteRows : []) {
+    if (row?.id) rows.set(String(row.id), mergeRow(rows.get(String(row.id)), row));
+  }
   return [...rows.values()];
 }
 
