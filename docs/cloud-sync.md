@@ -29,6 +29,8 @@ En **Mi cuenta > Sincronizacion en linea**, crea una cuenta o inicia sesion. Si 
 
 Cada conexión y cada uso de **Sincronizar ahora** combina primero los datos locales y remotos por identificador. La función SQL de la migración 003 hace la unión de forma atómica para que dos dispositivos no reemplacen sus picks o parlays entre sí. Cerrar sesión elimina la copia personal de ese navegador, pero no borra la información de Supabase.
 
+La migracion `004_parlay_draft_revision.sql` agrega una revision para el cupon en preparacion. Quitar un pick o vaciar el cupon reemplaza su version anterior y evita que selecciones antiguas reaparezcan desde otro dispositivo.
+
 ## Evidencia automatica una hora antes
 
 Cuando una cuenta ha iniciado sesion, cada busqueda registra sus fixtures programados en `evidence_watchlist`. El backend revisa la cola cada cinco minutos y captura una sola evidencia por usuario y fixture cuando faltan aproximadamente 60 minutos. La captura usa API-Football y los modelos internos; no llama a OpenAI y no usa estadisticas del fixture actual. Un error temporal se reintenta hasta tres veces antes de marcar la captura como fallida. Si varias cuentas vigilan el mismo fixture en un ciclo, la respuesta deportiva se consulta una vez y se reutiliza sin mezclar los datos privados de las cuentas.

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSpecificMarkets } from "../server/services/specific-markets.service.js";
+import { buildSpecificMarkets, dedupeMarketCandidates } from "../server/services/specific-markets.service.js";
 
 function dataset(overrides = {}) {
   const btts = { marketKey: "btts", selectionKey: "btts_yes", market: "Ambos anotan", selection: "Sí", decimalOdds: 1.9, impliedProbabilityPct: 52.6, modelProbabilityPct: 61, expectedValuePct: 15.9, confidenceScore: 72, highlightColor: "green", decision: "VALOR", sourceModule: "data_picks" };
@@ -45,4 +45,19 @@ test("corners queda parcial si existe modelo pero falta cuota compatible", () =>
   const corners = result.groups.find((group) => group.key === "corners");
   assert.equal(corners.status, "partial");
   assert.match(corners.alternativeData, /9.4/);
+});
+
+test("el catalogo conserva una sola version del pick con mejor resultado", () => {
+  const low = { marketKey: "btts", selectionKey: "btts_yes", confidenceScore: 55, expectedValuePct: 8, highlightColor: "orange" };
+  const best = { ...low, confidenceScore: 78, expectedValuePct: 15, highlightColor: "green", sourceModule: "poisson" };
+  const unique = dedupeMarketCandidates([low, best]);
+  assert.equal(unique.length, 1);
+  assert.equal(unique[0].confidenceScore, 78);
+  assert.equal(unique[0].sourceModule, "poisson");
+});
+
+test("un pick no se repite entre categorias del catalogo", () => {
+  const result = buildSpecificMarkets(dataset());
+  const identities = result.groups.flatMap((item) => item.picks.map((pick) => `${pick.marketKey}:${pick.selectionKey}`));
+  assert.equal(new Set(identities).size, identities.length);
 });

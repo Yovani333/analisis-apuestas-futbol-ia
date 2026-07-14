@@ -168,6 +168,20 @@ export function createSavedPick(leg, now = new Date()) {
   };
 }
 
+export function calculateOriginPerformance(picks = []) {
+  const groups = new Map();
+  for (const pick of picks) {
+    if (!['won', 'lost'].includes(pick?.result)) continue;
+    const origin = pick.sourceModule || "odds";
+    const current = groups.get(origin) || { origin, evaluated: 0, won: 0, lost: 0, winRate: 0 };
+    current.evaluated += 1;
+    current[pick.result] += 1;
+    current.winRate = Number((current.won / current.evaluated * 100).toFixed(1));
+    groups.set(origin, current);
+  }
+  return [...groups.values()].sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.origin.localeCompare(b.origin));
+}
+
 export function moveParlayToTrash(parlay, now = new Date()) {
   return { ...parlay, trashed: true, deletedAt: now.toISOString(), updatedAt: now.toISOString() };
 }

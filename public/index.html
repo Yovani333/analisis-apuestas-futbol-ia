@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260705-data-live-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260713-dashboard-fixes-v2" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -458,6 +458,7 @@
       </section>
       <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
       <section id="history-metrics" class="history-metrics" aria-label="Rendimiento histórico"></section>
+      <section id="origin-performance" class="origin-performance" aria-label="Resultados de picks por origen"></section>
       <div id="saved-picks-list" class="saved-parlays-list"></div>
       <div id="saved-parlays-list" class="saved-parlays-list" hidden></div>
       <div id="trash-parlays-list" class="saved-parlays-list" hidden></div>
@@ -476,7 +477,7 @@
       </section>
       <section class="panel audit-controls">
         <label for="audit-fixture">Partido finalizado</label>
-        <select id="audit-fixture"><option value="">Busca partidos finalizados en el Dashboard</option></select>
+        <select id="audit-fixture"><option value="">Cargando evidencias guardadas</option></select>
         <button id="run-audit" class="button button--primary" type="button" disabled>Ejecutar auditoría</button>
       </section>
       <div class="pick-color-legend"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Valor</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>
@@ -556,6 +557,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260713-lossless-sync-v1"></script>
+    <script type="module" src="app.js?v=20260713-dashboard-fixes-v2"></script>
   </body>
 </html>

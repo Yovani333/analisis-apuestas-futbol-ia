@@ -65,10 +65,18 @@ function mergeRowsById(existingRows, incomingRows, limit) {
   return [...rows.values()].slice(0, limit);
 }
 
+function syncTimestamp(value) {
+  return Date.parse(value || "") || 0;
+}
+
 function mergeNormalizedState(existing = {}, incoming = {}) {
+  const existingDraftUpdatedAt = syncTimestamp(existing.preferences?.parlayDraftUpdatedAt);
+  const incomingDraftUpdatedAt = syncTimestamp(incoming.preferences?.parlayDraftUpdatedAt);
   const merged = {
     preferences: { ...(existing.preferences || {}), ...(incoming.preferences || {}) },
-    parlay_draft: mergeRowsById(existing.parlay_draft, incoming.parlay_draft, 12),
+    parlay_draft: incomingDraftUpdatedAt >= existingDraftUpdatedAt && incomingDraftUpdatedAt
+      ? incoming.parlay_draft
+      : existingDraftUpdatedAt ? existing.parlay_draft : mergeRowsById(existing.parlay_draft, incoming.parlay_draft, 12),
     saved_picks: mergeRowsById(existing.saved_picks, incoming.saved_picks, 500),
     saved_parlays: mergeRowsById(existing.saved_parlays, incoming.saved_parlays, 200),
     evidence_snapshots: mergeRowsById(existing.evidence_snapshots, incoming.evidence_snapshots, 50),
@@ -223,7 +231,7 @@ export async function saveCloudState(authorization, input) {
   const state = normalizedState(input);
   const userId = userIdFromToken(token);
   try {
-    const rows = await supabaseRequest("/rest/v1/rpc/merge_user_sync_state", {
+    const rows = await supabaseRequest("/rest/v1/rpc/merge_user_sync_state_v2", {
       method: "POST",
       token,
       body: {
@@ -238,7 +246,7 @@ export async function saveCloudState(authorization, input) {
     });
     return Array.isArray(rows) ? rows[0] || state : rows;
   } catch (error) {
-    if (!/merge_user_sync_state|schema cache|could not find the function/i.test(error.message)) throw error;
+    if (!/merge_user_sync_state_v2|schema cache|could not find the function/i.test(error.message)) throw error;
   }
   const existingRows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage&limit=1", { token });
   const existing = Array.isArray(existingRows) ? existingRows[0] || {} : {};

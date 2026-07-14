@@ -1,9 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, hasDuplicatePick, moveParlayToTrash, normalizePickLeg, pickIdentity, restoreParlayFromTrash, settleLegResult } from "../public/parlay-store.js";
+import { calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, hasDuplicatePick, moveParlayToTrash, normalizePickLeg, pickIdentity, restoreParlayFromTrash, settleLegResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
+});
+
+test("ordena el rendimiento de picks concluidos por origen", () => {
+  const rows = calculateOriginPerformance([
+    { sourceModule: "poisson", result: "won" }, { sourceModule: "poisson", result: "lost" },
+    { sourceModule: "data_picks", result: "won" }, { sourceModule: "data_picks", result: "pending" }
+  ]);
+  assert.deepEqual(rows.map((row) => row.origin), ["data_picks", "poisson"]);
+  assert.equal(rows[0].winRate, 100);
+  assert.equal(rows[1].winRate, 50);
 });
 
 test("marca perdido si cualquier selección pierde", () => {

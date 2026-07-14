@@ -2,15 +2,15 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260712-pick-intelligence-v2";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  calculateHistoryMetrics, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
+  calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
-} from "./parlay-store.js?v=20260713-lossless-sync-v1";
+} from "./parlay-store.js?v=20260713-dashboard-fixes-v2";
 import { createEvidenceSnapshot, EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260712-cloud-sync-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginLabel } from "./pick-origins.js?v=20260705-player-goal-v1";
+import { pickOriginLabel } from "./pick-origins.js?v=20260713-dashboard-fixes-v2";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260713-lossless-sync-v1";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260713-dashboard-fixes-v2";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -149,6 +149,7 @@ const elements = {
   savedPicksList: document.querySelector("#saved-picks-list"),
   trashParlaysList: document.querySelector("#trash-parlays-list"),
   historyMetrics: document.querySelector("#history-metrics"),
+  originPerformance: document.querySelector("#origin-performance"),
   updateParlayResults: document.querySelector("#update-parlay-results")
 };
 
@@ -654,13 +655,14 @@ function formatDate(isoDate) {
   return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${isoDate}T00:00:00Z`));
 }
 
-function applyTheme(theme) {
+function applyTheme(theme, { userInitiated = false } = {}) {
   const dark = theme === "dark";
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   elements.themeToggle.setAttribute("aria-pressed", String(dark));
   elements.themeToggle.textContent = dark ? "Modo claro" : "Modo oscuro";
   elements.accountDarkMode.checked = dark;
   state.preferences.theme = dark ? "dark" : "light";
+  if (userInitiated) state.preferences.themeUpdatedAt = new Date().toISOString();
   writeLocalJson(PREFERENCES_KEY, state.preferences);
 }
 
@@ -1716,6 +1718,8 @@ function openDataDetail(categoryKey) {
 const resultLabels = Object.freeze({ pending: "Pendiente", won: "Ganado", lost: "Perdido", void: "Anulado" });
 
 function persistParlayDraft() {
+  state.preferences.parlayDraftUpdatedAt = new Date().toISOString();
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
   saveParlayDraft(state.parlayDraft);
   queueCloudSync();
 }
@@ -1751,6 +1755,7 @@ function saveIndividualLeg(leg) {
   state.savedPicks.unshift(createSavedPick({ ...leg, id: `${leg.id || "pick"}:${Date.now()}` }));
   persistSavedPicks();
   renderSavedPicks();
+  renderOriginPerformance();
   showNotice("Pick individual guardado en Mis apuestas.");
 }
 
@@ -1777,7 +1782,7 @@ function appendPickToParlay(leg, successMessage = "Pick agregado a Mi parlay.") 
   return true;
 }
 
-function renderParlayDraft(open = false) {
+function renderParlayDraft(open = false, minimized = true) {
   const count = state.parlayDraft.length;
   elements.parlayLegCount.textContent = count;
   elements.parlayFabCount.textContent = count;
@@ -1812,7 +1817,7 @@ function renderParlayDraft(open = false) {
 
   if (open) {
     elements.parlaySlip.hidden = false;
-    setParlayMinimized(false);
+    setParlayMinimized(minimized);
   }
   elements.parlayFab.hidden = !elements.parlaySlip.hidden;
 }
@@ -1967,6 +1972,16 @@ function renderSavedPicks() {
   </article>`; }).join("");
 }
 
+function renderOriginPerformance() {
+  if (!elements.originPerformance) return;
+  const rows = calculateOriginPerformance(state.savedPicks);
+  if (!rows.length) {
+    elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen</h3><p>El conteo aparecerá cuando existan picks individuales concluidos como ganados o perdidos.</p></div>';
+    return;
+  }
+  elements.originPerformance.innerHTML = `<header><div><span>Comparación automática</span><h3>Resultados por origen</h3></div><small>Solo picks individuales concluidos; anulados y pendientes no cuentan.</small></header><div class="origin-performance__grid">${rows.map((row) => `<article><span>${escapeHtml(pickOriginLabel(row.origin))}</span><strong>${displayValue(row.winRate)}%</strong><small>${row.won} ganados · ${row.lost} perdidos · ${row.evaluated} evaluados</small></article>`).join("")}</div>`;
+}
+
 function renderSavedParlays() {
   const activeParlays = state.savedParlays.filter((parlay) => !parlay.trashed);
   elements.savedParlayCount.textContent = activeParlays.length + state.savedPicks.length;
@@ -1977,6 +1992,7 @@ function renderSavedParlays() {
     <article><span>Ganados / perdidos</span><strong>${metrics.won} / ${metrics.lost}</strong></article>
     <article><span>Acierto</span><strong>${metrics.winRate === null ? "—" : `${metrics.winRate}%`}</strong></article>
     <article><span>Unidades teóricas</span><strong class="${metrics.theoreticalUnits >= 0 ? "value-positive" : "value-negative"}">${metrics.theoreticalUnits}</strong></article>`;
+  renderOriginPerformance();
   elements.updateParlayResults.disabled = activeParlays.length === 0 && state.savedPicks.length === 0;
   if (!activeParlays.length) {
     elements.savedParlaysList.innerHTML = '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis IA y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
@@ -2476,11 +2492,21 @@ function showAnalysisEmpty() {
 }
 
 function renderAuditFixtureOptions() {
-  const fixtures = state.fixtures.filter((fixture) => fixture.status === "finished");
+  const available = new Map();
+  for (const snapshot of state.evidenceSnapshots) {
+    const fixture = snapshot?.fixture;
+    if (!fixture?.id || available.has(String(fixture.id))) continue;
+    available.set(String(fixture.id), { ...fixture, hasEvidence: true });
+  }
+  for (const fixture of state.fixtures.filter((item) => item.status === "finished")) {
+    const id = String(fixture.id);
+    available.set(id, { ...available.get(id), ...fixture, hasEvidence: Boolean(latestEvidenceForFixture(state.evidenceSnapshots, id)) });
+  }
+  const fixtures = [...available.values()].sort((a, b) => String(b.utcDateTime || b.date || "").localeCompare(String(a.utcDateTime || a.date || "")));
   elements.auditFixture.innerHTML = fixtures.length
-    ? `<option value="">Selecciona un partido</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)}${latestEvidenceForFixture(state.evidenceSnapshots, fixture.id) ? " · Evidencia guardada" : " · Sin snapshot"}</option>`).join("")}`
-    : '<option value="">Busca partidos finalizados en el Dashboard</option>';
-  elements.runAudit.disabled = !fixtures.length;
+    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · ${fixture.hasEvidence ? "Evidencia prepartido" : "Sin snapshot"}</option>`).join("")}`
+    : '<option value="">No hay evidencias prepartido guardadas</option>';
+  elements.runAudit.disabled = true;
 }
 
 function renderAuditResults(audit) {
@@ -2678,7 +2704,7 @@ function renderOutcomeScenarios(result) {
     const support = item.supportingData?.slice(0, 4).join(" | ") || "Sin soporte suficiente.";
     const contradictions = item.contradictingData?.length ? item.contradictingData.join(" ") : "Sin contradicciones fuertes.";
     return `<article class="outcome-card outcome-card--${escapeHtml(outcomeDecisionClass(item.decision))}">
-      <header><span>${escapeHtml(item.label)}</span><strong>${displayValue(item.probabilityPct)}%</strong></header>
+      <header><span>${escapeHtml(item.label)}</span><div class="outcome-card__actions"><strong>${displayValue(item.probabilityPct)}%</strong><button class="pick-add-icon" type="button" data-add-outcome="${escapeHtml(item.key)}" aria-label="Agregar ${escapeHtml(item.label)} al cupón" title="Agregar pick">+</button></div></header>
       <div class="outcome-bar"><i style="width:${Math.min(100, Number(item.probabilityPct || 0))}%"></i></div>
       <dl><div><dt>Confianza futbolistica</dt><dd>${displayValue(item.footballConfidenceScore, 0)}/100</dd></div><div><dt>Cuota</dt><dd>${item.decimalOdds ? `${displayValue(item.decimalOdds)} (${escapeHtml(item.bookmaker)})` : "No disponible"}</dd></div><div><dt>EV</dt><dd>${item.expectedValuePct === null ? "Sin cuota" : `${escapeHtml(item.expectedValuePct)}%`}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(item.decisionLabel)}</dd></div></dl>
       <p><b>Apoya:</b> ${escapeHtml(support)}</p><p><b>Contradice:</b> ${escapeHtml(contradictions)}</p><p><b>Lectura final:</b> ${escapeHtml(item.notSelectedReason || "Sin explicación adicional.")}</p>
@@ -2691,6 +2717,27 @@ function renderOutcomeScenarios(result) {
     <article><span>Confianza</span><strong>${displayValue(result.confidenceScore, 0)}/100</strong><small>${escapeHtml(result.confidenceLabel || "No disponible")} · Riesgo ${escapeHtml(result.risk || "medium")}</small></article>
     <article><span>Fuentes</span><strong>${escapeHtml((result.supportingData || []).join(" + ") || "Modelo interno")}</strong><small>${escapeHtml((result.missingData || []).slice(0, 2).join(" | "))}</small></article>
   </div><div class="outcome-grid">${scenarioCards}</div><p class="market-disclaimer">${escapeHtml(warningText)}</p>`;
+}
+
+function outcomeScenarioLeg(key) {
+  const fixture = selectedFixture();
+  const result = state.outcomeByFixture.get(fixture?.id);
+  const scenario = result?.scenarios?.find((item) => item.key === key);
+  if (!fixture || !scenario) return null;
+  const selectionCodes = { home: "home_win", draw: "draw", away: "away_win" };
+  return {
+    id: `${fixture.id}:outcome:${key}`, fixtureId: fixture.id, league: fixture.leagueName,
+    home: fixture.home, away: fixture.away, date: fixture.date, market: "Resultado 1X2",
+    selection: scenario.label, marketCode: "match_winner", selectionCode: selectionCodes[key],
+    decimalOdds: scenario.decimalOdds, originalOdds: scenario.decimalOdds, updatedOdds: null,
+    impliedProbability: scenario.marketProbabilityPct, modelProbability: scenario.probabilityPct,
+    expectedValue: scenario.expectedValuePct, fixtureStatus: fixture.statusLabel || fixture.status,
+    kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt,
+    confidence: `${scenario.footballConfidenceScore}%`, confidenceScore: scenario.footballConfidenceScore,
+    risk: scenario.risk, reasoning: scenario.notSelectedReason, requiresReview: scenario.decision !== "apuesta_recomendada",
+    sourceModule: "outcome_1x2", source: result.source,
+    supportingData: scenario.supportingData, contradictingData: scenario.contradictingData
+  };
 }
 
 async function loadOutcomeScenarios(forceRefresh = false) {
@@ -3563,7 +3610,7 @@ document.querySelector("#parlay-slip-close").addEventListener("click", () => {
 elements.parlayMinimize.addEventListener("click", () => {
   setParlayMinimized(!elements.parlaySlip.classList.contains("parlay-slip--minimized"));
 });
-elements.parlayFab.addEventListener("click", () => renderParlayDraft(true));
+elements.parlayFab.addEventListener("click", () => renderParlayDraft(true, false));
 elements.saveParlay.addEventListener("click", saveCurrentParlay);
 elements.updateParlayResults.addEventListener("click", updateSavedParlayResults);
 elements.savedParlaysList.addEventListener("change", (event) => {
@@ -3628,6 +3675,7 @@ elements.savedPicksList.addEventListener("click", (event) => {
   state.savedPicks = state.savedPicks.filter((pick) => pick.id !== card.dataset.pickId);
   persistSavedPicks();
   renderSavedPicks();
+  renderOriginPerformance();
 });
 document.addEventListener("click", (event) => {
   const savedTab = event.target.closest("[data-saved-tab]");
@@ -3677,7 +3725,7 @@ elements.matchesList.addEventListener("keydown", async (event) => {
   await selectFixture(card.dataset.fixtureId, false);
 });
 
-elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark"));
+elements.themeToggle.addEventListener("click", () => applyTheme(state.preferences.theme === "dark" ? "light" : "dark", { userInitiated: true }));
 elements.toggleTeamPerformance.addEventListener("click", () => applyTeamPerformanceVisibility(elements.teamPerformanceContent.hidden));
 elements.togglePlayerGoal.addEventListener("click", () => toggleReadyModule(elements.togglePlayerGoal, elements.playerGoalContent));
 elements.playerGoalContent.addEventListener("click", (event) => {
@@ -3691,6 +3739,12 @@ elements.teamPerformanceContent.addEventListener("click", (event) => {
   const saveButton = event.target.closest("[data-save-team-performance-pick]");
   if (addButton) addTeamPerformancePick(addButton.dataset.addTeamPerformancePick);
   if (saveButton) saveTeamPerformancePick(saveButton.dataset.saveTeamPerformancePick);
+});
+elements.outcomeContent.addEventListener("click", (event) => {
+  const add = event.target.closest("[data-add-outcome]");
+  if (!add) return;
+  const leg = outcomeScenarioLeg(add.dataset.addOutcome);
+  if (leg) appendPickToParlay(leg, "Pick 1X2 agregado a Mi parlay.");
 });
 elements.savePreMatchEvidence.addEventListener("click", capturePreMatchEvidence);
 elements.auditFixture.addEventListener("change", () => { elements.runAudit.disabled = !elements.auditFixture.value; });
@@ -3717,7 +3771,7 @@ elements.accountForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.preferences.name = elements.accountName.value.trim();
   state.preferences.dailyLimit = elements.accountDailyLimit.value;
-  applyTheme(elements.accountDarkMode.checked ? "dark" : "light");
+  applyTheme(elements.accountDarkMode.checked ? "dark" : "light", { userInitiated: true });
   writeLocalJson(PREFERENCES_KEY, state.preferences);
   showNotice(cloudSyncClient.session?.accessToken ? "Preferencias guardadas y preparadas para sincronizar." : "Preferencias guardadas en este navegador.");
 });

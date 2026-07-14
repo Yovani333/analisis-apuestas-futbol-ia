@@ -67,3 +67,32 @@ test("combina evidencias manuales y automaticas sin duplicar snapshots", () => {
   assert.deepEqual(rows.map((row) => row.id), ["auto", "same", "manual"]);
   assert.equal(rows.find((row) => row.id === "same").source, "automatic");
 });
+
+test("la revision mas reciente del cupon permite borrar picks antiguos", () => {
+  const merged = mergeCloudState(
+    { preferences: { parlayDraftUpdatedAt: "2026-07-13T12:00:00Z" }, parlayDraft: [] },
+    { preferences: { parlayDraftUpdatedAt: "2026-07-13T10:00:00Z" }, parlay_draft: [{ id: "deleted-pick" }] }
+  );
+  assert.deepEqual(merged.parlayDraft, []);
+});
+
+test("el cupon remoto gana cuando su revision es mas reciente", () => {
+  const merged = mergeCloudState(
+    { preferences: { parlayDraftUpdatedAt: "2026-07-13T10:00:00Z" }, parlayDraft: [{ id: "old-local" }] },
+    { preferences: { parlayDraftUpdatedAt: "2026-07-13T12:00:00Z" }, parlay_draft: [{ id: "new-remote" }] }
+  );
+  assert.deepEqual(merged.parlayDraft.map((row) => row.id), ["new-remote"]);
+});
+
+test("la preferencia manual de tema mas reciente no es revertida por la nube", () => {
+  const merged = mergeCloudState(
+    { preferences: { theme: "light", themeUpdatedAt: "2026-07-13T12:00:00Z" } },
+    { preferences: { theme: "dark", themeUpdatedAt: "2026-07-13T10:00:00Z" } }
+  );
+  assert.equal(merged.preferences.theme, "light");
+});
+
+test("sin marcas temporales se usa el tema guardado en la cuenta", () => {
+  const merged = mergeCloudState({ preferences: { theme: "dark" } }, { preferences: { theme: "light" } });
+  assert.equal(merged.preferences.theme, "light");
+});

@@ -6,6 +6,27 @@ import { calculateTeamGoalProbability } from "./team-goal-probability.service.js
 const number = (value) => value === null || value === undefined || value === "" ? null : Number.isFinite(Number(value)) ? Number(value) : null;
 const unique = (values) => [...new Set(values.filter(Boolean))];
 const text = (pick) => `${pick.marketKey || ""} ${pick.selectionKey || ""} ${pick.market || ""} ${pick.selection || ""}`.toLocaleLowerCase("es-MX");
+const identityText = (value) => String(value || "").trim().toLocaleLowerCase("es-MX").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
+function pickIdentity(pick = {}) {
+  return `${identityText(pick.marketKey || pick.market)}::${identityText(pick.selectionKey || pick.selection)}`;
+}
+
+function pickScore(pick = {}) {
+  const color = { green: 4, blue: 3, orange: 2, red: 1, gray: 0 }[pick.highlightColor] || 0;
+  return color * 1_000_000 + (number(pick.confidenceScore ?? pick.finalPickScore) || 0) * 10_000
+    + (number(pick.expectedValuePct) || 0) * 100 + (number(pick.modelProbabilityPct ?? pick.estimatedProbabilityPct) || 0);
+}
+
+export function dedupeMarketCandidates(candidates = []) {
+  const best = new Map();
+  for (const candidate of candidates) {
+    const key = pickIdentity(candidate);
+    if (!key || key === "::") continue;
+    if (!best.has(key) || pickScore(candidate) > pickScore(best.get(key))) best.set(key, candidate);
+  }
+  return [...best.values()];
+}
 
 function normalizeCandidate(pick = {}) {
   return {
@@ -55,7 +76,7 @@ export function buildSpecificMarkets(dataset = {}) {
   dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
   dataset.cornersModel ||= calculateCornersModel(dataset);
   const dataPicks = generateDataPicks(dataset);
-  const all = [
+  const all = dedupeMarketCandidates([
     ...(dataset.playerGoalCandidates?.candidates || []),
     ...(dataPicks.picks || []),
     ...(dataset.poissonModel.suggestedMarkets || []),
@@ -63,7 +84,7 @@ export function buildSpecificMarkets(dataset = {}) {
     ...(dataset.cornersModel.picks || []),
     ...(dataset.marketAnalysis || []),
     ...(dataset.researchData?.odds?.markets || [])
-  ];
+  ]);
   const matches = (pattern) => all.filter((pick) => pattern.test(text(pick)));
   const quality = number(dataset.researchData?.totalConfidenceScore ?? dataset.dataQuality?.score) ?? 0;
   const playerData = dataset.researchData?.playerPerformance || dataset.supportingData?.playerPerformance;
@@ -83,6 +104,18 @@ export function buildSpecificMarkets(dataset = {}) {
     group({ key: "medium_risk", label: "Mercados de riesgo medio", candidates: all.filter((pick) => pick.highlightColor === "orange" || pick.decision === "PRECAUCIÓN"), missingData: ["Pick de riesgo medio con cuota y respaldo suficientes"], warning: "Estos mercados requieren revisión adicional y exposición prudente." }),
     group({ key: "high_value_risk", label: "Alto valor / mayor riesgo", candidates: all.filter((pick) => number(pick.expectedValuePct) >= 10 && !["green", "blue"].includes(pick.highlightColor)), missingData: ["Confirmaciones deportivas adicionales"], warning: "EV alto con riesgo o contradicciones: no usar como pick principal automáticamente." })
   ];
+
+  const shown = new Set();
+  for (const marketGroup of groups) {
+    marketGroup.picks = marketGroup.picks.filter((pick) => {
+      const key = pickIdentity(pick);
+      if (shown.has(key)) return false;
+      shown.add(key);
+      return true;
+    });
+    if (!marketGroup.picks.length && marketGroup.status === "available") marketGroup.status = marketGroup.alternativeData ? "partial" : "not_available";
+    marketGroup.confidenceScore = marketGroup.picks.length ? Math.max(...marketGroup.picks.map((pick) => pick.confidenceScore)) : 0;
+  }
 
   return {
     status: groups.some((item) => item.status === "available") ? "available" : groups.some((item) => item.status === "partial") ? "partial" : "not_available",

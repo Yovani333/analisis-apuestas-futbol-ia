@@ -65,10 +65,40 @@ function mergeById(localRows, remoteRows) {
   return [...rows.values()];
 }
 
+function timestamp(value) {
+  return Date.parse(value || "") || 0;
+}
+
+function mergePreferences(local = {}, remote = {}) {
+  const merged = { ...local, ...remote };
+  const localThemeUpdatedAt = timestamp(local.themeUpdatedAt);
+  const remoteThemeUpdatedAt = timestamp(remote.themeUpdatedAt);
+  if (local.theme && (localThemeUpdatedAt > remoteThemeUpdatedAt || (localThemeUpdatedAt > 0 && localThemeUpdatedAt === remoteThemeUpdatedAt))) {
+    merged.theme = local.theme;
+    merged.themeUpdatedAt = local.themeUpdatedAt || remote.themeUpdatedAt || null;
+  }
+  if (timestamp(local.parlayDraftUpdatedAt) >= timestamp(remote.parlayDraftUpdatedAt) && local.parlayDraftUpdatedAt) {
+    merged.parlayDraftUpdatedAt = local.parlayDraftUpdatedAt;
+  }
+  return merged;
+}
+
+function mergeParlayDraft(local = {}, remote = {}) {
+  const localUpdatedAt = timestamp(local.preferences?.parlayDraftUpdatedAt);
+  const remoteUpdatedAt = timestamp(remote.preferences?.parlayDraftUpdatedAt);
+  const remoteDraft = remote.parlay_draft ?? remote.parlayDraft;
+  if (localUpdatedAt || remoteUpdatedAt) {
+    return localUpdatedAt >= remoteUpdatedAt
+      ? (Array.isArray(local.parlayDraft) ? local.parlayDraft : [])
+      : (Array.isArray(remoteDraft) ? remoteDraft : []);
+  }
+  return mergeById(local.parlayDraft, remoteDraft).slice(0, 12);
+}
+
 export function mergeCloudState(local = {}, remote = {}) {
   return {
-    preferences: { ...(local.preferences || {}), ...(remote.preferences || {}) },
-    parlayDraft: mergeById(local.parlayDraft, remote.parlay_draft ?? remote.parlayDraft).slice(0, 12),
+    preferences: mergePreferences(local.preferences, remote.preferences),
+    parlayDraft: mergeParlayDraft(local, remote).slice(0, 12),
     savedPicks: mergeById(local.savedPicks, remote.saved_picks ?? remote.savedPicks),
     savedParlays: mergeById(local.savedParlays, remote.saved_parlays ?? remote.savedParlays),
     evidenceSnapshots: mergeById(local.evidenceSnapshots, remote.evidence_snapshots ?? remote.evidenceSnapshots),
