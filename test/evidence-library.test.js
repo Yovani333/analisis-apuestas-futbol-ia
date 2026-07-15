@@ -2,9 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadEvidenceLibrary } from "../server/services/audit/evidence-library.service.js";
 
-test("carga las nueve evidencias existentes con liga y contrato auditable", () => {
+test("carga evidencias de Mundial y Superliga China sin duplicar fixtures", () => {
   const library = loadEvidenceLibrary();
-  assert.equal(library.snapshots.length, 9);
+  assert.equal(library.snapshots.length, 18);
+  assert.equal(new Set(library.snapshots.map((snapshot) => snapshot.fixture.id)).size, 18);
+  assert.deepEqual(new Set(library.snapshots.map((snapshot) => snapshot.fixture.leagueName)), new Set(["Copa Mundial FIFA", "Superliga China"]));
+  assert.ok(library.snapshots.some((snapshot) => snapshot.fixture.leagueSlug === "chinese-super-league"));
   for (const snapshot of library.snapshots) {
     assert.ok(snapshot.fixture.leagueName);
     assert.ok(snapshot.fixture.id);
@@ -14,4 +17,3 @@ test("carga las nueve evidencias existentes con liga y contrato auditable", () =
     assert.ok(Array.isArray(snapshot.modules.dataPicks.picks));
   }
 });
-

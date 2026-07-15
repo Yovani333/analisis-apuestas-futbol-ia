@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
+import { ALLOWED_LEAGUES } from "../../config/leagues.js";
 
-const LIBRARY_PATH = new URL("../../../docs/world-cup-evidence-audit-2026-pilot.json", import.meta.url);
+const LIBRARY_PATH = new URL("../../../docs/evidence-library.json", import.meta.url);
 
 function technicalOrigin(label) {
   const value = String(label || "").toLowerCase();
@@ -14,6 +15,7 @@ function reportSnapshot(report) {
   const [home = "Local", away = "Visitante"] = String(report.match || "").split(/\s+vs\s+/i);
   const leagueId = Number(String(report.competition || "").match(/ID\s+(\d+)/i)?.[1]) || null;
   const leagueName = String(report.competition || "").replace(/\s*\(ID\s+\d+\)\s*$/i, "").trim() || "No disponible";
+  const leagueSlug = ALLOWED_LEAGUES.find((league) => Number(league.apiId) === leagueId)?.slug || "";
   return {
     version: 2,
     id: `library:${report.fixtureId}:${Date.parse(report.capturedAt || "") || 0}`,
@@ -22,7 +24,7 @@ function reportSnapshot(report) {
     fixture: {
       id: String(report.fixtureId), date: String(report.matchDate || "").slice(0, 10), time: "",
       utcDateTime: report.matchDate || null, status: "scheduled", statusLabel: "Programado",
-      leagueName, leagueId, leagueSlug: leagueId === 1 ? "world-cup" : "", season: Number(report.season) || report.season || null,
+      leagueName, leagueId, leagueSlug, season: Number(report.season) || report.season || null,
       country: report.country || "Mundial", home: home.trim(), away: away.trim(),
       homeTeamId: Number(report.homeTeamId) || report.homeTeamId || null,
       awayTeamId: Number(report.awayTeamId) || report.awayTeamId || null
@@ -73,6 +75,8 @@ export function loadEvidenceLibrary() {
   return {
     label: payload.label,
     generatedAt: payload.generatedAt,
+    competitions: payload.competitions || [],
+    duplicatesIgnored: payload.duplicatesIgnored || 0,
     count: payload.reports?.length || 0,
     snapshots: (payload.reports || []).map(reportSnapshot)
   };
