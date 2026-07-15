@@ -8,7 +8,7 @@ const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "u
 
 test("el menu lateral agrupa las vistas en un orden profesional", () => {
   assert.match(html, /id="app-sidebar"[\s\S]*id="nav-main-title">Principal<[\s\S]*id="nav-intelligence-title">Inteligencia<[\s\S]*id="nav-tracking-title">Seguimiento<[\s\S]*id="nav-account-title">Cuenta</);
-  const views = ["dashboard", "simulation", "live", "transparency", "guide", "markets", "pick-collection", "saved", "alerts", "audit", "account"];
+  const views = ["dashboard", "simulation", "live", "transparency", "guide", "markets", "pick-collection", "saved", "audit", "account"];
   const positions = views.map((view) => html.indexOf(`data-view="${view}"`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((a, b) => a - b), positions);
@@ -17,6 +17,7 @@ test("el menu lateral agrupa las vistas en un orden profesional", () => {
   assert.match(html, /data-view-panel="pick-collection"[\s\S]*id="collect-pick-info"[\s\S]*Actualizar picks/);
   assert.match(html, /data-view="pick-collection"[\s\S]*Picks recomendados/);
   assert.doesNotMatch(app, /<h3>Datos recopilados<\/h3>/);
+  assert.doesNotMatch(html, /data-view="alerts"|data-view-panel="alerts"|>Avisos</);
   const guide = html.slice(html.indexOf('data-view-panel="guide"'), html.indexOf('data-view-panel="markets"'));
   assert.doesNotMatch(guide, /id="specific-markets-panel"/);
 });
@@ -70,4 +71,17 @@ test("temporada se abre desde cada encuentro y la actualizacion de cinco minutos
 test("modo oscuro cubre picks individuales y sus metricas", () => {
   assert.match(styles, /data-theme="dark"[^}]*\.saved-pick/);
   assert.match(styles, /data-theme="dark"[^}]*\.saved-market-metrics/);
+});
+
+test("Mis apuestas separa picks, resultados por origen, parlays y papelera", () => {
+  assert.match(html, /data-saved-tab="individual"[^>]*>Picks individuales/);
+  assert.match(html, /data-saved-tab="origins"[^>]*>Resultados por origen/);
+  assert.match(html, /id="saved-individual-section"[\s\S]*id="update-individual-results"/);
+  assert.match(html, /id="origin-results-section"[\s\S]*id="update-origin-results"/);
+  assert.match(html, /id="saved-parlays-section"[\s\S]*id="update-parlay-results"/);
+  assert.match(app, /calculateOriginPerformance\(state\.savedPicks, state\.savedParlays\)/);
+});
+
+test("En vivo permite scroll vertical interno y continuar en la pagina", () => {
+  assert.match(styles, /\.live-data-content \.detail-table-wrap \{[^}]*max-height: min\(72vh, 720px\)[^}]*overflow: auto[^}]*overscroll-behavior-y: auto/);
 });
