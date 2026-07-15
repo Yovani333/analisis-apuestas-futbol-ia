@@ -1,5 +1,6 @@
 const number = (value) => value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
 const round = (value, digits = 1) => Number(Number(value || 0).toFixed(digits));
+const metricNumber = (value) => number(typeof value === "string" ? value.replace("%", "").trim() : value);
 
 function moduleEntry({ name, result, source, status, confidence = "No disponible", probability = null, sampleSize = null, warnings = [], feeds = [] }) {
   return {
@@ -63,10 +64,10 @@ function candidateFromPick(fixture, pick, sourceModule, sourceLabel, sourceFamil
     sourceModule: "pick_analysis_snapshot",
     originModule: sourceModule,
     source: sourceLabel,
-    sourceLabel: "Recopilación para Picks",
+    sourceLabel: "Picks recomendados",
     backingModels: [sourceLabel],
     independentFamilies: [sourceFamily],
-    allowSingleSource: ["data_picks", "player_goal_candidate", "team_average_performance"].includes(sourceModule) && Boolean(pick.canAdd ?? true),
+    allowSingleSource: ["data_picks", "corners", "player_goal_candidate", "team_average_performance"].includes(sourceModule) && Boolean(pick.canAdd ?? true),
     supportingData: pick.supportingData || [],
     contradictingData: pick.contradictingData || [],
     modelSignals: modelProbability === null ? [] : [{ source: sourceLabel, probability: modelProbability }],
@@ -74,7 +75,48 @@ function candidateFromPick(fixture, pick, sourceModule, sourceLabel, sourceFamil
   };
 }
 
-function candidateSources(fixture, results) {
+export function buildPerformanceWinnerPick(fixture, teamPerformance, oddsMarkets = []) {
+  const home = teamPerformance?.equipo_local;
+  const away = teamPerformance?.equipo_visitante;
+  const metrics = ["pases_acertados", "tiros", "entradas"];
+  if (!fixture?.id || !home?.nombre || !away?.nombre || !home?.metricas || !away?.metricas) return null;
+  if (metrics.some((key) => metricNumber(home.metricas[key]) === null || metricNumber(away.metricas[key]) === null)) return null;
+
+  const homeLeads = metrics.every((key) => metricNumber(home.metricas[key]) > metricNumber(away.metricas[key]));
+  const awayLeads = metrics.every((key) => metricNumber(away.metricas[key]) > metricNumber(home.metricas[key]));
+  if (!homeLeads && !awayLeads) return null;
+
+  const side = homeLeads ? "home" : "away";
+  const team = homeLeads ? home : away;
+  const opponent = homeLeads ? away : home;
+  const selectionKey = `${side}_win`;
+  const marketOdd = oddsMarkets.find((item) => item.marketKey === "match_winner" && item.selectionKey === selectionKey);
+  const k = Number(teamPerformance?.k || 0);
+  const confidenceScore = k >= 5 ? 65 : k >= 3 ? 58 : 50;
+  const gaps = metrics.map((key) => `${key.replace("pases_acertados", "pases acertados")}: ${round(metricNumber(team.metricas[key]) - metricNumber(opponent.metricas[key]), 2)}`);
+
+  return {
+    marketKey: "match_winner",
+    selectionKey,
+    market: "Resultado 1X2",
+    selection: marketOdd?.selection || `${team.nombre} gana`,
+    decimalOdds: marketOdd?.decimalOdds ?? null,
+    expectedValuePct: marketOdd?.expectedValuePct ?? null,
+    modelProbabilityPct: marketOdd?.estimatedProbabilityPct ?? null,
+    confidenceScore,
+    confidence: k >= 5 ? "Media-alta" : "Media",
+    risk: "Señal comparativa; validar con 1X2 y cuotas",
+    decision: "PRECAUCIÓN",
+    highlightColor: "orange",
+    canAdd: true,
+    requiresReview: true,
+    explanation: `${team.nombre} supera a ${opponent.nombre} simultáneamente en pases acertados, tiros y entradas dentro de la muestra k=${k}. Se recomienda como posible ganador, sujeto a validación con cuotas y contexto del partido.`,
+    supportingData: gaps,
+    contradictingData: []
+  };
+}
+
+function candidateSources(fixture, results, oddsMarkets = []) {
   const rows = [];
   const add = (picks, module, label, filter = () => true) => {
     for (const pick of picks || []) {
@@ -96,6 +138,7 @@ function candidateSources(fixture, results) {
     }
   }
   for (const side of ["home", "away"]) add(results.teamPerformance?.picks?.[side], "team_average_performance", "Rendimiento promedio por equipo", (pick) => pick.canAdd);
+  add([buildPerformanceWinnerPick(fixture, results.teamPerformance, oddsMarkets)].filter(Boolean), "team_average_performance", "Rendimiento promedio por equipo");
   add(results.playerGoals?.candidates, "player_goal_candidate", "Jugador con posible gol");
   return rows;
 }
@@ -123,7 +166,7 @@ function mergeConsensus(rows) {
       canAdd: row.contradictingData.length === 0 && (allowSingleSource || row.independentFamilies.length >= 2),
       requiresReview: row.requiresReview || row.independentFamilies.length < 2 || row.contradictingData.length > 0
     }))
-    .sort((a, b) => b.backingModels.length - a.backingModels.length || b.confidenceScore - a.confidenceScore)
+    .sort((a, b) => Number(b.canAdd) - Number(a.canAdd) || b.backingModels.length - a.backingModels.length || b.confidenceScore - a.confidenceScore || (b.expectedValue ?? -Infinity) - (a.expectedValue ?? -Infinity))
     .slice(0, 8);
 }
 
@@ -140,7 +183,7 @@ export function buildPickAnalysisCollection(dataset, results, apiUsage = {}) {
     moduleEntry({ name: "Jugadores", result: results.playerGoals?.status, sampleSize: results.playerGoals?.playersEvaluated, source: results.playerGoals?.source, status: results.playerGoals?.status, confidence: results.playerGoals?.candidates?.[0]?.confidence || "No disponible", warnings: [results.playerGoals?.message], feeds: ["Jugador con posible gol", "Forma individual"] }),
     moduleEntry({ name: "Mercado y cuotas", result: `${dataset.marketAnalysis?.length || 0} mercados normalizados`, source: "API-Football", status: dataset.marketAnalysis?.length ? "available" : "not_available", confidence: dataset.marketAnalysis?.length ? "Media" : "No disponible", feeds: ["EV", "Cuotas"] })
   ];
-  const candidateMarkets = mergeConsensus(candidateSources(fixture, results));
+  const candidateMarkets = mergeConsensus(candidateSources(fixture, results, dataset.marketAnalysis || []));
   const consensus = candidateMarkets.map((pick) => ({
     market: pick.market,
     selection: pick.selection,
@@ -157,7 +200,7 @@ export function buildPickAnalysisCollection(dataset, results, apiUsage = {}) {
   const availablePct = Math.round(validModules / modules.length * 100);
   return {
     type: "pickAnalysisSnapshot",
-    modelVersion: "pick-analysis-snapshot-v2",
+    modelVersion: "pick-analysis-snapshot-v3",
     fixtureId: fixture.id,
     generatedAt: new Date().toISOString(),
     source: "server-orchestrated-cache-and-api",

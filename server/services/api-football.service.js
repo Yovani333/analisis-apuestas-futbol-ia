@@ -406,6 +406,26 @@ export function shouldLoadCurrentFixtureData(status) {
   return fixtureStatus(status) !== "scheduled";
 }
 
+export function resolveFixtureOddsRequest(status) {
+  return fixtureStatus(status) === "live"
+    ? { endpoint: "/odds/live", mode: "live", cacheTtl: LIVE_CACHE_TTL }
+    : { endpoint: "/odds", mode: "pre_match", cacheTtl: CACHE_TTL };
+}
+
+async function loadFixtureOdds(fixtureId, status) {
+  const request = resolveFixtureOddsRequest(status);
+  const rows = await apiRequest(request.endpoint, { fixture: fixtureId }, request.cacheTtl).catch(() => []);
+  if (request.mode !== "live" || rows.length) return { ...request, rows };
+
+  const fallbackRows = await apiRequest("/odds", { fixture: fixtureId }, CACHE_TTL).catch(() => []);
+  return {
+    endpoint: "/odds",
+    mode: fallbackRows.length ? "pre_match_fallback" : "live",
+    cacheTtl: CACHE_TTL,
+    rows: fallbackRows
+  };
+}
+
 export function isCoverageAvailable(coverage, path, fallback = true) {
   if (!coverage) return fallback;
   let value = coverage;
@@ -499,13 +519,13 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
   const statisticsCutoffDate = new Date(Date.parse(base.fixture.date) - 86400000).toISOString().slice(0, 10);
   const safe = (promise) => promise.catch(() => []);
   const safeAdvanced = (promise) => promise.then((data) => ({ data, failed: false })).catch(() => ({ data: null, failed: true }));
-  const [statistics, standings, h2h, injuries, lineups, odds, homeRecentRows, awayRecentRows, predictions, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
+  const [statistics, standings, h2h, injuries, lineups, oddsResult, homeRecentRows, awayRecentRows, predictions, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
     loadCurrentFixtureData && allows("fixtures.statistics_fixtures") ? safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })) : Promise.resolve([]),
     allows("standings") ? safe(apiRequest("/standings", { league: base.league.id, season })) : Promise.resolve([]),
     safe(apiRequest("/fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 })),
     allows("injuries") ? safe(apiRequest("/injuries", { fixture: fixtureId })) : Promise.resolve([]),
     allows("fixtures.lineups") ? safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })) : Promise.resolve([]),
-    allows("odds") ? safe(apiRequest("/odds", { fixture: fixtureId })) : Promise.resolve([]),
+    allows("odds") ? loadFixtureOdds(fixtureId, base.fixture.status?.short) : Promise.resolve({ endpoint: "/odds", mode: "not_available", cacheTtl: CACHE_TTL, rows: [] }),
     safe(apiRequest("/fixtures", { team: homeId, last: 10, timezone: "UTC" })),
     safe(apiRequest("/fixtures", { team: awayId, last: 10, timezone: "UTC" })),
     allows("predictions") ? safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)) : Promise.resolve([]),
@@ -519,7 +539,16 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
   fixture.favorite = normalizeFavorite(predictions, fixture);
   const homeForm = summarizeRecentFixtures(homeRecentRows, homeId, base.fixture.date);
   const awayForm = summarizeRecentFixtures(awayRecentRows, awayId, base.fixture.date);
+  const odds = oddsResult.rows || [];
   const oddsSummary = normalizeOdds(odds, { homeName: fixture.home, awayName: fixture.away });
+  const fetchedAt = new Date().toISOString();
+  oddsSummary.providerUpdatedAt = oddsSummary.updatedAt;
+  oddsSummary.queriedAt = fetchedAt;
+  oddsSummary.mode = oddsResult.mode;
+  oddsSummary.endpoint = oddsResult.endpoint;
+  oddsSummary.refreshPolicy = oddsResult.mode === "live"
+    ? "API-Football live: actualización del proveedor entre 5 y 60 segundos."
+    : "API-Football prepartido: el proveedor puede actualizar aproximadamente cada 3 horas según la competición.";
   const dataQuality = calculateDataQuality({ homeForm, awayForm, odds: oddsSummary, standings, injuries, lineups, h2h });
   const marketAnalysis = calculateMarketAnalysis(homeForm, awayForm, oddsSummary).map((market) => ({
     ...market,
@@ -542,7 +571,7 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
 
   const dataset = {
     source: "api-football",
-    fetchedAt: new Date().toISOString(),
+    fetchedAt,
     fixture,
     confirmed: {
       statistics, standings, h2h, injuries, lineups, odds,

@@ -39,6 +39,15 @@ test("normaliza cuotas principales y calcula margen de la casa", () => {
   assert.equal(calculations[0].noVigImpliedProbabilityPct, 50);
 });
 
+test("normaliza la estructura del endpoint de cuotas en vivo", () => {
+  const odds = normalizeOdds([{ update: "2026-07-14T20:00:00Z", odds: [
+    { id: 1, name: "Match Winner", values: [{ value: "Home", odd: "1.80" }, { value: "Draw", odd: "3.40" }, { value: "Away", odd: "4.20" }] }
+  ] }], { homeName: "Local", awayName: "Visitante" });
+  assert.equal(odds.bookmaker, "API-Football Live");
+  assert.equal(odds.selections.find((item) => item.selectionKey === "home_win")?.decimalOdds, 1.8);
+  assert.equal(odds.updatedAt, "2026-07-14T20:00:00Z");
+});
+
 test("usa nombres de equipos en doble oportunidad sin asumir localía", () => {
   const odds = normalizeOdds([{ bookmakers: [{ name: "Casa", bets: [{ name: "Double Chance", values: [{ value: "Home/Draw", odd: "1.40" }, { value: "Draw/Away", odd: "1.70" }] }] }] }], {
     homeName: "México", awayName: "Japón"

@@ -330,8 +330,9 @@ apiRouter.post("/fixtures/:fixtureId/models/corners", requireLiveMode, asyncRout
 
 apiRouter.post("/fixtures/:fixtureId/picks/collection", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
   const before = getApiFootballObservability();
-  const dataset = await getFixtureDataset(fixtureId);
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
   dataset.poissonModel ||= calculatePoissonModel(dataset);
   dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
   dataset.cornersModel ||= calculateCornersModel(dataset);

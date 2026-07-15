@@ -108,6 +108,7 @@ export function getH2HData(dataset) {
 }
 
 export function getOddsData(dataset) {
+  const oddsMeta = dataset.preMatch?.odds || {};
   const apiMarkets = (dataset.marketAnalysis || []).map((market) => ({
     marketKey: market.marketKey, selectionKey: market.selectionKey, market: market.market,
     selection: market.selection, decimalOdds: market.decimalOdds, bookmaker: market.bookmaker || dataset.preMatch?.odds?.bookmaker || "",
@@ -136,8 +137,14 @@ export function getOddsData(dataset) {
     ? "Cuotas complementarias de Oddspedia recuperadas mediante búsqueda web restringida; requieren revisión."
     : markets.length ? "" : "No se encontraron cuotas principales verificables.";
   return {
-    ...moduleBase(status, apiMarkets.length ? dataset.preMatch?.odds?.updatedAt || dataset.fetchedAt : oddspedia?.updatedAt || dataset.fetchedAt, source, message),
-    markets
+    ...moduleBase(status, apiMarkets.length ? oddsMeta.providerUpdatedAt || oddsMeta.updatedAt || dataset.fetchedAt : oddspedia?.updatedAt || dataset.fetchedAt, source, message),
+    markets,
+    providerUpdatedAt: apiMarkets.length ? oddsMeta.providerUpdatedAt || oddsMeta.updatedAt || null : oddspedia?.updatedAt || null,
+    queriedAt: oddsMeta.queriedAt || dataset.fetchedAt,
+    oddsMode: oddsMeta.mode || "pre_match",
+    endpoint: oddsMeta.endpoint || "/odds",
+    refreshPolicy: oddsMeta.refreshPolicy || "La frecuencia depende del proveedor y de la competición.",
+    isFallbackSnapshot: oddsMeta.mode === "pre_match_fallback"
   };
 }
 
