@@ -5,53 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260713-origin-results-v3" />
+    <link rel="stylesheet" href="styles.css?v=20260715-sidebar-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
 
-    <header class="app-header">
-      <div class="brand">
-        <span class="brand__mark" aria-hidden="true"><span>⚽</span><i>↗</i></span>
-        <div>
-          <h1>Football Intelligence</h1>
-          <p>Centro de análisis predictivo y control de riesgo</p>
+    <header id="app-sidebar" class="app-header" aria-label="Panel lateral">
+      <div class="sidebar-brand-row">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true"><span>⚽</span><i>↗</i></span>
+          <div>
+            <h1>Football Intelligence</h1>
+            <p>Centro de control deportivo</p>
+          </div>
         </div>
+        <button id="sidebar-close" class="sidebar-close" type="button" aria-label="Cerrar menú">×</button>
       </div>
 
       <nav class="main-nav" aria-label="Navegación principal">
-        <button class="main-nav__item main-nav__item--active" type="button" data-view="dashboard" aria-current="page">
-          <span aria-hidden="true">▦</span> Dashboard
-        </button>
-        <button class="main-nav__item" type="button" data-view="simulation">Simulación</button>
-        <button class="main-nav__item" type="button" data-view="transparency">Transparencia de datos</button>
-        <button class="main-nav__item" type="button" data-view="guide">Guía de análisis</button>
-        <button class="main-nav__item" type="button" data-view="markets">Catálogo de mercados</button>
-        <button class="main-nav__item" type="button" data-view="live">En vivo</button>
-        <button class="main-nav__item" type="button" data-view="pick-collection">Recopilación para Picks</button>
-        <button id="theme-toggle" class="main-nav__item" type="button" aria-pressed="false" title="Cambiar tema">Modo oscuro</button>
-        <button class="main-nav__item" type="button" data-view="saved">
-          <span aria-hidden="true">▣</span> Mis apuestas <span id="saved-parlay-count" class="nav-count">0</span>
-        </button>
-        <button class="main-nav__item" type="button" data-view="alerts">
-          <span aria-hidden="true">♧</span> Alertas
-          <span id="alert-count" class="nav-count">0</span>
-        </button>
-        <button class="main-nav__item" type="button" data-view="audit">
-          Auditoría
-        </button>
-        <button class="main-nav__item" type="button" data-view="account">
-          <span aria-hidden="true">◎</span> Mi cuenta <span aria-hidden="true">⌄</span>
-        </button>
-        <div class="notification-menu">
-          <button id="notification-toggle" class="main-nav__item notification-menu__toggle" type="button" aria-expanded="false" aria-label="Notificaciones no leídas">Avisos <span id="notification-count" class="nav-count">0</span></button>
-          <div id="notification-popover" class="notification-popover" hidden>
-            <div><strong>Notificaciones</strong><button id="mark-notifications-read" type="button">Marcar leídas</button></div>
-            <div id="notification-list" class="notification-list"></div>
+        <section class="main-nav__group" aria-labelledby="nav-main-title">
+          <h2 id="nav-main-title">Principal</h2>
+          <button class="main-nav__item main-nav__item--active" type="button" data-view="dashboard" aria-current="page"><span class="nav-icon" aria-hidden="true">▦</span><span>Dashboard</span></button>
+          <button class="main-nav__item" type="button" data-view="simulation"><span class="nav-icon" aria-hidden="true">△</span><span>Simulación</span></button>
+          <button class="main-nav__item" type="button" data-view="live"><span class="nav-icon nav-icon--live" aria-hidden="true">●</span><span>En vivo</span></button>
+        </section>
+
+        <section class="main-nav__group" aria-labelledby="nav-intelligence-title">
+          <h2 id="nav-intelligence-title">Inteligencia</h2>
+          <button class="main-nav__item" type="button" data-view="transparency"><span class="nav-icon" aria-hidden="true">≡</span><span>Transparencia de datos</span></button>
+          <button class="main-nav__item" type="button" data-view="guide"><span class="nav-icon" aria-hidden="true">?</span><span>Guía de análisis</span></button>
+          <button class="main-nav__item" type="button" data-view="markets"><span class="nav-icon" aria-hidden="true">◇</span><span>Catálogo de mercados</span></button>
+          <button class="main-nav__item" type="button" data-view="pick-collection"><span class="nav-icon" aria-hidden="true">+</span><span>Recopilación para Picks</span></button>
+        </section>
+
+        <section class="main-nav__group" aria-labelledby="nav-tracking-title">
+          <h2 id="nav-tracking-title">Seguimiento</h2>
+          <button class="main-nav__item" type="button" data-view="saved"><span class="nav-icon" aria-hidden="true">✓</span><span>Mis apuestas</span><span id="saved-parlay-count" class="nav-count">0</span></button>
+          <button class="main-nav__item" type="button" data-view="alerts"><span class="nav-icon" aria-hidden="true">!</span><span>Alertas</span><span id="alert-count" class="nav-count">0</span></button>
+          <button class="main-nav__item" type="button" data-view="audit"><span class="nav-icon" aria-hidden="true">▤</span><span>Auditoría</span></button>
+        </section>
+
+        <section class="main-nav__group main-nav__group--account" aria-labelledby="nav-account-title">
+          <h2 id="nav-account-title">Cuenta</h2>
+          <div class="notification-menu">
+            <button id="notification-toggle" class="main-nav__item notification-menu__toggle" type="button" aria-expanded="false" aria-label="Notificaciones no leídas"><span class="nav-icon" aria-hidden="true">○</span><span>Avisos</span><span id="notification-count" class="nav-count">0</span></button>
+            <div id="notification-popover" class="notification-popover" hidden>
+              <div><strong>Notificaciones</strong><button id="mark-notifications-read" type="button">Marcar leídas</button></div>
+              <div id="notification-list" class="notification-list"></div>
+            </div>
           </div>
-        </div>
+          <button class="main-nav__item" type="button" data-view="account"><span class="nav-icon" aria-hidden="true">◎</span><span>Mi cuenta</span></button>
+          <button id="theme-toggle" class="main-nav__item" type="button" aria-pressed="false" title="Cambiar tema"><span class="nav-icon" aria-hidden="true">◐</span><span class="nav-label">Modo oscuro</span></button>
+        </section>
       </nav>
     </header>
+    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-controls="app-sidebar" aria-expanded="false"><span aria-hidden="true">☰</span><span>Menú</span></button>
+    <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
 
     <div class="demo-strip control-status" aria-label="Estado del sistema">
       <span id="runtime-mode" class="status-badge status-badge--demo">Modo demostración</span>
@@ -559,6 +568,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260715-xg-fields-v1"></script>
+    <script type="module" src="app.js?v=20260715-sidebar-v1"></script>
   </body>
 </html>

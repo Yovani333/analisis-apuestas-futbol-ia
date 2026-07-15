@@ -668,7 +668,7 @@ function applyTheme(theme, { userInitiated = false } = {}) {
   const dark = theme === "dark";
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   elements.themeToggle.setAttribute("aria-pressed", String(dark));
-  elements.themeToggle.textContent = dark ? "Modo claro" : "Modo oscuro";
+  elements.themeToggle.querySelector(".nav-label").textContent = dark ? "Modo claro" : "Modo oscuro";
   elements.accountDarkMode.checked = dark;
   state.preferences.theme = dark ? "dark" : "light";
   if (userInitiated) state.preferences.themeUpdatedAt = new Date().toISOString();
@@ -2153,6 +2153,20 @@ async function updateSavedParlayResults() {
   }
 }
 
+const sidebar = document.querySelector("#app-sidebar");
+const sidebarToggle = document.querySelector("#sidebar-toggle");
+const sidebarClose = document.querySelector("#sidebar-close");
+const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
+
+function setSidebarOpen(open, { restoreFocus = false } = {}) {
+  sidebar.classList.toggle("sidebar-open", open);
+  sidebarBackdrop.hidden = !open;
+  sidebarToggle.setAttribute("aria-expanded", String(open));
+  document.body.classList.toggle("sidebar-open", open);
+  if (open) sidebar.querySelector(".main-nav__item--active")?.focus();
+  else if (restoreFocus) sidebarToggle.focus();
+}
+
 function switchView(view) {
   state.currentView = view;
   document.querySelectorAll("[data-view-panel]").forEach((panel) => { panel.hidden = panel.dataset.viewPanel !== view; });
@@ -2169,6 +2183,7 @@ function switchView(view) {
     renderPickCollection(state.pickCollectionByFixture.get(selectedFixture()?.id));
   }
   if (["transparency", "guide", "markets"].includes(view)) void refreshCurrentViewData(view);
+  if (window.matchMedia("(max-width: 980px)").matches) setSidebarOpen(false);
   syncWeatherRefreshTimer();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -3815,6 +3830,19 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".notification-menu")) {
     elements.notificationPopover.hidden = true;
     elements.notificationToggle.setAttribute("aria-expanded", "false");
+  }
+});
+sidebarToggle.addEventListener("click", () => setSidebarOpen(sidebarToggle.getAttribute("aria-expanded") !== "true"));
+sidebarClose.addEventListener("click", () => setSidebarOpen(false, { restoreFocus: true }));
+sidebarBackdrop.addEventListener("click", () => setSidebarOpen(false, { restoreFocus: true }));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && sidebarToggle.getAttribute("aria-expanded") === "true") {
+    setSidebarOpen(false, { restoreFocus: true });
+  }
+});
+window.addEventListener("resize", () => {
+  if (!window.matchMedia("(max-width: 980px)").matches && sidebarToggle.getAttribute("aria-expanded") === "true") {
+    setSidebarOpen(false);
   }
 });
 elements.matchesList.addEventListener("click", async (event) => {

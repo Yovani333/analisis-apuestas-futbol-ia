@@ -6,13 +6,29 @@ const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 
-test("las vistas principales siguen el orden Dashboard, Simulacion, Transparencia, Guia, Catalogo, En vivo y Recopilacion", () => {
-  assert.match(html, /data-view="dashboard"[\s\S]*data-view="simulation">Simulaci[\s\S]*?n<\/button>\s*<button[^>]+data-view="transparency">Transparencia de datos<\/button>\s*<button[^>]+data-view="guide">Gu[\s\S]*?a de an[\s\S]*?lisis<\/button>\s*<button[^>]+data-view="markets">Cat[\s\S]*?logo de mercados<\/button>\s*<button[^>]+data-view="live">En vivo<\/button>\s*<button[^>]+data-view="pick-collection">Recopilaci[\s\S]*?n para Picks/);
+test("el menu lateral agrupa las vistas en un orden profesional", () => {
+  assert.match(html, /id="app-sidebar"[\s\S]*id="nav-main-title">Principal<[\s\S]*id="nav-intelligence-title">Inteligencia<[\s\S]*id="nav-tracking-title">Seguimiento<[\s\S]*id="nav-account-title">Cuenta</);
+  const views = ["dashboard", "simulation", "live", "transparency", "guide", "markets", "pick-collection", "saved", "alerts", "audit", "account"];
+  const positions = views.map((view) => html.indexOf(`data-view="${view}"`));
+  assert.ok(positions.every((position) => position >= 0));
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions);
   assert.match(html, /data-view-panel="simulation"[\s\S]*Comparador de equipos con datos reales/);
   assert.match(html, /data-view-panel="markets"/);
   assert.match(html, /data-view-panel="pick-collection"[\s\S]*id="collect-pick-info"[\s\S]*Recabar informaci[\s\S]*?n/);
   const guide = html.slice(html.indexOf('data-view-panel="guide"'), html.indexOf('data-view-panel="markets"'));
   assert.doesNotMatch(guide, /id="specific-markets-panel"/);
+});
+
+test("el menu lateral es fijo en escritorio y funciona como cajon accesible en movil", () => {
+  assert.match(html, /id="sidebar-toggle"[^>]+aria-controls="app-sidebar"[^>]+aria-expanded="false"/);
+  assert.match(html, /id="sidebar-backdrop"[^>]+hidden/);
+  assert.match(styles, /--sidebar-width:\s*252px/);
+  assert.match(styles, /@media \(min-width: 981px\)[\s\S]*body \{ padding-left: var\(--sidebar-width\); \}[\s\S]*\.app-header \{[\s\S]*position: fixed/);
+  assert.match(styles, /@media \(max-width: 980px\)[\s\S]*transform: translateX\(-104%\)[\s\S]*\.app-header\.sidebar-open \{ transform: translateX\(0\); \}/);
+  assert.match(app, /function setSidebarOpen\(open/);
+  assert.match(app, /event\.key === "Escape"/);
+  assert.match(html, /id="theme-toggle"[\s\S]*class="nav-label">Modo oscuro/);
+  assert.match(app, /themeToggle\.querySelector\("\.nav-label"\)\.textContent/);
 });
 
 test("la Guia conserva el orden Cobertura, Ataque, Poisson, Mercado y Decision", () => {
