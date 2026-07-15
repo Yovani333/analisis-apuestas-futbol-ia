@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
     <title>Análisis de Apuestas de Fútbol con IA</title>
-    <link rel="stylesheet" href="styles.css?v=20260715-sidebar-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260715-bets-results-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -41,19 +41,11 @@
         <section class="main-nav__group" aria-labelledby="nav-tracking-title">
           <h2 id="nav-tracking-title">Seguimiento</h2>
           <button class="main-nav__item" type="button" data-view="saved"><span class="nav-icon" aria-hidden="true">✓</span><span>Mis apuestas</span><span id="saved-parlay-count" class="nav-count">0</span></button>
-          <button class="main-nav__item" type="button" data-view="alerts"><span class="nav-icon" aria-hidden="true">!</span><span>Alertas</span><span id="alert-count" class="nav-count">0</span></button>
           <button class="main-nav__item" type="button" data-view="audit"><span class="nav-icon" aria-hidden="true">▤</span><span>Auditoría</span></button>
         </section>
 
         <section class="main-nav__group main-nav__group--account" aria-labelledby="nav-account-title">
           <h2 id="nav-account-title">Cuenta</h2>
-          <div class="notification-menu">
-            <button id="notification-toggle" class="main-nav__item notification-menu__toggle" type="button" aria-expanded="false" aria-label="Notificaciones no leídas"><span class="nav-icon" aria-hidden="true">○</span><span>Avisos</span><span id="notification-count" class="nav-count">0</span></button>
-            <div id="notification-popover" class="notification-popover" hidden>
-              <div><strong>Notificaciones</strong><button id="mark-notifications-read" type="button">Marcar leídas</button></div>
-              <div id="notification-list" class="notification-list"></div>
-            </div>
-          </div>
           <button class="main-nav__item" type="button" data-view="account"><span class="nav-icon" aria-hidden="true">◎</span><span>Mi cuenta</span></button>
           <button id="theme-toggle" class="main-nav__item" type="button" aria-pressed="false" title="Cambiar tema"><span class="nav-icon" aria-hidden="true">◐</span><span class="nav-label">Modo oscuro</span></button>
         </section>
@@ -460,23 +452,23 @@
           <h2>Mis apuestas</h2>
           <p>Consulta picks individuales y parlays usando el guardado actual del navegador.</p>
         </div>
-        <div class="saved-view__actions">
-          <div class="saved-refresh-box"><strong>Actualizar datos</strong><span>Consulta marcadores finales y liquida cada selección y el parlay completo.</span><button id="update-parlay-results" class="button button--primary" type="button">Actualizar resultados</button></div>
-          <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
-        </div>
+        <div class="saved-view__actions"><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></div>
       </section>
-      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
-      <section id="history-metrics" class="history-metrics" aria-label="Rendimiento histórico"></section>
-      <section id="origin-performance" class="origin-performance" aria-label="Resultados de picks por origen"></section>
-      <div id="saved-picks-list" class="saved-parlays-list"></div>
-      <div id="saved-parlays-list" class="saved-parlays-list" hidden></div>
-      <div id="trash-parlays-list" class="saved-parlays-list" hidden></div>
-    </main>
-
-    <main class="utility-view" data-view-panel="alerts" hidden>
-      <section class="utility-heading"><div><p class="eyebrow">Seguimiento API-Football</p><h2>Alertas</h2><p>Cambios detectados al actualizar partidos, marcadores y cobertura.</p></div><div class="panel-actions"><button id="mark-all-alerts-read" class="button button--secondary" type="button">Marcar leídas</button><button id="clear-alerts" class="button button--danger" type="button">Limpiar</button></div></section>
-      <section class="alert-settings panel"><label><input id="alert-live" type="checkbox" checked /> Inicio y estado del partido</label><label><input id="alert-score" type="checkbox" checked /> Cambios de marcador</label><label><input id="alert-data" type="checkbox" checked /> Cobertura y datos</label></section>
-      <div id="alerts-list" class="alerts-list"></div>
+      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins">Resultados por origen</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
+      <section id="saved-individual-section" class="saved-bets-section">
+        <div class="saved-section-toolbar"><div><h3>Picks individuales</h3><p>Solo selecciones guardadas individualmente, con su resultado ganado, perdido, anulado o pendiente.</p></div><button id="update-individual-results" class="button button--primary" type="button">Actualizar datos</button></div>
+        <div id="saved-picks-list" class="saved-parlays-list"></div>
+      </section>
+      <section id="origin-results-section" class="saved-bets-section" hidden>
+        <div class="saved-section-toolbar"><div><h3>Resultados por origen</h3><p>Conteo conjunto de picks individuales y selecciones incluidas en parlays ya concluidos.</p></div><button id="update-origin-results" class="button button--primary" type="button">Actualizar datos</button></div>
+        <section id="origin-performance" class="origin-performance" aria-label="Resultados de picks por origen"></section>
+      </section>
+      <section id="saved-parlays-section" class="saved-bets-section" hidden>
+        <div class="saved-section-toolbar"><div><h3>Parlays</h3><p>Actualiza cuotas, marcadores y el resultado de todas las selecciones del parlay.</p></div><button id="update-parlay-results" class="button button--primary" type="button">Actualizar datos</button></div>
+        <section id="history-metrics" class="history-metrics" aria-label="Rendimiento histórico"></section>
+        <div id="saved-parlays-list" class="saved-parlays-list"></div>
+      </section>
+      <section id="trash-results-section" class="saved-bets-section" hidden><div id="trash-parlays-list" class="saved-parlays-list"></div></section>
     </main>
 
     <main class="utility-view" data-view-panel="audit" hidden>
@@ -498,7 +490,7 @@
     <main class="utility-view" data-view-panel="account" hidden>
       <section class="utility-heading"><div><p class="eyebrow">Cuenta y sincronización</p><h2>Mi cuenta</h2><p>Accede con el mismo correo para consultar tus datos desde cualquier dispositivo.</p></div><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></section>
       <section id="cloud-account-panel" class="panel account-cloud" aria-labelledby="cloud-account-title">
-        <div class="account-cloud__heading"><div><h3 id="cloud-account-title">Sincronización en línea</h3><p>Guarda picks, parlays, evidencias, alertas y preferencias en tu cuenta.</p></div><span id="cloud-account-status" class="status-badge status-badge--processing">Comprobando</span></div>
+        <div class="account-cloud__heading"><div><h3 id="cloud-account-title">Sincronización en línea</h3><p>Guarda picks, parlays, evidencias y preferencias en tu cuenta.</p></div><span id="cloud-account-status" class="status-badge status-badge--processing">Comprobando</span></div>
         <div id="cloud-auth-fields" class="account-cloud__auth">
           <label>Correo electrónico<input id="cloud-email-input" type="email" autocomplete="email" maxlength="160" placeholder="correo@ejemplo.com" /></label>
           <label>Contraseña<input id="cloud-password-input" type="password" autocomplete="current-password" minlength="8" maxlength="128" placeholder="Mínimo 8 caracteres" /></label>
@@ -568,6 +560,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260715-sidebar-v1"></script>
+    <script type="module" src="app.js?v=20260715-bets-results-v1"></script>
   </body>
 </html>

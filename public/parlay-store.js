@@ -103,17 +103,75 @@ export function settleLegResult(selectionCode, fixtureResult) {
     away_win: away > home,
     "1X": home >= away,
     X2: away >= home,
+    "12": home !== away,
     home_over_0_5: home > 0,
     home_over_1_5: home > 1,
     away_over_0_5: away > 0,
     away_over_1_5: away > 1,
+    over_1_5: total > 1.5,
     over_2_5: total > 2.5,
+    over_3_5: total > 3.5,
+    under_1_5: total < 1.5,
     under_2_5: total < 2.5,
     under_3_5: total < 3.5,
     btts_yes: home > 0 && away > 0,
     btts_no: home === 0 || away === 0
   };
   return selectionCode in outcomes ? (outcomes[selectionCode] ? "won" : "lost") : "pending";
+}
+
+function normalizedSelectionText(value) {
+  return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+}
+
+export function resolveSelectionCode(leg = {}) {
+  if (leg.selectionCode) return String(leg.selectionCode);
+  const selection = normalizedSelectionText(leg.selection);
+  const market = normalizedSelectionText(`${leg.marketCode || ""} ${leg.market || ""}`);
+  const home = normalizedSelectionText(leg.home);
+  const away = normalizedSelectionText(leg.away);
+  const belongsTo = (team) => Boolean(team && selection.includes(team));
+
+  if (/\b1x\b|local.*empate|home.*draw/.test(selection)) return "1X";
+  if (/\bx2\b|empate.*visitante|draw.*away/.test(selection)) return "X2";
+  if (/\b12\b|local.*visitante|home.*away/.test(selection)) return "12";
+  if (/dnb|empate no apuesta/.test(`${market} ${selection}`)) return belongsTo(away) ? "away_dnb" : belongsTo(home) ? "home_dnb" : null;
+  if (/ambos.*anotan|btts/.test(market)) return /\b(no)\b/.test(selection) ? "btts_no" : /\b(si|yes)\b/.test(selection) ? "btts_yes" : null;
+  if (/corners|tiros de esquina/.test(`${market} ${selection}`)) {
+    if (/mas corners|most corners/.test(selection)) return belongsTo(away) ? "away_most_corners" : belongsTo(home) ? "home_most_corners" : null;
+    if (/mas de|over/.test(selection)) return "over_corners";
+    if (/menos de|under/.test(selection)) return "under_corners";
+  }
+  if (/mas de 0[.,]5/.test(selection)) return belongsTo(away) ? "away_over_0_5" : belongsTo(home) ? "home_over_0_5" : null;
+  if (/mas de 1[.,]5/.test(selection) && /goles de|team.*goals/.test(market)) return belongsTo(away) ? "away_over_1_5" : belongsTo(home) ? "home_over_1_5" : null;
+  if (/mas de 1[.,]5|over 1[.,]5/.test(selection)) return "over_1_5";
+  if (/mas de 2[.,]5|over 2[.,]5/.test(selection)) return "over_2_5";
+  if (/mas de 3[.,]5|over 3[.,]5/.test(selection)) return "over_3_5";
+  if (/menos de 1[.,]5|under 1[.,]5/.test(selection)) return "under_1_5";
+  if (/menos de 2[.,]5|under 2[.,]5/.test(selection)) return "under_2_5";
+  if (/menos de 3[.,]5|under 3[.,]5/.test(selection)) return "under_3_5";
+  if (/empate|\bdraw\b/.test(selection) && !belongsTo(home) && !belongsTo(away)) return "draw";
+  if (/^local gana|home wins?/.test(selection)) return "home_win";
+  if (/^visitante gana|away wins?/.test(selection)) return "away_win";
+  if (belongsTo(home) && (/gana|winner/.test(`${market} ${selection}`) || selection === home)) return "home_win";
+  if (belongsTo(away) && (/gana|winner/.test(`${market} ${selection}`) || selection === away)) return "away_win";
+  return null;
+}
+
+export function settlePickResult(leg, fixtureResult) {
+  const selectionCode = resolveSelectionCode(leg);
+  if (!selectionCode || !fixtureResult?.finished) return "pending";
+  if (!/corners/.test(selectionCode)) return settleLegResult(selectionCode, fixtureResult);
+
+  const homeCorners = Number(fixtureResult.corners?.home);
+  const awayCorners = Number(fixtureResult.corners?.away);
+  if (!Number.isFinite(homeCorners) || !Number.isFinite(awayCorners)) return "pending";
+  if (selectionCode === "home_most_corners") return homeCorners === awayCorners ? "void" : homeCorners > awayCorners ? "won" : "lost";
+  if (selectionCode === "away_most_corners") return homeCorners === awayCorners ? "void" : awayCorners > homeCorners ? "won" : "lost";
+  const threshold = Number.parseFloat(normalizedSelectionText(leg.selection).match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(",", ".") || "");
+  if (!Number.isFinite(threshold)) return "pending";
+  const total = homeCorners + awayCorners;
+  return selectionCode === "over_corners" ? (total > threshold ? "won" : "lost") : total < threshold ? "won" : "lost";
 }
 
 export function calculateHistoryMetrics(parlays = []) {

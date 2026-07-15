@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, hasDuplicatePick, moveParlayToTrash, normalizePickLeg, pickIdentity, restoreParlayFromTrash, settleLegResult } from "../public/parlay-store.js";
+import { calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, hasDuplicatePick, moveParlayToTrash, normalizePickLeg, pickIdentity, resolveSelectionCode, restoreParlayFromTrash, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -111,6 +111,23 @@ test("liquida automáticamente los tres mercados permitidos", () => {
   assert.equal(settleLegResult("home_win", result), "won");
   assert.equal(settleLegResult("away_over_0_5", result), "won");
   assert.equal(settleLegResult("home_over_1_5", result), "won");
+  assert.equal(settleLegResult("over_1_5", result), "won");
+  assert.equal(settleLegResult("12", result), "won");
+});
+
+test("recupera el código de picks antiguos y los liquida con el marcador final", () => {
+  const result = { finished: true, goals: { home: 2, away: 0 } };
+  assert.equal(resolveSelectionCode({ home: "Argentina", away: "Egypt", market: "Resultado 1X2", selection: "Argentina gana" }), "home_win");
+  assert.equal(settlePickResult({ home: "Argentina", away: "Egypt", market: "Resultado 1X2", selection: "Argentina gana" }, result), "won");
+  assert.equal(settlePickResult({ market: "Total de goles 1.5", selection: "Más de 1.5 goles" }, result), "won");
+  assert.equal(settlePickResult({ market: "Ambos equipos anotan", selection: "Sí" }, result), "lost");
+});
+
+test("liquida corners cuando las estadísticas finales están disponibles", () => {
+  const result = { finished: true, goals: { home: 1, away: 0 }, corners: { home: 7, away: 3 } };
+  assert.equal(settlePickResult({ home: "A", away: "B", market: "Total de corners", selection: "Más de 8.5 corners" }, result), "won");
+  assert.equal(settlePickResult({ home: "A", away: "B", market: "Más corners", selection: "A más corners" }, result), "won");
+  assert.equal(settlePickResult({ home: "A", away: "B", market: "Total de corners", selection: "Más de 8.5 corners" }, { ...result, corners: null }), "pending");
 });
 
 test("liquida DNB como ganado, perdido o anulado", () => {

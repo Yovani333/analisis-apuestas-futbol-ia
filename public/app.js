@@ -3,8 +3,8 @@ import { footballDataService } from "./services.js?v=20260714-evidence-audit-v1"
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
-  hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
-} from "./parlay-store.js?v=20260714-evidence-audit-v1";
+  hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settlePickResult
+} from "./parlay-store.js?v=20260715-bets-results-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260714-evidence-audit-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -156,7 +156,13 @@ const elements = {
   trashParlaysList: document.querySelector("#trash-parlays-list"),
   historyMetrics: document.querySelector("#history-metrics"),
   originPerformance: document.querySelector("#origin-performance"),
-  updateParlayResults: document.querySelector("#update-parlay-results")
+  updateParlayResults: document.querySelector("#update-parlay-results"),
+  updateIndividualResults: document.querySelector("#update-individual-results"),
+  updateOriginResults: document.querySelector("#update-origin-results"),
+  savedIndividualSection: document.querySelector("#saved-individual-section"),
+  originResultsSection: document.querySelector("#origin-results-section"),
+  savedParlaysSection: document.querySelector("#saved-parlays-section"),
+  trashResultsSection: document.querySelector("#trash-results-section")
 };
 
 Object.assign(elements, {
@@ -183,12 +189,7 @@ Object.assign(elements, {
   collectPickInfo: document.querySelector("#collect-pick-info"),
   pickCollectionStatus: document.querySelector("#pick-collection-status"),
   pickCollectionContent: document.querySelector("#pick-collection-content-inner"),
-  themeToggle: document.querySelector("#theme-toggle"), alertCount: document.querySelector("#alert-count"),
-  notificationToggle: document.querySelector("#notification-toggle"), notificationCount: document.querySelector("#notification-count"),
-  notificationPopover: document.querySelector("#notification-popover"), notificationList: document.querySelector("#notification-list"),
-  markNotificationsRead: document.querySelector("#mark-notifications-read"), alertsList: document.querySelector("#alerts-list"),
-  markAllAlertsRead: document.querySelector("#mark-all-alerts-read"), clearAlerts: document.querySelector("#clear-alerts"),
-  alertLive: document.querySelector("#alert-live"), alertScore: document.querySelector("#alert-score"), alertData: document.querySelector("#alert-data"),
+  themeToggle: document.querySelector("#theme-toggle"),
   accountForm: document.querySelector("#account-form"), accountName: document.querySelector("#account-name"),
   accountDarkMode: document.querySelector("#account-dark-mode"),
   accountDailyLimit: document.querySelector("#account-daily-limit"),
@@ -347,9 +348,6 @@ function applyCloudState(remoteState) {
     writeLocalJson(ANALYSIS_USAGE_KEY, remoteState.analysisUsage || {});
     elements.accountName.value = state.preferences.name || "";
     elements.accountDailyLimit.value = state.preferences.dailyLimit || "none";
-    elements.alertLive.checked = state.preferences.alertLive !== false;
-    elements.alertScore.checked = state.preferences.alertScore !== false;
-    elements.alertData.checked = state.preferences.alertData !== false;
     applyTheme(state.preferences.theme || "dark");
     renderParlayDraft();
     renderSavedPicks();
@@ -437,7 +435,7 @@ function clearLocalAccountData() {
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(state.preferences));
     elements.accountName.value = "";
     elements.accountDailyLimit.value = "none";
-    renderParlayDraft(); renderSavedPicks(); renderSavedParlays(); renderAlerts(); renderAuditFixtureOptions();
+    renderParlayDraft(); renderSavedPicks(); renderSavedParlays(); renderAuditFixtureOptions();
   } finally { state.cloudApplying = false; }
 }
 
@@ -689,19 +687,7 @@ function addAlert(type, title, message, fixture = null) {
 }
 
 function renderAlerts() {
-  const unread = state.alerts.filter((item) => !item.read);
-  elements.alertCount.textContent = unread.length;
-  elements.notificationCount.textContent = unread.length;
-  elements.notificationToggle.classList.toggle("notification-menu__toggle--active", unread.length > 0);
-  const alertHtml = (item, compact = false) => `<article class="alert-item alert-item--${escapeHtml(item.type)}${item.read ? " alert-item--read" : ""}">
-    <div><strong>${escapeHtml(item.title)}</strong>${item.missedWhileAway ? '<span class="missed-badge">Mientras estabas fuera</span>' : ""}</div>
-    <p>${escapeHtml(item.message)}</p>${item.match ? `<small>${escapeHtml(item.match)} · Hora del Pacífico</small>` : ""}
-    ${compact ? "" : `<time datetime="${escapeHtml(item.createdAt)}">${escapeHtml(formatUpdatedAt(item.createdAt))}</time>`}
-  </article>`;
-  elements.alertsList.innerHTML = state.alerts.length ? state.alerts.map((item) => alertHtml(item)).join("")
-    : '<div class="saved-empty"><h3>Sin alertas</h3><p>Los cambios detectados al actualizar datos aparecerán aquí.</p></div>';
-  elements.notificationList.innerHTML = unread.length ? unread.slice(0, 8).map((item) => alertHtml(item, true)).join("")
-    : '<p class="notification-empty">No tienes notificaciones nuevas.</p>';
+  // Se conserva la lectura del estado legado para sincronización, pero ya no existe interfaz de alertas o avisos.
 }
 
 function markAlertsRead() {
@@ -2012,15 +1998,16 @@ function oddsUpdateHtml(item) {
 
 function renderSavedPicks() {
   elements.savedParlayCount.textContent = state.savedParlays.filter((parlay) => !parlay.trashed).length + state.savedPicks.length;
+  elements.updateIndividualResults.disabled = state.savedPicks.length === 0;
   if (!state.savedPicks.length) {
     elements.savedPicksList.innerHTML = '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis IA.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
   }
-  elements.savedPicksList.innerHTML = state.savedPicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); return `<article class="saved-pick" data-pick-id="${escapeHtml(pick.id)}">
+  elements.savedPicksList.innerHTML = state.savedPicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}" data-pick-id="${escapeHtml(pick.id)}">
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Confianza / resultado</span><strong>${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`}</strong><small>${escapeHtml(resultLabels[pick.result] || "Pendiente")} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
+    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.finalScore ? `<small>Marcador final: ${escapeHtml(pick.finalScore)}</small>` : ""}${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`; }).join("");
 }
@@ -2028,6 +2015,7 @@ function renderSavedPicks() {
 function renderOriginPerformance() {
   if (!elements.originPerformance) return;
   const rows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
+  elements.updateOriginResults.disabled = state.savedPicks.length === 0 && state.savedParlays.every((parlay) => parlay.trashed);
   if (!rows.length) {
     elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen</h3><p>El conteo aparecerá cuando existan picks individuales o selecciones de parlays concluidas como ganadas o perdidas.</p></div>';
     return;
@@ -2097,13 +2085,13 @@ function renderTrashParlays() {
 
 async function updateSavedParlayResults() {
   const allSavedLegs = [...state.savedPicks, ...state.savedParlays.filter((parlay) => !parlay.trashed).flatMap((parlay) => parlay.legs)];
-  const fixtureIds = [...new Set(allSavedLegs.filter((leg) => leg.fixtureId && leg.selectionCode).map((leg) => leg.fixtureId))];
+  const fixtureIds = [...new Set(allSavedLegs.filter((leg) => leg.fixtureId).map((leg) => leg.fixtureId))];
   if (!fixtureIds.length) {
     showNotice("No hay selecciones compatibles pendientes de actualización automática.");
     return;
   }
-  elements.updateParlayResults.disabled = true;
-  elements.updateParlayResults.textContent = "Consultando resultados…";
+  const updateButtons = [elements.updateIndividualResults, elements.updateOriginResults, elements.updateParlayResults];
+  updateButtons.forEach((button) => { button.disabled = true; button.textContent = "Consultando resultados…"; });
   try {
     const updates = await Promise.all(fixtureIds.map(async (fixtureId) => {
       const fixture = { id: fixtureId };
@@ -2115,14 +2103,27 @@ async function updateSavedParlayResults() {
     }));
     const byFixture = new Map(updates.map((item) => [item.fixtureId, item]));
     let updated = 0;
+    const fixtureCorners = (details, fixtureResult) => {
+      const rows = details?.confirmedData?.statistics || [];
+      const read = (row) => {
+        const raw = row?.statistics?.find((stat) => String(stat.type || "").toLowerCase() === "corner kicks")?.value;
+        const value = Number(raw);
+        return Number.isFinite(value) ? value : null;
+      };
+      const homeRow = rows.find((row) => row.team?.name === fixtureResult?.home) || rows[0];
+      const awayRow = rows.find((row) => row.team?.name === fixtureResult?.away) || rows[1];
+      return { home: read(homeRow), away: read(awayRow) };
+    };
     const updateLeg = (leg) => {
       const update = byFixture.get(String(leg.fixtureId));
       if (!update) return;
       const fixtureResult = update.result;
+      const selectionCode = resolveSelectionCode(leg);
+      if (selectionCode && !leg.selectionCode) leg.selectionCode = selectionCode;
       leg.originalOdds ??= leg.decimalOdds ?? null;
       leg.fixtureStatus = fixtureResult?.statusLabel || update.details?.statusLabel || fixtureResult?.appStatus || leg.fixtureStatus;
       const currentMarket = [...(update.details?.marketAnalysis || []), ...(update.details?.researchData?.odds?.markets || [])]
-        .find((market) => market.selectionKey === leg.selectionCode && (!leg.marketCode || market.marketKey === leg.marketCode));
+        .find((market) => market.selectionKey === selectionCode && (!leg.marketCode || market.marketKey === leg.marketCode));
       const hasNumber = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
       if (hasNumber(currentMarket?.decimalOdds)) leg.updatedOdds = Number(currentMarket.decimalOdds);
       if (hasNumber(currentMarket?.impliedProbabilityPct)) leg.impliedProbability = Number(currentMarket.impliedProbabilityPct);
@@ -2132,7 +2133,7 @@ async function updateSavedParlayResults() {
       leg.updatedAt = leg.lastUpdatedAt;
       Object.assign(leg, applyAnalysisTiming(leg));
       if (leg.result !== "pending") return;
-      const nextResult = settleLegResult(leg.selectionCode, fixtureResult);
+      const nextResult = settlePickResult(leg, { ...fixtureResult, corners: fixtureCorners(update.details, fixtureResult) });
       if (nextResult !== "pending") {
         leg.result = nextResult;
         leg.finalScore = `${fixtureResult.goals.home}-${fixtureResult.goals.away}`;
@@ -2153,8 +2154,10 @@ async function updateSavedParlayResults() {
     renderSavedParlays();
     showNotice(updated ? `${updated} selección(es) actualizadas con API-Football.` : "Los partidos pendientes todavía no tienen resultado final.");
   } finally {
-    elements.updateParlayResults.disabled = state.savedParlays.filter((parlay) => !parlay.trashed).length === 0 && state.savedPicks.length === 0;
-    elements.updateParlayResults.textContent = "Actualizar resultados";
+    elements.updateIndividualResults.disabled = state.savedPicks.length === 0;
+    elements.updateOriginResults.disabled = state.savedParlays.filter((parlay) => !parlay.trashed).length === 0 && state.savedPicks.length === 0;
+    elements.updateParlayResults.disabled = state.savedParlays.filter((parlay) => !parlay.trashed).length === 0;
+    updateButtons.forEach((button) => { button.textContent = "Actualizar datos"; });
   }
 }
 
@@ -3742,7 +3745,8 @@ elements.parlayMinimize.addEventListener("click", () => {
 });
 elements.parlayFab.addEventListener("click", () => renderParlayDraft(true, false));
 elements.saveParlay.addEventListener("click", saveCurrentParlay);
-elements.updateParlayResults.addEventListener("click", updateSavedParlayResults);
+[elements.updateIndividualResults, elements.updateOriginResults, elements.updateParlayResults]
+  .forEach((button) => button.addEventListener("click", updateSavedParlayResults));
 elements.originPerformance.addEventListener("click", (event) => {
   const open = event.target.closest("[data-view-origin-picks]");
   if (open) state.expandedOrigin = open.dataset.viewOriginPicks;
@@ -3818,16 +3822,13 @@ document.addEventListener("click", (event) => {
   if (savedTab) {
     state.savedTab = savedTab.dataset.savedTab;
     document.querySelectorAll("[data-saved-tab]").forEach((button) => button.classList.toggle("saved-tab--active", button === savedTab));
-    elements.savedPicksList.hidden = state.savedTab !== "individual";
-    elements.savedParlaysList.hidden = state.savedTab !== "parlays";
-    elements.trashParlaysList.hidden = state.savedTab !== "trash";
+    elements.savedIndividualSection.hidden = state.savedTab !== "individual";
+    elements.originResultsSection.hidden = state.savedTab !== "origins";
+    elements.savedParlaysSection.hidden = state.savedTab !== "parlays";
+    elements.trashResultsSection.hidden = state.savedTab !== "trash";
   }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);
-  if (!event.target.closest(".notification-menu")) {
-    elements.notificationPopover.hidden = true;
-    elements.notificationToggle.setAttribute("aria-expanded", "false");
-  }
 });
 sidebarToggle.addEventListener("click", () => setSidebarOpen(sidebarToggle.getAttribute("aria-expanded") !== "true"));
 sidebarClose.addEventListener("click", () => setSidebarOpen(false, { restoreFocus: true }));
@@ -3921,24 +3922,6 @@ elements.auditFixture.addEventListener("change", () => {
 elements.runAudit.addEventListener("click", runSelectedAudit);
 elements.viewAuditEvidence.addEventListener("click", showAuditEvidencePreview);
 elements.closeAuditEvidence.addEventListener("click", () => { elements.auditEvidencePreview.hidden = true; });
-elements.notificationToggle.addEventListener("click", () => {
-  const open = elements.notificationToggle.getAttribute("aria-expanded") === "true";
-  elements.notificationToggle.setAttribute("aria-expanded", String(!open));
-  elements.notificationPopover.hidden = open;
-});
-elements.markNotificationsRead.addEventListener("click", markAlertsRead);
-elements.markAllAlertsRead.addEventListener("click", markAlertsRead);
-elements.clearAlerts.addEventListener("click", () => {
-  state.alerts = [];
-  writeLocalJson(ALERTS_KEY, state.alerts);
-  renderAlerts();
-});
-[elements.alertLive, elements.alertScore, elements.alertData].forEach((input) => input.addEventListener("change", () => {
-  state.preferences.alertLive = elements.alertLive.checked;
-  state.preferences.alertScore = elements.alertScore.checked;
-  state.preferences.alertData = elements.alertData.checked;
-  writeLocalJson(PREFERENCES_KEY, state.preferences);
-}));
 elements.accountForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.preferences.name = elements.accountName.value.trim();
@@ -4025,11 +4008,7 @@ async function initializeApp() {
   syncCompetitionCheckboxes();
   elements.accountName.value = state.preferences.name || "";
   elements.accountDailyLimit.value = state.preferences.dailyLimit || "none";
-  elements.alertLive.checked = state.preferences.alertLive !== false;
-  elements.alertScore.checked = state.preferences.alertScore !== false;
-  elements.alertData.checked = state.preferences.alertData !== false;
   applyTheme(state.preferences.theme || "dark");
-  renderAlerts();
   renderParlayDraft();
   renderSavedPicks();
   renderSavedParlays();
