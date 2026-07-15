@@ -37,3 +37,16 @@ test("el cupon agregado se abre minimizado y solo el FAB lo maximiza", () => {
   assert.match(app, /function renderParlayDraft\(open = false, minimized = true\)/);
   assert.match(app, /parlayFab\.addEventListener\("click", \(\) => renderParlayDraft\(true, false\)\)/);
 });
+
+test("Dashboard prioriza la calidad canonica y no convierte datos ausentes en cero", () => {
+  const qualityBody = app.match(/function fixtureQualityView[\s\S]+?function renderMatches/)[0];
+  assert.match(qualityBody, /const score = baseScore \?\? researchScore/);
+  assert.match(qualityBody, /value === null \|\| value === undefined \|\| value === ""/);
+});
+
+test("la busqueda muestra solo encuentros validos sin exponer errores de ligas vacias", () => {
+  const searchBody = app.match(/async function searchFixtures\(event\)[\s\S]+?function handleFilterChange/)[0];
+  assert.match(searchBody, /encuentros válidos/);
+  assert.doesNotMatch(searchBody, /Datos no disponibles en la API/);
+  assert.match(searchBody, /elements\.filterError\.hidden = true/);
+});

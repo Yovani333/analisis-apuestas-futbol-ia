@@ -812,9 +812,14 @@ function teamCrest(name, logo, size = "default") {
 }
 
 function fixtureQualityView(fixture) {
-  const researchScore = Number(fixture?.researchData?.totalConfidenceScore);
-  const baseScore = Number(fixture?.dataQuality?.score);
-  const score = Number.isFinite(researchScore) ? researchScore : Number.isFinite(baseScore) ? baseScore : null;
+  const numericScore = (value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const baseScore = numericScore(fixture?.dataQuality?.score);
+  const researchScore = numericScore(fixture?.researchData?.totalConfidenceScore);
+  const score = baseScore ?? researchScore;
   if (score === null) return null;
   const level = score >= 80 ? "Alta" : score >= 55 ? "Media" : score > 0 ? "Baja" : "No disponible";
   return { score: Math.max(0, Math.min(100, Math.round(score))), level };
@@ -3415,6 +3420,7 @@ async function refreshResearchData() {
     if (state.preferences.alertData && previousSignature !== nextSignature) {
       addAlert("data", "Cobertura actualizada", "Cambió la disponibilidad de uno o más módulos del partido.", detailedFixture);
     }
+    renderMatches();
     renderFixtureData();
     showNotice("Cobertura y fuentes actualizadas desde API-Football.");
   } catch (error) {
@@ -3422,6 +3428,7 @@ async function refreshResearchData() {
       const researchData = await footballDataService.getResearchData(fixture.id, true);
       const fixtureIndex = state.fixtures.findIndex((item) => item.id === fixture.id);
       if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = { ...state.fixtures[fixtureIndex], researchData };
+      renderMatches();
       renderFixtureData();
       showNotice("Fuentes actualizadas; algunos datos del partido no se pudieron refrescar.");
     } catch {
@@ -3536,12 +3543,10 @@ async function searchFixtures(event) {
       status: elements.status.value
     });
     const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
-    const searchWarnings = footballDataService.lastSearchWarnings || [];
-    elements.searchFeedback.textContent = `Búsqueda ${source} completada${searchWarnings.length ? ` con ${searchWarnings.length} competición(es) sin respuesta` : ""} · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
-    if (searchWarnings.length) {
-      elements.filterError.hidden = false;
-      elements.filterError.textContent = searchWarnings.map((warning) => `${warning.slug}: Datos no disponibles en la API`).join(" · ");
-    }
+    const validCount = state.fixtures.length;
+    elements.searchFeedback.textContent = `${validCount} ${validCount === 1 ? "encuentro válido" : "encuentros válidos"} desde ${source} · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
+    elements.filterError.hidden = true;
+    elements.filterError.textContent = "";
     renderMatches();
     void registerAutomaticEvidence(state.fixtures);
   } catch (error) {
