@@ -1352,6 +1352,12 @@ body {
 .corner-team h3 { margin: 2px 0 0; font-size: .82rem; text-transform: uppercase; }
 .corner-team > small, .corner-team div > small { color: var(--muted); font-size: .64rem; }
 .live-corner-alert { padding: 10px; margin-bottom: 10px; color: #174b37; font-size: .74rem; font-weight: 800; background: var(--success-soft); border: 1px solid #c9eadb; border-radius: 7px; }
+.expected-corners-pick { display: grid; grid-template-columns: minmax(140px, .55fr) minmax(220px, 1fr) auto; align-items: center; gap: 12px; margin-top: 12px; padding: 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-left: 4px solid #d49a20; border-radius: 7px; }
+.expected-corners-pick--green { border-left-color: #16805a; }
+.expected-corners-pick__projection, .expected-corners-pick__selection { display: grid; gap: 3px; min-width: 0; }
+.expected-corners-pick__projection small, .expected-corners-pick__selection small, .expected-corners-pick__projection span, .expected-corners-pick__selection span { color: var(--muted); font-size: .65rem; }
+.expected-corners-pick__projection strong { color: var(--text); font-size: 1.25rem; }
+.expected-corners-pick__selection strong { color: var(--text); font-size: .84rem; }
 .analysis-panel .eyebrow { color: #7048c8; }
 .empty-state__icon { color: #7048c8; background: #f0ebff; border-radius: 8px; }
 .analysis-hero { color: white; background: #34245e; border: 0; border-radius: 7px; }
@@ -1493,6 +1499,7 @@ body {
   .team-goal-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .corner-grid { grid-template-columns: 1fr; }
   .corner-summary { align-items: flex-start; flex-direction: column; }
+  .expected-corners-pick { grid-template-columns: 1fr; }
   .simple-filters { grid-template-columns: 1fr !important; }
   .simple-filters > * { grid-column: 1 !important; }
   .quick-filters .button { flex: 1 1 auto; min-height: 42px; }
