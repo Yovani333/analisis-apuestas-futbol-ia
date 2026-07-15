@@ -5,6 +5,7 @@ import {
   normalizeFixture,
   isCoverageAvailable,
   resolveApiResponseCacheTtl,
+  resolveFixtureOddsRequest,
   searchFixtures,
   shouldLoadCurrentFixtureData
 } from "../server/services/api-football.service.js";
@@ -140,6 +141,13 @@ test("solo carga estadísticas del fixture actual cuando ya inició", () => {
   assert.equal(shouldLoadCurrentFixtureData("TBD"), false);
   assert.equal(shouldLoadCurrentFixtureData("2H"), true);
   assert.equal(shouldLoadCurrentFixtureData("FT"), true);
+});
+
+test("selecciona cuotas live únicamente durante el encuentro", () => {
+  assert.equal(resolveFixtureOddsRequest("2H").endpoint, "/odds/live");
+  assert.equal(resolveFixtureOddsRequest("LIVE").mode, "live");
+  assert.equal(resolveFixtureOddsRequest("NS").endpoint, "/odds");
+  assert.equal(resolveFixtureOddsRequest("FT").mode, "pre_match");
 });
 
 test("normaliza tipo, región y ronda de una clasificatoria", () => {

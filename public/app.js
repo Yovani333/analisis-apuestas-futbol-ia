@@ -1178,7 +1178,10 @@ function renderSourceCoverage(research) {
 }
 
 function researchMeta(moduleKey, module) {
-  return `<div class="research-detail-meta"><div><span>Estado</span>${statusBadge(researchStatusLabel(module.status))}</div><div><span>Fuente</span><strong>${escapeHtml(researchSourceLabel(moduleKey, module))}</strong></div><div><span>Actualización</span><strong>${escapeHtml(formatUpdatedAt(module.updatedAt))}</strong></div></div>${module.message ? `<div class="detail-note"><strong>Observación</strong><span>${escapeHtml(module.message)}</span></div>` : ""}`;
+  const updateMeta = moduleKey === "odds"
+    ? `<div><span>Consulta del sistema</span><strong>${escapeHtml(formatUpdatedAt(module.queriedAt))}</strong></div><div><span>Actualización del proveedor</span><strong>${escapeHtml(formatUpdatedAt(module.providerUpdatedAt))}</strong></div>`
+    : `<div><span>Actualización</span><strong>${escapeHtml(formatUpdatedAt(module.updatedAt))}</strong></div>`;
+  return `<div class="research-detail-meta"><div><span>Estado</span>${statusBadge(researchStatusLabel(module.status))}</div><div><span>Fuente</span><strong>${escapeHtml(researchSourceLabel(moduleKey, module))}</strong></div>${updateMeta}</div>${module.message ? `<div class="detail-note"><strong>Observación</strong><span>${escapeHtml(module.message)}</span></div>` : ""}`;
 }
 
 function researchTeamStats(title, values) {
@@ -1214,7 +1217,9 @@ function renderResearchModuleDetail(moduleKey, research) {
     const legend = `<div class="pick-color-legend" aria-label="Leyenda de colores"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Confiable</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>`;
     const summary = decision.matchProfile ? `<div class="pick-decision-summary"><div><span>Favorito real</span><strong>${escapeHtml(decision.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(decision.favoriteStrength || "none")}</small></div><div><span>Perfil</span><strong>${escapeHtml(decision.matchProfile)}</strong></div><div><span>Mejor pick</span><strong>${escapeHtml(decision.recommendedPick?.selection || "Sin pick")}</strong></div><div><span>Alternativa conservadora</span><strong>${escapeHtml(decision.conservativeAlternative?.selection || "Sin alternativa")}</strong></div></div>` : "";
     const rowClasses = (module.markets || []).map(pickSignalClass);
-    content = rows.length ? `${renderOddsMonitor(selectedFixture()?.confirmedData?.odds || [])}${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación"], rows, rowClasses)}` : emptyDetail("No hay cuotas principales verificables.");
+    const modeLabel = module.oddsMode === "live" ? "Cuotas en vivo" : module.oddsMode === "pre_match_fallback" ? "Última cuota prepartido disponible" : "Cuotas prepartido";
+    const freshness = `<div class="detail-note ${module.isFallbackSnapshot ? "detail-note--warning" : "detail-note--info"}"><strong>${escapeHtml(modeLabel)}</strong><span>${escapeHtml(module.refreshPolicy || "")}${module.isFallbackSnapshot ? " API-Football no publicó una cuota live para este fixture; no se presenta el respaldo como dato nuevo." : ""}</span></div>`;
+    content = rows.length ? `${freshness}${renderOddsMonitor(selectedFixture()?.confirmedData?.odds || [])}${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación"], rows, rowClasses)}` : `${freshness}${emptyDetail("No hay cuotas principales verificables.")}`;
   } else if (moduleKey === "contextCalendar") {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
   } else if (moduleKey === "statsForm") {
@@ -1356,10 +1361,10 @@ function renderSupportingDetail(moduleKey, research) {
   let content = "";
   if (moduleKey === "fixtureEvents") {
     const rows = (module.events || []).map((event) => [`${displayValue(event.elapsed)}${event.extra ? `+${displayValue(event.extra)}` : ""}'`, displayValue(event.team), displayValue(event.player), displayValue(event.type), displayValue(event.detail)]);
-    content = `<div class="research-kpis"><span>Goles <strong>${displayValue(module.summary?.goals, 0)}</strong></span><span>Tarjetas <strong>${displayValue(module.summary?.cards, 0)}</strong></span><span>Cambios <strong>${displayValue(module.summary?.substitutions, 0)}</strong></span></div>${rows.length ? detailTable(["Minuto", "Equipo", "Jugador", "Tipo", "Detalle"], rows) : emptyDetail("No hay eventos publicados para este fixture.")}`;
+    content = `<div class="research-kpis"><span>Goles <strong>${displayValue(module.summary?.goals, 0)}</strong></span><span>Tarjetas <strong>${displayValue(module.summary?.cards, 0)}</strong></span><span>Cambios <strong>${displayValue(module.summary?.substitutions, 0)}</strong></span></div><div class="live-table live-table--events">${rows.length ? detailTable(["Minuto", "Equipo", "Jugador", "Tipo", "Detalle"], rows) : emptyDetail("No hay eventos publicados para este fixture.")}</div>`;
   } else if (moduleKey === "playerPerformance") {
     const rows = (module.teams || []).flatMap((team) => (team.players || []).map((player) => [displayValue(team.team), displayValue(player.name), displayValue(player.position), displayValue(player.minutes), displayValue(player.rating), displayValue(player.shotsOnTarget), displayValue(player.goals), displayValue(player.assists), displayValue(player.keyPasses), displayValue(player.tackles)])).sort((a, b) => Number(b[4] || 0) - Number(a[4] || 0)).slice(0, 30);
-    content = rows.length ? detailTable(["Equipo", "Jugador", "Pos.", "Min.", "Rating", "Tiros arco", "Goles", "Asist.", "Pases clave", "Entradas"], rows) : emptyDetail("No hay rendimiento individual publicado.");
+    content = `<div class="live-table live-table--players">${rows.length ? detailTable(["Equipo", "Jugador", "Pos.", "Min.", "Rating", "Tiros arco", "Goles", "Asist.", "Pases clave", "Entradas"], rows) : emptyDetail("No hay rendimiento individual publicado.")}</div>`;
   } else if (moduleKey === "teamSeasonStatistics") {
     const seasonCard = (teamName, data) => researchTeamStats(teamName, [["Forma", data?.form], ["Partidos", data?.played], ["G / E / P", data ? `${displayValue(data.wins)} / ${displayValue(data.draws)} / ${displayValue(data.losses)}` : null], ["Goles a favor", data?.goalsFor], ["Goles en contra", data?.goalsAgainst], ["Promedio GF / GC", data ? `${displayValue(data.averageGoalsFor)} / ${displayValue(data.averageGoalsAgainst)}` : null], ["Porterías a cero", data?.cleanSheets], ["Sin marcar", data?.failedToScore], ["Formación más usada", data?.commonLineups?.[0]?.formation]]);
     content = `<div class="team-stat-grid">${seasonCard(research.homeTeam.name, module.home)}${seasonCard(research.awayTeam.name, module.away)}</div>`;
@@ -2375,11 +2380,11 @@ async function collectPickInformation() {
   if (!fixture || state.isCollectingPickInfo) return showNotice("Selecciona primero un encuentro en Dashboard.");
   state.isCollectingPickInfo = true;
   elements.collectPickInfo.disabled = true;
-  elements.collectPickInfo.textContent = "Recopilando datos...";
-  elements.pickCollectionContent.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Recopilando datos útiles del partido seleccionado...</p></div>';
+  elements.collectPickInfo.textContent = "Evaluando picks...";
+  elements.pickCollectionContent.innerHTML = '<div class="research-empty"><div class="loading-spinner" aria-hidden="true"></div><p>Validando y ordenando las mejores selecciones del partido...</p></div>';
   try {
     setPickCollectionStatus("Recopilando y validando", "processing");
-    const snapshot = await footballDataService.getPickCollection(fixture);
+    const snapshot = await footballDataService.getPickCollection(fixture, true);
     if (!snapshot?.fixtureId) throw new Error("No se pudo construir el expediente del encuentro.");
     state.pickCollectionByFixture.set(fixture.id, snapshot);
     persistPickCollectionCache();
@@ -2391,32 +2396,24 @@ async function collectPickInformation() {
   } finally {
     state.isCollectingPickInfo = false;
     elements.collectPickInfo.disabled = !selectedFixture();
-    elements.collectPickInfo.textContent = "Recabar información";
+    elements.collectPickInfo.textContent = "Actualizar picks";
   }
 }
 
 function renderPickCollection(snapshot) {
   if (!snapshot) {
-    elements.pickCollectionContent.innerHTML = '<div class="research-empty">Selecciona un encuentro y presiona “Recabar información”.</div>';
+    elements.pickCollectionContent.innerHTML = '<div class="research-empty">Selecciona un encuentro y presiona “Actualizar picks”.</div>';
     return;
   }
-  const summary = snapshot.summary || {};
-  const moduleRows = (snapshot.modules || []).map((module) => `<tr><td>${escapeHtml(module.name)}</td><td>${escapeHtml(module.result)}</td><td>${module.probability === null || module.probability === undefined ? "—" : `${displayValue(module.probability)}%`}</td><td>${module.sampleSize ?? "—"}</td><td>${escapeHtml(module.source)}</td><td>${escapeHtml(module.confidence)}</td><td><span class="status-badge status-badge--${collectionStatusClass(module.status)}">${escapeHtml(module.status)}</span></td><td>${escapeHtml((module.feeds || []).join(", ") || "Solo contexto")}</td><td>${escapeHtml((module.warnings || []).join(" ") || "Sin advertencias")}</td></tr>`).join("");
-  const consensus = (snapshot.consensus || []).map((item) => `<article><strong>${escapeHtml(item.selection)}</strong><span>${escapeHtml(item.market)}</span><small>${escapeHtml(item.models.join(" + ") || "Sin consenso independiente")} · ${escapeHtml(item.status === "valid" ? "Consenso" : item.status === "contradictory" ? "Contradictorio" : "Fuente única")}</small></article>`).join("");
-  const candidates = (snapshot.candidateMarkets || []).map((pick, index) => `<article class="collection-pick">
-    <div><span>${escapeHtml(pick.market)}</span><strong>${escapeHtml(pick.selection)}</strong><small>Modelo ${displayValue(pick.modelProbability)}% · Cuota ${displayValue(pick.decimalOdds)} · Justa ${displayValue(pick.fairOdds)} · EV ${pick.expectedValue === null ? "Sin cuota" : `${displayValue(pick.expectedValue)}%`}</small><small>Respaldos: ${escapeHtml((pick.backingModels || []).join(" + ") || pick.source)}</small><p>${escapeHtml(pick.reasoning)}</p></div>
-    <button class="button button--primary button--compact" type="button" data-add-collection-pick="${index}" ${pick.canAdd ? "" : 'disabled title="Requiere consenso independiente o validación del Motor de Decisión"'}>${pick.canAdd ? "Agregar pick" : "Solo observación"}</button>
-  </article>`).join("");
-  elements.pickCollectionContent.innerHTML = `<div class="collection-summary">
-    <article><span>Calidad global</span><strong>${escapeHtml(summary.globalQuality || "No disponible")}</strong><small>${displayValue(summary.availablePct, 0)}% datos disponibles</small></article>
-    <article><span>Módulos</span><strong>${displayValue(summary.validModules, 0)} / ${displayValue(summary.modulesEvaluated, 0)}</strong><small>válidos / evaluados</small></article>
-    <article><span>Contradicciones</span><strong>${displayValue(summary.contradictions, 0)}</strong><small>${escapeHtml(formatUpdatedAt(snapshot.generatedAt))}</small></article>
-    <article><span>Consumo real</span><strong>${displayValue(summary.apiRequests, 0)} API</strong><small>${displayValue(summary.cacheHits, 0)} respuestas desde caché</small></article>
-  </div>
-  ${snapshot.warnings?.length ? `<div class="data-picks-warnings">${snapshot.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
-  <section class="collection-block"><h3>Datos recopilados</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Módulo</th><th>Resultado</th><th>Prob.</th><th>Muestra</th><th>Fuente</th><th>Confianza</th><th>Estado</th><th>Alimenta</th><th>Advertencias</th></tr></thead><tbody>${moduleRows}</tbody></table></div></section>
-  <section class="collection-grid"><article><h3>Coincidencias analíticas</h3><div class="collection-mini-list">${consensus || '<p class="muted-text">Sin coincidencias suficientes entre módulos independientes.</p>'}</div></article><article><h3>Contradicciones y faltantes</h3><ul>${[...(snapshot.contradictions || []), ...(snapshot.missingData || []).map((item) => `Falta o es insuficiente: ${item}`)].map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>Sin contradicciones graves detectadas.</li>"}</ul></article></section>
-  <section class="collection-block"><h3>Mercados candidatos</h3>${candidates || '<div class="research-empty">No se encontró un pick recomendado: los datos disponibles no alcanzan los criterios mínimos de calidad, consenso y valor esperado.</div>'}</section>`;
+  const recommended = (snapshot.candidateMarkets || []).filter((pick) => pick.canAdd);
+  const candidates = recommended.map((pick) => {
+    const index = (snapshot.candidateMarkets || []).indexOf(pick);
+    return `<article class="collection-pick collection-pick--recommended">
+      <div><span>${escapeHtml(pick.market)}</span><strong>${escapeHtml(pick.selection)}</strong><small>Confianza ${displayValue(pick.confidenceScore, 0)}/100 · Cuota ${displayValue(pick.decimalOdds, "No disponible")} · EV ${pick.expectedValue === null ? "No disponible" : `${displayValue(pick.expectedValue)}%`}</small><small>Origen: ${escapeHtml((pick.backingModels || []).join(" + ") || pick.source)}</small><p>${escapeHtml(pick.reasoning)}</p></div>
+      <button class="button button--primary button--compact" type="button" data-add-collection-pick="${index}">Agregar pick</button>
+    </article>`;
+  }).join("");
+  elements.pickCollectionContent.innerHTML = `<section class="collection-block collection-recommended-list"><div class="collection-list-heading"><div><h3>Picks recomendados</h3><p>Ordenados de mejor a menor, sin selecciones repetidas. Incluye corners cuando supera las validaciones del módulo.</p></div><small>Actualizado: ${escapeHtml(formatUpdatedAt(snapshot.generatedAt))}</small></div>${candidates || '<div class="research-empty">No se encontró un pick recomendado: los datos disponibles no alcanzan los criterios mínimos de calidad, coherencia o valor.</div>'}</section>`;
 }
 
 function collectionPickLeg(index) {
@@ -2427,7 +2424,7 @@ function collectionPickLeg(index) {
 
 function addCollectionPick(index) {
   const leg = collectionPickLeg(index);
-  if (leg) appendPickToParlay(leg, "Pick de recopilación agregado a Mi parlay.");
+  if (leg) appendPickToParlay(leg, "Pick recomendado agregado a Mi parlay.");
 }
 
 async function refreshCurrentViewData(view) {

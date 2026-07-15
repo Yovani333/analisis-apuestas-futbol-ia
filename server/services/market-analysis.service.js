@@ -91,7 +91,15 @@ function escapedPattern(value = "") {
 
 export function normalizeOdds(rows = [], teams = {}) {
   const safeRows = Array.isArray(rows) ? rows : [];
-  const bookmakers = safeRows.flatMap((row) => row.bookmakers || []);
+  const bookmakers = safeRows.flatMap((row) => {
+    if (Array.isArray(row?.bookmakers)) return row.bookmakers;
+    if (!Array.isArray(row?.odds)) return [];
+    return [{
+      id: null,
+      name: "API-Football Live",
+      bets: row.odds.map((odd) => ({ id: odd.id, name: odd.name, values: odd.values || [] }))
+    }];
+  });
   const preference = (item) => /caliente/.test(normalizedName(item?.name)) ? 0 : /playdoit/.test(normalizedName(item?.name)) ? 1 : 2;
   const orderedBookmakers = [...bookmakers].sort((a, b) => preference(a) - preference(b));
   if (!orderedBookmakers.length) return { bookmaker: null, updatedAt: rows[0]?.update || null, selections: [] };
