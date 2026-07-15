@@ -68,6 +68,8 @@ test("marca parcial cuando faltan tiros dentro y fuera del área", () => {
   assert.equal(result.status, "partial");
   assert.equal(result.confidence.label, "medium");
   assert.ok(result.confidence.missingFields.includes("shotsInsideBox"));
+  assert.ok(result.confidence.optionalMissingFields.includes("dangerousAttacks"));
+  assert.ok(!result.confidence.missingFields.includes("dangerousAttacks"));
 });
 
 test("no calcula si uno de los equipos no tiene estadísticas básicas", () => {

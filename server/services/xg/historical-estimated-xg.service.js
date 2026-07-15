@@ -62,6 +62,7 @@ function emptyTeam(team) {
     sampleSize: 0,
     fixturesUsed: [],
     missingFields: [],
+    optionalMissingFields: [],
     diagnostics: {
       attemptedFixtures: 0,
       usedFixtures: 0,
@@ -183,6 +184,7 @@ async function buildTeamHistory({
         blockedShots: teamStats.blockedShots
       },
       missingFields: confidence.missingFields,
+      optionalMissingFields: confidence.optionalMissingFields,
       eventsAvailable: !eventsResult.failed,
       eventsErrorCode: eventsResult.errorCode
     }, skipped: null };
@@ -192,6 +194,7 @@ async function buildTeamHistory({
 
   const confidence = historicalConfidence(records, fixtures.length, { worldCup });
   const missingFields = [...new Set(records.flatMap((record) => record.missingFields))];
+  const optionalMissingFields = [...new Set(records.flatMap((record) => record.optionalMissingFields || []))];
   const notes = [...confidence.notes];
   if (records.some((record) => record.estimatedXG > 6 || record.estimatedXGA > 6)) {
     notes.push("Un resultado histórico fue superior a 6.00; revisar posibles datos inflados o inconsistentes.");
@@ -211,6 +214,7 @@ async function buildTeamHistory({
     sampleSize: records.length,
     fixturesUsed: records.map(({ rawStats, eventsAvailable, ...record }) => record),
     missingFields,
+    optionalMissingFields,
     diagnostics: {
       attemptedFixtures: fixtures.length,
       usedFixtures: records.length,

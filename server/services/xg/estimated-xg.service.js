@@ -25,7 +25,7 @@ function emptyResult(fixtureId, homeTeam, awayTeam, updatedAt, note = "No hay es
     modelVersion: MODEL_VERSION, scope: "current_fixture", fixtureId,
     homeTeam: { ...homeTeam, estimatedXG: null, estimatedXGA: null },
     awayTeam: { ...awayTeam, estimatedXG: null, estimatedXGA: null },
-    confidence: { score: 0, label: "not_available", missingFields: [], notes: [note] },
+    confidence: { score: 0, label: "not_available", missingFields: [], optionalMissingFields: [], notes: [note] },
     diagnostics: {
       statisticsAvailable: {
         home: hasRecordedValue(homeTeam?.rawStats?.totalShots) || hasRecordedValue(homeTeam?.rawStats?.shotsOnGoal),
@@ -60,6 +60,10 @@ export function buildEstimatedXgFromDataset(dataset) {
   const label = score >= 80 && homeConfidence.label === "high" && awayConfidence.label === "high"
     ? "high" : score >= 50 ? "medium" : "low";
   const missingFields = [...new Set([...homeConfidence.missingFields, ...awayConfidence.missingFields])];
+  const optionalMissingFields = [...new Set([
+    ...homeConfidence.optionalMissingFields,
+    ...awayConfidence.optionalMissingFields
+  ])];
   const notes = [...new Set([...homeConfidence.notes, ...awayConfidence.notes])];
   const penaltyCount = extracted.homeTeam.rawStats.penalties + extracted.awayTeam.rawStats.penalties;
   if (penaltyCount === 0) notes.push("No se detectaron eventos de penal o la fuente no los proporcionó.");
@@ -76,7 +80,7 @@ export function buildEstimatedXgFromDataset(dataset) {
       ...baseTeam(extracted.awayTeam), estimatedXG: awayEstimatedXG, estimatedXGA: homeEstimatedXG,
       confidence: awayConfidence
     },
-    confidence: { score, label, missingFields, notes },
+    confidence: { score, label, missingFields, optionalMissingFields, notes },
     diagnostics: {
       statisticsAvailable: { home: true, away: true },
       eventsAvailable: extracted.homeTeam.eventsAvailable && extracted.awayTeam.eventsAvailable,
@@ -100,7 +104,7 @@ export async function getEstimatedXgForFixture(fixtureId, { loadFixtureDataset }
     return {
       status: "failed", type: "fixture_estimated", source: "api-football-internal-model",
       modelVersion: MODEL_VERSION, scope: "current_fixture", fixtureId: String(fixtureId), homeTeam: null, awayTeam: null,
-      confidence: { score: 0, label: "not_available", missingFields: [], notes: ["No fue posible procesar las estadísticas del fixture."] },
+      confidence: { score: 0, label: "not_available", missingFields: [], optionalMissingFields: [], notes: ["No fue posible procesar las estadísticas del fixture."] },
       diagnostics: {
         statisticsAvailable: { home: false, away: false },
         eventsAvailable: false,

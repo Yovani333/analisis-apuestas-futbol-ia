@@ -103,6 +103,8 @@ test("partido programado con cinco partidos útiles produce histórico parcial d
   assert.equal(result.homeTeam.calculation.recencyWeightingApplied, true);
   assert.ok(result.homeTeam.effectiveSampleSize < result.homeTeam.sampleSize);
   assert.equal(result.calculation.shrinkageApplied, false);
+  assert.ok(result.homeTeam.optionalMissingFields.includes("dangerousAttacks"));
+  assert.ok(!result.homeTeam.missingFields.includes("dangerousAttacks"));
   assert.match(result.confidence.notes.join(" "), /confiabilidad histórica es media/i);
   assert.match(result.warning, /No corresponde a xG oficial/);
 });

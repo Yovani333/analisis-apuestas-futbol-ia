@@ -379,7 +379,7 @@ test("integra xG/xGA histórico estimado para un partido programado", () => {
     homeTeam: {
       historicalEstimatedXGAvg: 1.45, historicalEstimatedXGAAvg: 1.1, sampleSize: 5,
       fixturesUsed: [{ fixtureId: "1", opponent: "Rival A", estimatedXG: 1.4, estimatedXGA: 1 }],
-      missingFields: [], confidence: { score: 90, label: "high", notes: [] }
+      missingFields: [], optionalMissingFields: ["dangerousAttacks"], confidence: { score: 90, label: "high", notes: [] }
     },
     awayTeam: {
       historicalEstimatedXGAvg: 1.2, historicalEstimatedXGAAvg: 1.35, sampleSize: 5,
@@ -392,6 +392,7 @@ test("integra xG/xGA histórico estimado para un partido programado", () => {
   assert.equal(normalized.xgXga.scope, "previous_matches");
   assert.equal(normalized.xgXga.homeXG, 1.45);
   assert.equal(normalized.xgXga.sampleSize, 5);
+  assert.deepEqual(normalized.xgXga.optionalMissingFields, ["dangerousAttacks"]);
   assert.equal(normalized.xgXga.analysisUse, "pre_match_context");
   assert.match(normalized.xgXga.message, /no requiere H2H/i);
   assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["API-Football + modelo interno"]);

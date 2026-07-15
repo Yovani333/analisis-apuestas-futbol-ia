@@ -8,7 +8,9 @@ const OPTIONAL_FIELDS = Object.freeze([
 
 export function calculateEstimatedXgConfidence(stats = {}, { eventsAvailable = false } = {}) {
   const available = REQUIRED_FIELDS.filter((key) => stats[key] !== null && stats[key] !== undefined);
-  const missingFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS]
+  const missingFields = REQUIRED_FIELDS
+    .filter((key) => stats[key] === null || stats[key] === undefined);
+  const optionalMissingFields = OPTIONAL_FIELDS
     .filter((key) => stats[key] === null || stats[key] === undefined);
   const score = Math.round((available.length / REQUIRED_FIELDS.length) * 100);
   let label = "low";
@@ -20,5 +22,5 @@ export function calculateEstimatedXgConfidence(stats = {}, { eventsAvailable = f
   if (stats.dangerousAttacks === null || stats.dangerousAttacks === undefined) {
     notes.push("Dangerous Attacks no fue proporcionado y aporta 0 al cálculo.");
   }
-  return { score, label, missingFields, notes };
+  return { score, label, missingFields, optionalMissingFields, notes };
 }

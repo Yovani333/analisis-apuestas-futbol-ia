@@ -351,6 +351,10 @@ export function getXgXgaData(dataset) {
       ...(historical.homeTeam?.missingFields || []),
       ...(historical.awayTeam?.missingFields || [])
     ])];
+    const optionalMissingFields = [...new Set([
+      ...(historical.homeTeam?.optionalMissingFields || []),
+      ...(historical.awayTeam?.optionalMissingFields || [])
+    ])];
     return {
       ...moduleBase(historical.status, historical.updatedAt || dataset.fetchedAt, "api-football-internal-model",
         "Calculado con partidos anteriores de cada equipo; no requiere H2H."),
@@ -393,6 +397,7 @@ export function getXgXgaData(dataset) {
       homeConfidence: historical.homeTeam.confidence,
       awayConfidence: historical.awayTeam.confidence,
       missingFields,
+      optionalMissingFields,
       notes: historical.confidence.notes,
       warning: historical.warning,
       analysisUse: "pre_match_context"
@@ -416,6 +421,7 @@ export function getXgXgaData(dataset) {
       homeConfidence: estimated.homeTeam.confidence,
       awayConfidence: estimated.awayTeam.confidence,
       missingFields: estimated.confidence.missingFields,
+      optionalMissingFields: estimated.confidence.optionalMissingFields || [],
       notes: estimated.confidence.notes,
       diagnostics: estimated.diagnostics,
       warning: estimated.warning,

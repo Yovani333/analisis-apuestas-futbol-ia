@@ -1233,6 +1233,19 @@ function renderResearchModuleDetail(moduleKey, research) {
     const historicalEstimated = module.type === "historical_estimated" || module.dataSource === "historical_api_estimate";
     const historicalAttempted = historicalEstimated || module.historicalAttempted === true;
     const estimated = historicalEstimated || ["estimated", "fixture_estimated"].includes(module.type);
+    const xgFieldLabels = {
+      totalShots: "Tiros totales",
+      shotsOnGoal: "Tiros a puerta",
+      shotsOffGoal: "Tiros fuera",
+      shotsInsideBox: "Tiros dentro del área",
+      shotsOutsideBox: "Tiros fuera del área",
+      blockedShots: "Tiros bloqueados",
+      cornerKicks: "Tiros de esquina",
+      ballPossession: "Posesión",
+      goalkeeperSaves: "Atajadas del portero",
+      dangerousAttacks: "Ataques peligrosos"
+    };
+    const xgFieldList = (fields = []) => fields.map((field) => xgFieldLabels[field] || field).join(", ");
     const confidenceLabel = (value) => ({
       high: historicalEstimated ? "Aceptable" : "Alta",
       medium: "Media",
@@ -1250,7 +1263,8 @@ function renderResearchModuleDetail(moduleKey, research) {
       : "xG/xGA estimado calculado internamente con estadísticas del partido desde API-Football. No corresponde a xG oficial.";
     const metadata = estimated
       ? `<div class="detail-note detail-note--info"><strong>API-Football + modelo interno · ${escapeHtml(module.modelVersion || (historicalEstimated ? "historical-estimated-xg-v1" : "fixture-estimated-xg-v1"))}</strong><span>${escapeHtml(mandatoryText)}</span></div>
-        ${module.missingFields?.length ? `<div class="detail-note"><strong>Datos faltantes</strong><span>${escapeHtml(module.missingFields.join(", "))}</span></div>` : ""}
+        ${module.missingFields?.length ? `<div class="detail-note"><strong>Datos esenciales faltantes</strong><span>${escapeHtml(xgFieldList(module.missingFields))}. La ausencia de estos campos reduce la confianza del cálculo.</span></div>` : ""}
+        ${module.optionalMissingFields?.length ? `<div class="detail-note detail-note--info"><strong>Datos complementarios no proporcionados</strong><span>${escapeHtml(xgFieldList(module.optionalMissingFields))}. No bloquean el cálculo ni reducen por sí solos la muestra.</span></div>` : ""}
         ${module.notes?.length ? `<div class="detail-note"><strong>Notas de revisión</strong><span>${escapeHtml(module.notes.join(" "))}</span></div>` : ""}`
       : historicalAttempted
         ? `<div class="detail-note"><strong>API-Football no entregó una muestra histórica utilizable</strong><span>${escapeHtml(module.notes?.join(" ") || "Revisa la trazabilidad para conocer qué partidos se omitieron. No se inventaron valores.")}</span></div>`
