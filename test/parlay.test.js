@@ -30,6 +30,20 @@ test("resultados por origen incluye selecciones concluidas de parlays activos", 
   assert.deepEqual({ evaluated: poisson.evaluated, won: poisson.won, lost: poisson.lost, individual: poisson.individual, parlayLegs: poisson.parlayLegs }, { evaluated: 1, won: 1, lost: 0, individual: 0, parlayLegs: 1 });
 });
 
+test("resultados por origen agrupa anticipacion y clasifica picks ganados", () => {
+  const rows = calculateOriginPerformance([{
+    id: "p1", sourceModule: "data_picks", result: "won", selection: "Más de 2.5 goles", market: "Total",
+    home: "A", away: "B", kickoffAt: "2026-07-10T18:00:00Z", addedAt: "2026-07-08T17:00:00Z"
+  }, {
+    id: "p2", sourceModule: "data_picks", result: "won", selection: "Más de 2.5 goles", market: "Total",
+    home: "C", away: "D", kickoffAt: "2026-07-10T18:00:00Z", addedAt: "2026-07-10T16:30:00Z"
+  }]);
+  assert.match(rows[0].addedSummary, /2 d \(1\)/);
+  assert.match(rows[0].addedSummary, /1 h \(1\)/);
+  assert.deepEqual(rows[0].wonCategories, [{ category: "Más de 2.5", count: 2 }]);
+  assert.equal(rows[0].wonPicks.length, 2);
+});
+
 test("marca perdido si cualquier selección pierde", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "lost" }]), "lost");
   assert.equal(calculateParlayResult([{ result: "pending" }, { result: "lost" }]), "lost");

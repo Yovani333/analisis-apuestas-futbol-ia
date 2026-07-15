@@ -123,6 +123,8 @@ export function parseEvidenceText(text, sourceFile = "") {
     homeTeamId: firstMatch(text, /^Home team ID:\s*(.+)$/m),
     awayTeamId: firstMatch(text, /^Away team ID:\s*(.+)$/m),
     phase: firstMatch(text, /^Fase(?: del Mundial)?:\s*(.+)$/m, "No especificada"),
+    dataQualityScore: numeric(firstMatch(text, /^Calidad:\s*([^/]+)/m)),
+    dataQualityLevel: firstMatch(text, /^Calidad:\s*[^\n]*\(([^)]+)\)/m),
     picks
   };
 }

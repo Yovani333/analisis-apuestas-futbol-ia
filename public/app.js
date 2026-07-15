@@ -1,11 +1,11 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260712-expanded-competitions-v1";
-import { footballDataService } from "./services.js?v=20260712-pick-intelligence-v2";
+import { footballDataService } from "./services.js?v=20260714-evidence-audit-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settleLegResult
-} from "./parlay-store.js?v=20260713-origin-results-v3";
-import { createEvidenceSnapshot, EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260712-cloud-sync-v1";
+} from "./parlay-store.js?v=20260714-evidence-audit-v1";
+import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260714-evidence-audit-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260713-dashboard-fixes-v2";
@@ -45,9 +45,11 @@ const state = {
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
   evidenceSnapshots: loadEvidenceSnapshots(),
+  evidenceLibrary: [],
   savedTab: "individual",
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
+  expandedOrigin: null,
   alerts: readLocalJson(ALERTS_KEY, []),
   preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
   currentView: "dashboard",
@@ -69,6 +71,7 @@ const state = {
   isRefreshingStatuses: false,
   isRefreshingLive: false,
   isCapturingEvidence: false,
+  isLoadingEvidenceLibrary: false,
   isCollectingPickInfo: false,
   lastLiveRefreshAt: null,
   simulationTeamOptionByValue: new Map(),
@@ -198,7 +201,10 @@ Object.assign(elements, {
   automaticEvidenceStatus: document.querySelector("#automatic-evidence-status")
 });
 Object.assign(elements, {
-  auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results")
+  auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results"),
+  viewAuditEvidence: document.querySelector("#view-audit-evidence"), auditEvidencePreview: document.querySelector("#audit-evidence-preview"),
+  auditEvidenceTitle: document.querySelector("#audit-evidence-title"), auditEvidenceText: document.querySelector("#audit-evidence-text"),
+  closeAuditEvidence: document.querySelector("#close-audit-evidence")
 });
 Object.assign(elements, {
   analysisGuideContent: document.querySelector("#analysis-guide-content"), guideOddsContent: document.querySelector("#guide-odds-content"),
@@ -805,6 +811,15 @@ function teamCrest(name, logo, size = "default") {
     : `<span class="team-crest team-crest--fallback${modifier}" aria-label="${escapeHtml(name)}">${escapeHtml(teamInitials(name))}</span>`;
 }
 
+function fixtureQualityView(fixture) {
+  const researchScore = Number(fixture?.researchData?.totalConfidenceScore);
+  const baseScore = Number(fixture?.dataQuality?.score);
+  const score = Number.isFinite(researchScore) ? researchScore : Number.isFinite(baseScore) ? baseScore : null;
+  if (score === null) return null;
+  const level = score >= 80 ? "Alta" : score >= 55 ? "Media" : score > 0 ? "Baja" : "No disponible";
+  return { score: Math.max(0, Math.min(100, Math.round(score))), level };
+}
+
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
@@ -841,7 +856,7 @@ function renderMatches() {
           : "";
         const favoriteTitle = fixture.favorite ? `${fixture.favorite.note}${probabilitySummary}` : "";
         const teamName = (name, logo, favorite) => `<div class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${teamCrest(name, logo)}<div><strong>${escapeHtml(name)}</strong>${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2${fixture.favorite.percent !== null ? ` · ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</div></div>`;
-        const quality = fixture.dataQuality;
+        const quality = fixtureQualityView(fixture);
         return `
           <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" tabindex="0" ${selected ? 'aria-current="true"' : ""}>
             <div class="match-card__topline">
@@ -855,8 +870,8 @@ function renderMatches() {
             </div>
             <div class="match-card__meta">
               <time datetime="${escapeHtml(fixture.utcDateTime || `${fixture.date}T${fixture.time}`)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT</time>
-              <span>${escapeHtml(fixture.stadium || "Sede por confirmar")}</span>
-              ${quality ? `<span class="data-quality data-quality--${escapeHtml(String(quality.level || "").toLowerCase())}">Calidad ${escapeHtml(quality.level)} · ${escapeHtml(quality.score)}/100</span>` : ""}
+              <span>${escapeHtml(fixture.stadium && fixture.stadium !== "No disponible" ? fixture.stadium : "Estadio pendiente en API-Football")}</span>
+              ${quality ? `<span class="data-quality data-quality--${escapeHtml(String(quality.level || "").toLowerCase())}">Calidad ${escapeHtml(quality.level)} · ${escapeHtml(quality.score)}/100</span>` : '<span class="data-quality">Calidad pendiente · abre el encuentro</span>'}
               ${fixture.status === "live" && fixture.elapsed !== null ? `<small>${escapeHtml(fixture.elapsed)} minutos</small>` : ""}
             </div>
             <div class="match-card__actions">
@@ -890,7 +905,8 @@ function renderFixtureData() {
   elements.dataStatus.textContent = overall;
   elements.selectedSummary.className = "selected-summary";
   const sourceLabel = fixture.dataSource === "api-football" ? "API-Football" : "escenario sintético";
-  const qualityLabel = fixture.dataQuality ? ` · Calidad ${fixture.dataQuality.level} ${fixture.dataQuality.score}/100` : "";
+  const quality = fixtureQualityView(fixture);
+  const qualityLabel = quality ? ` · Calidad ${quality.level} ${quality.score}/100` : " · Calidad pendiente";
   const venueLabel = fixture.neutralVenue ? " · Sede neutral; equipo 1 y equipo 2" : "";
   const cacheStatus = fixture.cacheInfo?.status === "hit" ? "Cache" : fixture.cacheInfo?.status === "miss" ? "API" : "Fuente";
   const cacheReason = fixture.cacheInfo?.reason ? ` - ${fixture.cacheInfo.reason.replaceAll("_", " ")}` : "";
@@ -912,10 +928,11 @@ function renderFixtureData() {
       <div class="selected-match__team">${teamCrest(fixture.away, fixture.awayLogo, "large")}<span><strong>${escapeHtml(fixture.away)}</strong><small>ID API-Football: ${escapeHtml(fixture.awayTeamId || "No disponible")}</small></span></div>
     </div>
     <div class="selected-match__details">
-      <span>${escapeHtml(fixture.stadium || "Sede por confirmar")}${escapeHtml(venueLabel)}</span>
+      <span>${escapeHtml(fixture.stadium && fixture.stadium !== "No disponible" ? fixture.stadium : "Estadio pendiente en API-Football")}${escapeHtml(venueLabel)} · ${escapeHtml(fixture.stadiumSource === "api-football-venues" ? "Catálogo de estadios API-Football" : fixture.stadiumSource === "api-football-fixture" ? "Fixture API-Football" : "Sin ubicación verificable")}</span>
       <span class="source-chip source-chip--api">${escapeHtml(sourceLabel)}</span>
       <span class="source-chip source-chip--model">${escapeHtml(cacheStatus)}${escapeHtml(cacheReason)}</span>
-      ${fixture.dataQuality ? `<span class="data-quality data-quality--${escapeHtml(String(fixture.dataQuality.level || "").toLowerCase())}">Confianza de datos ${escapeHtml(fixture.dataQuality.score)}/100</span>` : ""}
+      ${quality ? `<span class="data-quality data-quality--${escapeHtml(String(quality.level || "").toLowerCase())}">Confianza de datos ${escapeHtml(quality.score)}/100</span>` : '<span class="data-quality">Calidad pendiente</span>'}
+      <small>La cobertura prepartido puede aumentar cuando API-Football publica cuotas, alineaciones o lesiones cerca del inicio.</small>
     </div>
     ${probabilityLine}`;
   updateAnalysisActionState();
@@ -1987,7 +2004,9 @@ function renderOriginPerformance() {
     elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen</h3><p>El conteo aparecerá cuando existan picks individuales o selecciones de parlays concluidas como ganadas o perdidas.</p></div>';
     return;
   }
-  elements.originPerformance.innerHTML = `<header><div><span>Comparación automática</span><h3>Resultados por origen</h3></div><small>Incluye picks individuales y selecciones de parlays activos. Pendientes y anulados no cuentan.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Origen</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th></tr></thead><tbody>${rows.map((row) => `<tr><td data-label="Origen"><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive">${row.won}</td><td data-label="Perdidos" class="value-negative">${row.lost}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${displayValue(row.winRate)}%</strong></td></tr>`).join("")}</tbody></table></div>`;
+  const expanded = rows.find((row) => row.origin === state.expandedOrigin);
+  const detail = expanded ? `<section class="origin-pick-detail"><header><div><span>Picks positivos</span><h4>${escapeHtml(pickOriginLabel(expanded.origin))}</h4></div><button class="button button--secondary button--compact" type="button" data-close-origin-picks>Cerrar</button></header><div class="origin-category-list">${expanded.wonCategories.map((item) => `<span><strong>${escapeHtml(item.category)}</strong>${item.count} ${item.count === 1 ? "pick" : "picks"}</span>`).join("") || "Sin picks ganados"}</div>${expanded.wonPicks.length ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Clasificación</th><th>Pick</th><th>Partido</th><th>Liga</th><th>Cuota</th><th>Agregado</th></tr></thead><tbody>${expanded.wonPicks.map((pick) => `<tr><td>${escapeHtml(pick.category)}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league)}</td><td>${displayValue(pick.odds)}</td><td>${escapeHtml(pick.addedLead)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted-text">Todavía no hay picks positivos en este origen.</p>'}</section>` : "";
+  elements.originPerformance.innerHTML = `<header><div><span>Comparación automática</span><h3>Resultados por origen</h3></div><small>Incluye picks individuales y selecciones de parlays activos. Pendientes y anulados no cuentan.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Origen</th><th>Agregados</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th><th>Detalle</th></tr></thead><tbody>${rows.map((row) => `<tr><td data-label="Origen"><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong></td><td data-label="Agregados">${escapeHtml(row.addedSummary || "Sin dato")}</td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive">${row.won}</td><td data-label="Perdidos" class="value-negative">${row.lost}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${displayValue(row.winRate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}">Ver picks</button></td></tr>`).join("")}</tbody></table></div>${detail}`;
 }
 
 function renderSavedParlays() {
@@ -2120,7 +2139,7 @@ function switchView(view) {
     if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   if (view === "saved") { renderSavedPicks(); renderSavedParlays(); }
-  if (view === "audit") renderAuditFixtureOptions();
+  if (view === "audit") { renderAuditFixtureOptions(); void loadEvidenceLibrary(); }
   if (view === "simulation") refreshSimulationPickers();
   if (view === "pick-collection") {
     elements.collectPickInfo.disabled = !selectedFixture() || state.isCollectingPickInfo;
@@ -2500,22 +2519,49 @@ function showAnalysisEmpty() {
   elements.analysisContent.innerHTML = '<div class="empty-state"><span class="empty-state__icon" aria-hidden="true">✦</span><h3>Partido seleccionado</h3><p>Analiza primero con el Motor de Reglas. OpenAI queda como explicación opcional.</p></div>';
 }
 
+function allEvidenceSnapshots() {
+  const rows = new Map();
+  for (const snapshot of [...state.evidenceLibrary, ...state.evidenceSnapshots]) if (snapshot?.id) rows.set(String(snapshot.id), snapshot);
+  return [...rows.values()];
+}
+
+function selectedAuditEvidence() {
+  return latestEvidenceForFixture(allEvidenceSnapshots(), elements.auditFixture.value);
+}
+
+async function loadEvidenceLibrary() {
+  if (state.evidenceLibrary.length || state.isLoadingEvidenceLibrary) return;
+  state.isLoadingEvidenceLibrary = true;
+  try { state.evidenceLibrary = await footballDataService.getEvidenceLibrary(); }
+  catch (error) { showNotice(error.message || "No se pudo cargar la biblioteca de evidencias."); }
+  finally { state.isLoadingEvidenceLibrary = false; renderAuditFixtureOptions(); }
+}
+
 function renderAuditFixtureOptions() {
   const available = new Map();
-  for (const snapshot of state.evidenceSnapshots) {
+  for (const snapshot of allEvidenceSnapshots()) {
     const fixture = snapshot?.fixture;
     if (!fixture?.id || available.has(String(fixture.id))) continue;
     available.set(String(fixture.id), { ...fixture, hasEvidence: true });
   }
   for (const fixture of state.fixtures.filter((item) => item.status === "finished")) {
     const id = String(fixture.id);
-    available.set(id, { ...available.get(id), ...fixture, hasEvidence: Boolean(latestEvidenceForFixture(state.evidenceSnapshots, id)) });
+    available.set(id, { ...available.get(id), ...fixture, hasEvidence: Boolean(latestEvidenceForFixture(allEvidenceSnapshots(), id)) });
   }
   const fixtures = [...available.values()].sort((a, b) => String(b.utcDateTime || b.date || "").localeCompare(String(a.utcDateTime || a.date || "")));
   elements.auditFixture.innerHTML = fixtures.length
-    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · ${fixture.hasEvidence ? "Evidencia prepartido" : "Sin snapshot"}</option>`).join("")}`
+    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}">${escapeHtml(fixture.leagueName || "Liga no disponible")} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · ${fixture.hasEvidence ? "Evidencia prepartido" : "Sin snapshot"}</option>`).join("")}`
     : '<option value="">No hay evidencias prepartido guardadas</option>';
   elements.runAudit.disabled = true;
+  elements.viewAuditEvidence.disabled = true;
+}
+
+function showAuditEvidencePreview() {
+  const evidence = selectedAuditEvidence();
+  if (!evidence) return showNotice("No existe evidencia prepartido para visualizar.");
+  elements.auditEvidenceTitle.textContent = `${evidence.fixture?.leagueName || "Liga no disponible"} · ${evidence.fixture?.home} vs ${evidence.fixture?.away}`;
+  elements.auditEvidenceText.textContent = evidenceSnapshotToText(evidence);
+  elements.auditEvidencePreview.hidden = false;
 }
 
 function renderAuditResults(audit) {
@@ -2540,7 +2586,7 @@ async function runSelectedAudit() {
   elements.runAudit.disabled = true;
   elements.runAudit.textContent = "Auditando…";
   try {
-    const evidence = latestEvidenceForFixture(state.evidenceSnapshots, elements.auditFixture.value);
+    const evidence = selectedAuditEvidence();
     renderAuditResults(await footballDataService.auditFixture(elements.auditFixture.value, evidence));
   }
   catch (error) { elements.auditResults.innerHTML = `<div class="saved-empty"><h3>No se pudo ejecutar la auditoría</h3><p>${escapeHtml(error.message)}</p></div>`; }
@@ -2555,23 +2601,15 @@ async function capturePreMatchEvidence() {
   elements.savePreMatchEvidence.disabled = true;
   elements.savePreMatchEvidence.textContent = "Guardando…";
   elements.evidenceStatus.textContent = "Recopilando módulos sin usar OpenAI…";
-  const fallback = (status, warning) => ({ status, warning, picks: [], suggestedMarkets: [] });
   try {
-    const results = await Promise.allSettled([
-      footballDataService.getDataPicks(fixture), footballDataService.getPoissonModel(fixture),
-      footballDataService.getTeamGoalProbability(fixture), footballDataService.getCornersModel(fixture)
-    ]);
-    const value = (index, warning) => results[index].status === "fulfilled" ? results[index].value : fallback("not_available", warning);
-    const dataPicks = value(0, "Picks basados en datos no disponibles al capturar."), poisson = value(1, "Poisson no disponible al capturar.");
-    const teamGoals = value(2, "Gol por equipo no disponible al capturar."), corners = value(3, "Corners no disponible al capturar.");
-    state.dataPicksByFixture.set(fixture.id, dataPicks);
-    state.poissonByFixture.set(fixture.id, poisson);
-    state.teamGoalsByFixture.set(fixture.id, teamGoals);
-    state.cornersByFixture.set(fixture.id, corners);
-    const snapshot = createEvidenceSnapshot({ fixture, dataPicks, poisson, teamGoals, corners });
+    const snapshot = await footballDataService.captureEvidence(fixture.id);
+    state.dataPicksByFixture.set(fixture.id, snapshot.modules?.dataPicks);
+    state.poissonByFixture.set(fixture.id, snapshot.modules?.poisson);
+    state.teamGoalsByFixture.set(fixture.id, snapshot.modules?.teamGoals);
+    state.cornersByFixture.set(fixture.id, snapshot.modules?.corners);
     state.evidenceSnapshots = saveEvidenceSnapshot(snapshot);
     queueCloudSync();
-    showNotice("Evidencia prepartido guardada. No se utilizó OpenAI.");
+    showNotice("Evidencia fresca guardada desde el mismo snapshot del servidor usado por la automatización. No se utilizó OpenAI.");
   } catch (error) {
     showNotice(error.message || "No fue posible guardar la evidencia prepartido.");
   } finally {
@@ -3670,6 +3708,12 @@ elements.parlayMinimize.addEventListener("click", () => {
 elements.parlayFab.addEventListener("click", () => renderParlayDraft(true, false));
 elements.saveParlay.addEventListener("click", saveCurrentParlay);
 elements.updateParlayResults.addEventListener("click", updateSavedParlayResults);
+elements.originPerformance.addEventListener("click", (event) => {
+  const open = event.target.closest("[data-view-origin-picks]");
+  if (open) state.expandedOrigin = open.dataset.viewOriginPicks;
+  if (event.target.closest("[data-close-origin-picks]")) state.expandedOrigin = null;
+  if (open || event.target.closest("[data-close-origin-picks]")) renderOriginPerformance();
+});
 elements.savedParlaysList.addEventListener("change", (event) => {
   const select = event.target.closest("[data-leg-result]");
   const card = event.target.closest("[data-parlay-id]");
@@ -3820,8 +3864,15 @@ elements.outcomeContent.addEventListener("click", (event) => {
   if (leg) appendPickToParlay(leg, "Pick 1X2 agregado a Mi parlay.");
 });
 elements.savePreMatchEvidence.addEventListener("click", capturePreMatchEvidence);
-elements.auditFixture.addEventListener("change", () => { elements.runAudit.disabled = !elements.auditFixture.value; });
+elements.auditFixture.addEventListener("change", () => {
+  const hasEvidence = Boolean(selectedAuditEvidence());
+  elements.runAudit.disabled = !elements.auditFixture.value || !hasEvidence;
+  elements.viewAuditEvidence.disabled = !hasEvidence;
+  elements.auditEvidencePreview.hidden = true;
+});
 elements.runAudit.addEventListener("click", runSelectedAudit);
+elements.viewAuditEvidence.addEventListener("click", showAuditEvidencePreview);
+elements.closeAuditEvidence.addEventListener("click", () => { elements.auditEvidencePreview.hidden = true; });
 elements.notificationToggle.addEventListener("click", () => {
   const open = elements.notificationToggle.getAttribute("aria-expanded") === "true";
   elements.notificationToggle.setAttribute("aria-expanded", String(!open));

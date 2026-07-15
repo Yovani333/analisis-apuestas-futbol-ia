@@ -329,8 +329,10 @@ export function normalizeFixture(item, league) {
     statusShort: shortStatus,
     elapsed: item.fixture.status?.elapsed ?? null,
     neutralVenue,
+    venueId: item.fixture.venue?.id ?? null,
     stadium: item.fixture.venue?.name || "No disponible",
     city: item.fixture.venue?.city || "",
+    stadiumSource: item.fixture.venue?.name ? (item.fixture.venue?._hydrated ? "api-football-venues" : "api-football-fixture") : "not_available",
     latitude: item.fixture.venue?.latitude ?? item.fixture.venue?.lat ?? null,
     longitude: item.fixture.venue?.longitude ?? item.fixture.venue?.lng ?? item.fixture.venue?.lon ?? null,
     country: league.countryLabel,
@@ -447,6 +449,19 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const base = fixtureRows[0];
   if (!base) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
+
+  const venueId = base.fixture?.venue?.id;
+  if (venueId && (!base.fixture.venue?.name || !base.fixture.venue?.city)) {
+    const venue = (await apiRequest("/venues", { id: venueId }, HISTORICAL_CACHE_TTL).catch(() => []))[0];
+    if (venue) base.fixture.venue = {
+      ...base.fixture.venue,
+      name: base.fixture.venue?.name || venue.name || null,
+      city: base.fixture.venue?.city || venue.city || null,
+      latitude: base.fixture.venue?.latitude ?? venue.latitude ?? null,
+      longitude: base.fixture.venue?.longitude ?? venue.longitude ?? null,
+      _hydrated: true
+    };
+  }
 
   const leagueConfigBase = ALLOWED_LEAGUES.find((league) =>
     league.country.toLowerCase() === base.league.country?.toLowerCase() &&

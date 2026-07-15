@@ -2,35 +2,35 @@
 
 **Etiqueta:** Prueba piloto inicial: 9 evidencias del Mundial. Útil para validar auditoría y detectar errores preliminares, pero insuficiente para calibración estadística.
 
-**Generada:** 2026-07-09T10:40:00.776Z
+**Generada:** 2026-07-15T04:37:08.234Z
 
 > Esta muestra sirve para validar extracción, comparación contra resultados y detección preliminar de errores. No se usa para recalibrar pesos ni fórmulas.
 
 ## Resumen
 
-- Evidencias procesadas: 8
-- Picks extraídos: 123
-- Picks PRECAUCIÓN/equivalentes evaluados: 16
+- Evidencias procesadas: 9
+- Picks extraídos: 138
+- Picks PRECAUCIÓN/equivalentes evaluados: 20
 - Acertados: 10
 - Fallados: 6
 - Nulos: 0
-- No evaluables: 0
-- Descartados EVITAR/NO BET: 107
+- No evaluables: 4
+- Descartados EVITAR/NO BET: 118
 
 ## Mercados con mejor lectura preliminar
 
-- Total de goles 2.5: 4 aciertos, 2 fallos, 0 no evaluables.
-- Ambos anotan: 3 aciertos, 2 fallos, 0 no evaluables.
-- Resultado 1X2: 1 aciertos, 0 fallos, 0 no evaluables.
+- Total de goles 2.5: 4 aciertos, 2 fallos, 1 no evaluables.
+- Ambos anotan: 3 aciertos, 2 fallos, 1 no evaluables.
+- Resultado 1X2: 1 aciertos, 0 fallos, 1 no evaluables.
+- Total de goles 1.5: 1 aciertos, 1 fallos, 1 no evaluables.
 - Doble oportunidad: 1 aciertos, 1 fallos, 0 no evaluables.
-- Total de goles 1.5: 1 aciertos, 1 fallos, 0 no evaluables.
 
 ## Mercados con peor lectura preliminar
 
-- Total de goles 2.5: 2 fallos, 4 aciertos, 0 no evaluables.
-- Ambos anotan: 2 fallos, 3 aciertos, 0 no evaluables.
+- Total de goles 2.5: 2 fallos, 4 aciertos, 1 no evaluables.
+- Ambos anotan: 2 fallos, 3 aciertos, 1 no evaluables.
+- Total de goles 1.5: 1 fallos, 1 aciertos, 1 no evaluables.
 - Doble oportunidad: 1 fallos, 1 aciertos, 0 no evaluables.
-- Total de goles 1.5: 1 fallos, 1 aciertos, 0 no evaluables.
 
 ## Evidencias
 
@@ -155,6 +155,23 @@
   - PRECAUCIÓN: Total de goles 1.5 - Más de 1.5 goles => fallado. Total 0 goles en 90' contra línea 1.5.
   - PRECAUCIÓN: Ambos anotan - Sí => fallado. Ambos anotan evaluado con 90': 0-0.
   - PRECAUCIÓN: Total de goles 2.5 - Más de 2.5 goles => fallado. Total 0 goles en 90' contra línea 2.5.
+
+### Argentina vs Switzerland
+
+- Archivo: evidencia_2026-07-11_argentina_vs_switzerland.txt
+- Fixture ID: 1582681
+- Competición: Copa Mundial FIFA (ID 1)
+- Fase: No especificada
+- Marcador 90': No disponible
+- Tiempo extra: No
+- Penales: No
+- Avanzó: No disponible
+- PRECAUCIÓN/equivalentes: 4
+- Descartes EVITAR/NO BET: 11
+  - PRECAUCIÓN: Total de goles 1.5 - Más de 1.5 goles => no_evaluable. Falta marcador final de 90 minutos + añadido.
+  - PRECAUCIÓN: Total de goles 2.5 - Más de 2.5 goles => no_evaluable. Falta marcador final de 90 minutos + añadido.
+  - PRECAUCIÓN: Ambos anotan - Sí => no_evaluable. Falta marcador final de 90 minutos + añadido.
+  - PRECAUCIÓN: Resultado 1X2 - Empate => no_evaluable. Falta marcador final de 90 minutos + añadido.
 
 ## Recomendaciones prudentes
 

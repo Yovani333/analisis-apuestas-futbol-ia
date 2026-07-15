@@ -14,7 +14,7 @@ import { calculateTeamGoalProbability } from "./team-goal-probability.service.js
 const fallback = (warning) => ({ status: "not_available", warning, picks: [], suggestedMarkets: [] });
 let activeCycle = null;
 
-export function createAutomaticEvidenceSnapshot(dataset, now = new Date()) {
+export function createServerEvidenceSnapshot(dataset, now = new Date(), { captureMode = "automatic_one_hour", targetLeadMinutes = 60 } = {}) {
   const fixture = dataset?.fixture;
   if (!fixture?.id) throw new TypeError("La evidencia automatica requiere fixtureId.");
   if (fixture.status !== "scheduled") throw new TypeError("La evidencia automatica solo se captura antes del inicio.");
@@ -40,6 +40,10 @@ export function createAutomaticEvidenceSnapshot(dataset, now = new Date()) {
       leagueId: fixture.leagueId ?? null,
       season: fixture.season ?? null,
       country: fixture.country || null,
+      stadium: fixture.stadium || null,
+      city: fixture.city || null,
+      venueId: fixture.venueId ?? null,
+      stadiumSource: fixture.stadiumSource || "api-football",
       source: fixture.dataSource || dataset.source || "api-football",
       home: fixture.home,
       away: fixture.away,
@@ -54,8 +58,10 @@ export function createAutomaticEvidenceSnapshot(dataset, now = new Date()) {
     researchData: dataset.researchData || fixture.researchData || null,
     modules: { dataPicks, poisson, teamGoals, corners },
     auditMetadata: {
-      captureMode: "automatic_one_hour",
-      targetLeadMinutes: 60,
+      captureMode,
+      targetLeadMinutes,
+      datasetFetchedAt: dataset.fetchedAt || null,
+      dataSource: dataset.source || "api-football",
       dataPicksModelVersion: dataPicks?.modelVersion || null,
       adjustmentsVersion: dataPicks?.adjustmentsVersion || null,
       probabilityScale: "percent_0_100",
@@ -64,6 +70,10 @@ export function createAutomaticEvidenceSnapshot(dataset, now = new Date()) {
     currentFixtureStatisticsUsed: false,
     openAiUsed: false
   });
+}
+
+export function createAutomaticEvidenceSnapshot(dataset, now = new Date()) {
+  return createServerEvidenceSnapshot(dataset, now, { captureMode: "automatic_one_hour", targetLeadMinutes: 60 });
 }
 
 export function evidenceWindowStatus(fixtureDate, now = new Date()) {
@@ -85,7 +95,7 @@ async function processWatchRow(row, now, dependencies) {
     return { fixtureId: String(row.fixture_id), status: "skipped" };
   }
   try {
-    const dataset = await dependencies.getDataset(row.fixture_id);
+    const dataset = await dependencies.getDataset(row.fixture_id, { forceRefresh: true });
     if (dataset?.fixture?.status !== "scheduled") throw new TypeError("El fixture ya no esta programado.");
     const snapshot = createAutomaticEvidenceSnapshot(dataset, now);
     await dependencies.saveEvidence(row, snapshot, now);
@@ -118,9 +128,9 @@ export async function runAutomaticEvidenceCycle(options = {}) {
   activeCycle = (async () => {
     const rows = await dependencies.listDue(now, options.limit || 10);
     const datasetByFixture = new Map();
-    const getSharedDataset = (fixtureId) => {
+    const getSharedDataset = (fixtureId, datasetOptions = {}) => {
       const key = String(fixtureId);
-      if (!datasetByFixture.has(key)) datasetByFixture.set(key, Promise.resolve(dependencies.getDataset(key)));
+      if (!datasetByFixture.has(key)) datasetByFixture.set(key, Promise.resolve(dependencies.getDataset(key, datasetOptions)));
       return datasetByFixture.get(key);
     };
     const results = [];

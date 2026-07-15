@@ -237,6 +237,18 @@ export const footballDataService = {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") throw new Error("La auditoría real requiere API-Football; los cálculos se validan localmente con mocks.");
     return requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/audit${evidence ? "/snapshot" : ""}`, { method: "POST", body: evidence ? JSON.stringify({ evidence }) : undefined });
+  },
+
+  async captureEvidence(fixtureId) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") throw new Error("La evidencia verificable requiere API-Football.");
+    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/evidence`, { method: "POST" });
+    return payload.snapshot;
+  },
+
+  async getEvidenceLibrary() {
+    const payload = await requestJson("/api/audit/evidence-library");
+    return payload.snapshots || [];
   }
 };
 

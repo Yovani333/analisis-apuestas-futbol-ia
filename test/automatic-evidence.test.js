@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   automaticEvidenceInternals,
   createAutomaticEvidenceSnapshot,
+  createServerEvidenceSnapshot,
   evidenceWindowStatus,
   runAutomaticEvidenceCycle
 } from "../server/services/automatic-evidence.service.js";
@@ -50,6 +51,16 @@ test("crea evidencia automatica auditable sin OpenAI ni datos actuales", () => {
   assert.equal(snapshot.currentFixtureStatisticsUsed, false);
   assert.equal(snapshot.openAiUsed, false);
   assert.ok(snapshot.modules.dataPicks);
+});
+
+test("evidencia manual y automatica comparten el mismo constructor y datos deportivos", () => {
+  const automatic = createAutomaticEvidenceSnapshot(dataset(), NOW);
+  const manual = createServerEvidenceSnapshot(dataset(), NOW, { captureMode: "manual_server", targetLeadMinutes: null });
+  assert.deepEqual(Object.keys(manual.modules), Object.keys(automatic.modules));
+  assert.deepEqual(manual.modules.dataPicks.picks.map((pick) => [pick.market, pick.selection, pick.decision]), automatic.modules.dataPicks.picks.map((pick) => [pick.market, pick.selection, pick.decision]));
+  assert.deepEqual(manual.fixture, automatic.fixture);
+  assert.equal(manual.auditMetadata.captureMode, "manual_server");
+  assert.equal(manual.auditMetadata.dataSource, "api-football");
 });
 
 test("registra solo fixtures programados futuros y calcula la hora objetivo", () => {
@@ -106,6 +117,7 @@ test("reintenta fallos temporales y falla de forma controlada al tercer intento"
 
 test("comparte una sola consulta API cuando varias cuentas vigilan el mismo fixture", async () => {
   let datasetCalls = 0;
+  let requestedOptions = null;
   let saved = 0;
   const result = await runAutomaticEvidenceCycle({
     now: NOW,
@@ -113,11 +125,12 @@ test("comparte una sola consulta API cuando varias cuentas vigilan el mismo fixt
       { user_id: "u1", fixture_id: "12345", fixture_date: "2026-07-12T19:00:00.000Z", attempts: 0 },
       { user_id: "u2", fixture_id: "12345", fixture_date: "2026-07-12T19:00:00.000Z", attempts: 0 }
     ],
-    getDataset: async () => { datasetCalls += 1; return dataset(); },
+    getDataset: async (fixtureId, options) => { datasetCalls += 1; requestedOptions = options; return dataset(); },
     saveEvidence: async () => { saved += 1; },
     updateWatch: async () => {}
   });
   assert.equal(datasetCalls, 1);
+  assert.deepEqual(requestedOptions, { forceRefresh: true });
   assert.equal(saved, 2);
   assert.equal(result.captured, 2);
 });

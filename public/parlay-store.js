@@ -171,16 +171,52 @@ export function createSavedPick(leg, now = new Date()) {
 export function calculateOriginPerformance(picks = [], parlays = []) {
   const groups = new Map();
   const parlayLegs = parlays.filter((parlay) => !parlay?.trashed).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
-  for (const pick of [...picks, ...parlayLegs]) {
+  const rows = [...picks.map((pick) => ({ pick, kind: "individual" })), ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))];
+  const leadLabel = (pick) => {
+    const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || "");
+    const added = Date.parse(pick.addedAt || pick.savedAt || pick.createdAt || "");
+    if (!Number.isFinite(kickoff) || !Number.isFinite(added) || kickoff <= added) return "Sin dato";
+    const minutes = Math.max(1, Math.round((kickoff - added) / 60000));
+    if (minutes >= 1440) return `${Math.floor(minutes / 1440)} d`;
+    if (minutes >= 60) return `${Math.floor(minutes / 60)} h`;
+    return `${minutes} min`;
+  };
+  const classify = (pick) => {
+    const value = String(pick.selection || pick.market || "Pick").trim();
+    const total = value.match(/(más|menos)\s+de\s+(\d+(?:[.,]\d+)?)/i);
+    if (total) return `${total[1][0].toUpperCase()}${total[1].slice(1).toLowerCase()} de ${total[2].replace(",", ".")}`;
+    if (/^empate$/i.test(value) || /resultado.*empate/i.test(`${pick.market} ${value}`)) return "Empate";
+    if (/\bgana\b/i.test(value)) return "Gana";
+    return value;
+  };
+  for (const { pick, kind } of rows) {
     if (!['won', 'lost'].includes(pick?.result)) continue;
     const origin = pick.sourceModule || "odds";
-    const current = groups.get(origin) || { origin, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0 };
+    const current = groups.get(origin) || { origin, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0, addedBuckets: {}, wonPicks: [], wonCategories: [] };
     current.evaluated += 1;
     current[pick.result] += 1;
-    if (parlayLegs.includes(pick)) current.parlayLegs += 1;
+    if (kind === "parlay") current.parlayLegs += 1;
     else current.individual += 1;
+    const lead = leadLabel(pick);
+    current.addedBuckets[lead] = (current.addedBuckets[lead] || 0) + 1;
+    if (pick.result === "won") current.wonPicks.push({
+      id: pick.id || `${origin}:${current.wonPicks.length}`,
+      selection: pick.selection || "Pick",
+      market: pick.market || "Mercado no disponible",
+      match: [pick.home, pick.away].filter(Boolean).join(" vs "),
+      league: pick.league || "No disponible",
+      addedLead: lead,
+      category: classify(pick),
+      odds: pick.originalOdds ?? pick.decimalOdds ?? null
+    });
     current.winRate = Number((current.won / current.evaluated * 100).toFixed(1));
     groups.set(origin, current);
+  }
+  for (const current of groups.values()) {
+    const categories = new Map();
+    for (const pick of current.wonPicks) categories.set(pick.category, (categories.get(pick.category) || 0) + 1);
+    current.wonCategories = [...categories.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+    current.addedSummary = Object.entries(current.addedBuckets).map(([label, count]) => `${label} (${count})`).join(" · ");
   }
   return [...groups.values()].sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.origin.localeCompare(b.origin));
 }

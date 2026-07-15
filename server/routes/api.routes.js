@@ -34,7 +34,8 @@ import {
   cloudConfiguration, getCloudState, getEvidenceAutomationStatus, refreshCloudSession, registerEvidenceWatchlist,
   saveCloudState, signInCloudUser, signOutCloudUser, signUpCloudUser
 } from "../services/cloud-sync.service.js";
-import { runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
+import { createServerEvidenceSnapshot, runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
+import { loadEvidenceLibrary } from "../services/audit/evidence-library.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -91,6 +92,8 @@ apiRouter.post("/automation/evidence/run", requireLiveMode, automationLimiter, a
   if (!validAutomationSecret(req.headers["x-automation-secret"])) throw new AppError("Automatizacion no autorizada.", 401, "AUTOMATION_UNAUTHORIZED");
   res.json(await runAutomaticEvidenceCycle());
 }));
+
+apiRouter.get("/audit/evidence-library", (req, res) => res.json(loadEvidenceLibrary()));
 
 apiRouter.get("/leagues", asyncRoute(async (req, res) => {
   if (env.dataMode !== "live") {
@@ -253,6 +256,16 @@ apiRouter.post("/fixtures/:fixtureId/audit", requireLiveMode, asyncRoute(async (
   if (!result.finished) return res.status(409).json({ error: { code: "FIXTURE_NOT_FINISHED", message: result.appStatus === "live" ? "El partido sigue en vivo; la auditoría queda LIVE_PENDING." : "Solo se auditan partidos finalizados." } });
   const dataset = await getFixtureDataset(fixtureId, { includeHistorical: true });
   res.json(runFixtureBacktest(dataset, result));
+}));
+
+apiRouter.post("/fixtures/:fixtureId/evidence", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh: true });
+  if (dataset.fixture.status !== "scheduled") throw new AppError("La evidencia solo puede capturarse antes del inicio.", 409, "EVIDENCE_FIXTURE_STARTED");
+  res.json({
+    source: "api-football-server-snapshot",
+    snapshot: createServerEvidenceSnapshot(dataset, new Date(), { captureMode: "manual_server", targetLeadMinutes: null })
+  });
 }));
 
 apiRouter.post("/fixtures/:fixtureId/audit/snapshot", requireLiveMode, asyncRoute(async (req, res) => {
