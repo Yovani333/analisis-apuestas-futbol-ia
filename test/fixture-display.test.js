@@ -4,9 +4,18 @@ import {
   normalizeFavorite,
   normalizeFixture,
   isCoverageAvailable,
+  resolveApiResponseCacheTtl,
   searchFixtures,
   shouldLoadCurrentFixtureData
 } from "../server/services/api-football.service.js";
+
+test("respuestas xG vacias usan cache corto y datos utiles conservan cache historico", () => {
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const fiveMinutes = 5 * 60 * 1000;
+  const policy = { emptyTtl: fiveMinutes, hasUsableData: (rows) => rows.length > 0 };
+  assert.equal(resolveApiResponseCacheTtl([], week, policy), fiveMinutes);
+  assert.equal(resolveApiResponseCacheTtl([{ team: { id: 1 } }], week, policy), week);
+});
 
 const league = {
   slug: "world-cup", name: "Copa Mundial FIFA", countryLabel: "Mundial"

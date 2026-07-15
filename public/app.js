@@ -1231,6 +1231,7 @@ function renderResearchModuleDetail(moduleKey, research) {
     content = `<div class="detail-note"><strong>${module.confirmed ? "Alineaciones confirmadas" : "Alineaciones probables / sin confirmación"}</strong><span>La confirmación exige once inicial oficial para ambos equipos.</span></div><div class="lineups-grid">${playerList(research.homeTeam.name, module.homeFormation, homePlayers)}${playerList(research.awayTeam.name, module.awayFormation, awayPlayers)}</div>`;
   } else if (moduleKey === "xgXga") {
     const historicalEstimated = module.type === "historical_estimated" || module.dataSource === "historical_api_estimate";
+    const historicalAttempted = historicalEstimated || module.historicalAttempted === true;
     const estimated = historicalEstimated || ["estimated", "fixture_estimated"].includes(module.type);
     const confidenceLabel = (value) => ({
       high: historicalEstimated ? "Aceptable" : "Alta",
@@ -1238,7 +1239,7 @@ function renderResearchModuleDetail(moduleKey, research) {
       low: "Baja",
       not_available: "No disponible"
     }[value] || "No disponible");
-    const modeLabel = historicalEstimated ? "Estimado con partidos anteriores" : estimated ? "Fixture actual" : "Oficial";
+    const modeLabel = historicalEstimated ? "Estimado con partidos anteriores" : historicalAttempted ? "Histórico sin muestra útil" : estimated ? "Fixture actual" : "Oficial";
     const teamRows = [
       [escapeHtml(research.homeTeam.name), displayValue(module.homeXG), displayValue(module.homeXGA), modeLabel, displayValue(module.homeSampleSize ?? module.sampleSize), confidenceLabel(module.homeConfidence?.label || module.confidenceLabel)],
       [escapeHtml(research.awayTeam.name), displayValue(module.awayXG), displayValue(module.awayXGA), modeLabel, displayValue(module.awaySampleSize ?? module.sampleSize), confidenceLabel(module.awayConfidence?.label || module.confidenceLabel)]
@@ -1251,7 +1252,9 @@ function renderResearchModuleDetail(moduleKey, research) {
       ? `<div class="detail-note detail-note--info"><strong>API-Football + modelo interno · ${escapeHtml(module.modelVersion || (historicalEstimated ? "historical-estimated-xg-v1" : "fixture-estimated-xg-v1"))}</strong><span>${escapeHtml(mandatoryText)}</span></div>
         ${module.missingFields?.length ? `<div class="detail-note"><strong>Datos faltantes</strong><span>${escapeHtml(module.missingFields.join(", "))}</span></div>` : ""}
         ${module.notes?.length ? `<div class="detail-note"><strong>Notas de revisión</strong><span>${escapeHtml(module.notes.join(" "))}</span></div>` : ""}`
-      : "";
+      : historicalAttempted
+        ? `<div class="detail-note"><strong>API-Football no entregó una muestra histórica utilizable</strong><span>${escapeHtml(module.notes?.join(" ") || "Revisa la trazabilidad para conocer qué partidos se omitieron. No se inventaron valores.")}</span></div>`
+        : "";
     const fixtureRows = historicalEstimated
       ? ["home", "away"].flatMap((side) => (module.fixturesUsed?.[side] || []).map((fixture) => [
         escapeHtml(side === "home" ? research.homeTeam.name : research.awayTeam.name),
@@ -1284,18 +1287,19 @@ function renderResearchModuleDetail(moduleKey, research) {
       statistics_request_failed: "Falló la consulta de estadísticas",
       insufficient_statistics: "Estadísticas insuficientes"
     };
-    const diagnostics = historicalEstimated && module.diagnostics
+    const diagnostics = historicalAttempted && module.diagnostics
       ? `<section class="detail-section"><h3>Trazabilidad de la muestra</h3>${detailTable(
-        ["Equipo", "Intentados", "Usados", "Omitidos"],
+        ["Equipo", "Intentados", "Usados", "Eventos fallidos", "Omitidos"],
         ["home", "away"].map((side) => {
           const item = module.diagnostics?.[side] || {};
           const skipped = (item.skippedFixtures || []).map((fixture) =>
-            `${fixture.fixtureId || "Sin ID"}: ${skippedReasonLabel[fixture.reason] || fixture.reason}`
+            `${fixture.fixtureId || "Sin ID"}: ${skippedReasonLabel[fixture.reason] || fixture.reason}${fixture.errorCode && fixture.errorCode !== "UNKNOWN" ? ` (${fixture.errorCode})` : ""}`
           ).join("; ");
           return [
             escapeHtml(side === "home" ? research.homeTeam.name : research.awayTeam.name),
             displayValue(item.attemptedFixtures, 0),
             displayValue(item.usedFixtures, 0),
+            displayValue(item.eventsRequestFailures, 0),
             escapeHtml(skipped || "Ninguno")
           ];
         })

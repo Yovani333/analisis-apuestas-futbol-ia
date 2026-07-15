@@ -427,8 +427,14 @@ export function getXgXgaData(dataset) {
     ...moduleBase(DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, "",
       historical?.confidence?.notes?.[0] || "Datos históricos insuficientes para calcular xG/xGA responsablemente."),
     type: "not_available", homeXG: null, homeXGA: null, awayXG: null, awayXGA: null,
-    homeNPXG: null, awayNPXG: null, modelVersion: "", confidenceScore: 0,
-    confidenceLabel: "not_available", warning: "No se inventaron valores de xG/xGA."
+    homeNPXG: null, awayNPXG: null, modelVersion: historical?.modelVersion || "", confidenceScore: 0,
+    confidenceLabel: "not_available", warning: "No se inventaron valores de xG/xGA.",
+    historicalAttempted: Boolean(historical),
+    diagnostics: historical ? {
+      home: historical.homeTeam?.diagnostics,
+      away: historical.awayTeam?.diagnostics
+    } : null,
+    notes: historical?.confidence?.notes || []
   };
 }
 

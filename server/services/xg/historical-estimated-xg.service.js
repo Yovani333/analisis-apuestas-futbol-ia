@@ -16,6 +16,21 @@ export const WORLD_CUP_XG_WARNING = "Modo Mundial: muestra estadística limitada
 
 const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
 const REQUIRED_FIELDS = ["totalShots", "shotsOnGoal", "shotsInsideBox", "shotsOutsideBox", "cornerKicks"];
+const HISTORY_REQUEST_CONCURRENCY = 2;
+
+async function mapWithConcurrency(rows, concurrency, worker) {
+  const results = new Array(rows.length);
+  let cursor = 0;
+  const run = async () => {
+    while (cursor < rows.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(rows[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, rows.length) }, run));
+  return results;
+}
 
 function hasMinimumInputs(stats) {
   return stats.totalShots !== null && stats.shotsOnGoal !== null;
@@ -50,6 +65,7 @@ function emptyTeam(team) {
     diagnostics: {
       attemptedFixtures: 0,
       usedFixtures: 0,
+      eventsRequestFailures: 0,
       skippedFixtures: []
     }
   };
@@ -120,7 +136,7 @@ async function buildTeamHistory({
   priorStrength
 }) {
   const fixtures = previousFinishedFixtures(fixtureRows, currentFixtureDate, limit);
-  const outcomes = await Promise.all(fixtures.map(async (fixture) => {
+  const outcomes = await mapWithConcurrency(fixtures, HISTORY_REQUEST_CONCURRENCY, async (fixture) => {
     const fixtureId = String(fixture?.fixture?.id || "");
     const homeId = fixture?.teams?.home?.id;
     const awayId = fixture?.teams?.away?.id;
@@ -130,13 +146,13 @@ async function buildTeamHistory({
     }
 
     const [statisticsResult, eventsResult] = await Promise.all([
-      getFixtureStatistics(fixtureId).then((data) => ({ data, failed: false })).catch(() => ({ data: [], failed: true })),
-      getFixtureEvents(fixtureId).then((data) => ({ data, failed: false })).catch(() => ({ data: [], failed: true }))
+      getFixtureStatistics(fixtureId).then((data) => ({ data, failed: false, errorCode: null })).catch((error) => ({ data: [], failed: true, errorCode: error?.code || "UNKNOWN" })),
+      getFixtureEvents(fixtureId).then((data) => ({ data, failed: false, errorCode: null })).catch((error) => ({ data: [], failed: true, errorCode: error?.code || "UNKNOWN" }))
     ]);
     const teamStats = extractTeamStatsFromApiFootball(statisticsResult.data, team.id);
     const opponentStats = extractTeamStatsFromApiFootball(statisticsResult.data, opponentId);
     if (statisticsResult.failed) {
-      return { record: null, skipped: { fixtureId, reason: "statistics_request_failed" } };
+      return { record: null, skipped: { fixtureId, reason: "statistics_request_failed", errorCode: statisticsResult.errorCode } };
     }
     if (!hasMinimumInputs(teamStats) || !hasMinimumInputs(opponentStats)) {
       return { record: null, skipped: { fixtureId, reason: "insufficient_statistics" } };
@@ -167,9 +183,10 @@ async function buildTeamHistory({
         blockedShots: teamStats.blockedShots
       },
       missingFields: confidence.missingFields,
-      eventsAvailable: !eventsResult.failed
+      eventsAvailable: !eventsResult.failed,
+      eventsErrorCode: eventsResult.errorCode
     }, skipped: null };
-  }));
+  });
   const records = outcomes.map((outcome) => outcome.record).filter(Boolean);
   const skippedFixtures = outcomes.map((outcome) => outcome.skipped).filter(Boolean);
 
@@ -197,6 +214,7 @@ async function buildTeamHistory({
     diagnostics: {
       attemptedFixtures: fixtures.length,
       usedFixtures: records.length,
+      eventsRequestFailures: records.filter((record) => !record.eventsAvailable).length,
       skippedFixtures
     },
     confidence: { ...confidence, notes },

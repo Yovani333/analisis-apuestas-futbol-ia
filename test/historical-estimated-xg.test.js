@@ -169,6 +169,37 @@ test("conserva el motivo cuando falla una consulta histórica", async () => {
   assert.doesNotMatch(JSON.stringify(result), /límite/);
 });
 
+test("limita la concurrencia al recopilar estadisticas y eventos historicos", async () => {
+  let active = 0;
+  let maximum = 0;
+  const wrap = (loader) => async (fixtureId) => {
+    active += 1;
+    maximum = Math.max(maximum, active);
+    await new Promise((resolve) => setTimeout(resolve, 3));
+    try { return await loader(fixtureId); }
+    finally { active -= 1; }
+  };
+  const loaders = createLoaders();
+  const result = await getHistoricalEstimatedXgXga(input(6, 6, {
+    limit: 10,
+    getFixtureStatistics: wrap(loaders.getFixtureStatistics),
+    getFixtureEvents: wrap(loaders.getFixtureEvents)
+  }));
+  assert.equal(result.homeTeam.sampleSize, 6);
+  assert.equal(result.awayTeam.sampleSize, 6);
+  assert.ok(maximum <= 8, `Se observaron ${maximum} solicitudes simultaneas`);
+});
+
+test("registra fallos de eventos sin descartar estadisticas utilizables", async () => {
+  const result = await getHistoricalEstimatedXgXga(input(1, 1, {
+    getFixtureEvents: async () => { const error = new Error("temporal"); error.code = "API_FOOTBALL_NETWORK_ERROR"; throw error; }
+  }));
+  assert.equal(result.homeTeam.sampleSize, 1);
+  assert.equal(result.awayTeam.sampleSize, 1);
+  assert.equal(result.homeTeam.diagnostics.eventsRequestFailures, 1);
+  assert.equal(result.awayTeam.diagnostics.eventsRequestFailures, 1);
+});
+
 test("los porcentajes string se normalizan dentro de la muestra", async () => {
   const result = await getHistoricalEstimatedXgXga(input(1, 1));
   assert.equal(result.homeTeam.fixturesUsed.length, 1);

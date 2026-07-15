@@ -347,6 +347,23 @@ test("no usa estadísticas del fixture como xG prepartido", () => {
   assert.equal(normalized.xgXga.type, "not_available");
 });
 
+test("conserva diagnostico historico cuando API-Football no entrega muestra util", () => {
+  const dataset = datasetFixture();
+  dataset.fixture.status = "scheduled";
+  dataset.historicalEstimatedXg = {
+    status: "not_available",
+    modelVersion: "historical-estimated-xg-v2",
+    confidence: { score: 0, label: "not_available", notes: ["Sin estadisticas suficientes."] },
+    homeTeam: { diagnostics: { attemptedFixtures: 5, usedFixtures: 0, eventsRequestFailures: 1, skippedFixtures: [{ fixtureId: "10", reason: "insufficient_statistics" }] } },
+    awayTeam: { diagnostics: { attemptedFixtures: 5, usedFixtures: 0, eventsRequestFailures: 0, skippedFixtures: [] } }
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.xgXga.historicalAttempted, true);
+  assert.equal(normalized.xgXga.diagnostics.home.attemptedFixtures, 5);
+  assert.equal(normalized.xgXga.diagnostics.home.eventsRequestFailures, 1);
+  assert.match(normalized.xgXga.notes.join(" "), /Sin estadisticas suficientes/);
+});
+
 test("integra xG/xGA histórico estimado para un partido programado", () => {
   const dataset = datasetFixture();
   dataset.fixture.status = "scheduled";

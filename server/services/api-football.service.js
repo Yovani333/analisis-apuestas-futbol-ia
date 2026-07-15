@@ -42,6 +42,11 @@ const FINISHED_DATASET_CACHE_TTL = 24 * 60 * 60 * 1000;
 const LEAGUE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
+export function resolveApiResponseCacheTtl(value, requestedTtl, { emptyTtl = CACHE_TTL, hasUsableData } = {}) {
+  if (typeof hasUsableData !== "function") return requestedTtl;
+  return hasUsableData(value) ? requestedTtl : Math.min(requestedTtl, emptyTtl);
+}
+
 function getCached(key) {
   const item = requestCache.get(key);
   if (!item || item.expiresAt < Date.now()) return null;
@@ -79,7 +84,7 @@ function cacheMeta({ status, source, ttlMs, expiresAt, reason }) {
   };
 }
 
-async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
+async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy = {}) {
   if (!env.apiFootballKey) throw new AppError("API-Football no está configurada.", 503, "API_FOOTBALL_NOT_CONFIGURED");
   const url = new URL(path, env.apiFootballBaseUrl);
   Object.entries(params).forEach(([key, value]) => {
@@ -132,7 +137,8 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL) {
     throw new AppError("API-Football rechazó la consulta.", 502, "API_FOOTBALL_PROVIDER_ERROR");
   }
   const value = payload.response || [];
-  requestCache.set(cacheKey, { value, expiresAt: Date.now() + cacheTtl });
+  const responseCacheTtl = resolveApiResponseCacheTtl(value, cacheTtl, cachePolicy);
+  requestCache.set(cacheKey, { value, expiresAt: Date.now() + responseCacheTtl });
   negativeRequestCache.delete(cacheKey);
   return value;
   })().catch((error) => {
@@ -153,11 +159,19 @@ export async function getPreviousFixturesForTeam(teamId, limit = 5) {
 }
 
 export async function getFixtureStatistics(fixtureId) {
-  return apiRequest("/fixtures/statistics", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
+  return apiRequest("/fixtures/statistics", { fixture: fixtureId }, HISTORICAL_CACHE_TTL, {
+    emptyTtl: CACHE_TTL,
+    hasUsableData: (rows) => Array.isArray(rows) && rows.some((row) =>
+      Array.isArray(row?.statistics) && row.statistics.some((stat) => stat?.value !== null && stat?.value !== undefined && stat?.value !== "")
+    )
+  });
 }
 
 export async function getFixtureEvents(fixtureId) {
-  return apiRequest("/fixtures/events", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
+  return apiRequest("/fixtures/events", { fixture: fixtureId }, HISTORICAL_CACHE_TTL, {
+    emptyTtl: CACHE_TTL,
+    hasUsableData: (rows) => Array.isArray(rows) && rows.length > 0
+  });
 }
 
 export async function getFixturePlayers(fixtureId) {
