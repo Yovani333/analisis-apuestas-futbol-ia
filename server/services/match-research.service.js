@@ -457,7 +457,7 @@ export function getWeatherPitchData(dataset) {
     const weatherAdvantage = evaluateWeatherAdvantage({
       fixture: dataset.fixture,
       weather: weather.data,
-      historicalEstimatedXg: dataset.historicalEstimatedXg
+      historicalEstimatedXg: dataset.historicalEstimatedXg || {}
     });
     return {
       ...moduleBase(DATA_STATUS.PARTIAL, weather.updatedAt || dataset.fetchedAt, "weather",

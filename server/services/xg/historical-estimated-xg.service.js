@@ -146,10 +146,9 @@ async function buildTeamHistory({
       return { record: null, skipped: { fixtureId, reason: "invalid_fixture" } };
     }
 
-    const [statisticsResult, eventsResult] = await Promise.all([
-      getFixtureStatistics(fixtureId).then((data) => ({ data, failed: false, errorCode: null })).catch((error) => ({ data: [], failed: true, errorCode: error?.code || "UNKNOWN" })),
-      getFixtureEvents(fixtureId).then((data) => ({ data, failed: false, errorCode: null })).catch((error) => ({ data: [], failed: true, errorCode: error?.code || "UNKNOWN" }))
-    ]);
+    const statisticsResult = await getFixtureStatistics(fixtureId)
+      .then((data) => ({ data, failed: false, errorCode: null }))
+      .catch((error) => ({ data: [], failed: true, errorCode: error?.code || "UNKNOWN" }));
     const teamStats = extractTeamStatsFromApiFootball(statisticsResult.data, team.id);
     const opponentStats = extractTeamStatsFromApiFootball(statisticsResult.data, opponentId);
     if (statisticsResult.failed) {
@@ -159,6 +158,9 @@ async function buildTeamHistory({
       return { record: null, skipped: { fixtureId, reason: "insufficient_statistics" } };
     }
 
+    const eventsResult = await getFixtureEvents(fixtureId)
+      .then((data) => ({ data, failed: false, errorCode: null }))
+      .catch((error) => ({ data: [], failed: true, errorCode: error?.code || "UNKNOWN" }));
     teamStats.penalties = extractPenaltyCountFromEvents(eventsResult.data, team.id);
     opponentStats.penalties = extractPenaltyCountFromEvents(eventsResult.data, opponentId);
     const estimatedXG = calculateEstimatedXG(teamStats);

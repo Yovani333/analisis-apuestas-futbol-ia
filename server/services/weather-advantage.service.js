@@ -44,6 +44,7 @@ function neutralResult(reason, conditions = [], styles = {}) {
 }
 
 export function evaluateWeatherAdvantage({ fixture = {}, weather = {}, historicalEstimatedXg = {} } = {}) {
+  const safeHistoricalEstimatedXg = historicalEstimatedXg || {};
   const rainProbability = numeric(weather.rainProbability);
   const precipitation = numeric(weather.precipitation);
   const windSpeed = numeric(weather.windSpeed);
@@ -60,8 +61,8 @@ export function evaluateWeatherAdvantage({ fixture = {}, weather = {}, historica
     return neutralResult("El pronóstico no presenta una condición suficientemente adversa para diferenciar a los equipos.");
   }
 
-  const homeStyle = summarizeStyle(historicalEstimatedXg.homeTeam?.fixturesUsed);
-  const awayStyle = summarizeStyle(historicalEstimatedXg.awayTeam?.fixturesUsed);
+  const homeStyle = summarizeStyle(safeHistoricalEstimatedXg.homeTeam?.fixturesUsed);
+  const awayStyle = summarizeStyle(safeHistoricalEstimatedXg.awayTeam?.fixturesUsed);
   const styles = { home: homeStyle, away: awayStyle };
   if (!homeStyle || !awayStyle) {
     return neutralResult("Faltan al menos tres partidos comparables con posesión y tiros para ambos equipos.", conditions, styles);
@@ -96,4 +97,3 @@ export function evaluateWeatherAdvantage({ fixture = {}, weather = {}, historica
     analysisUse: "secondary_context_only"
   };
 }
-

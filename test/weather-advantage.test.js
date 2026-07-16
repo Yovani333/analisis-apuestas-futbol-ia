@@ -19,6 +19,16 @@ test("no atribuye ventaja con clima normal", () => {
   assert.equal(result.label, "Sin ventaja verificable");
 });
 
+test("no falla cuando el historico xG llega como null", () => {
+  const result = evaluateWeatherAdvantage({
+    fixture: { home: "A", away: "B" },
+    weather: { rainProbability: 80, precipitation: 2 },
+    historicalEstimatedXg: null
+  });
+  assert.equal(result.favoredSide, null);
+  assert.match(result.reason, /Faltan al menos tres partidos/i);
+});
+
 test("detecta posible ventaja de juego directo bajo lluvia o viento", () => {
   const result = evaluateWeatherAdvantage({
     fixture: { home: "Equipo Directo", away: "Equipo de Posesión" },
@@ -56,4 +66,3 @@ test("no inventa ventaja con muestra insuficiente o solo calor", () => {
   assert.equal(heat.favoredSide, null);
   assert.match(heat.reason, /aclimatación/i);
 });
-

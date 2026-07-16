@@ -171,6 +171,20 @@ test("conserva el motivo cuando falla una consulta histórica", async () => {
   assert.doesNotMatch(JSON.stringify(result), /límite/);
 });
 
+test("no consulta eventos cuando las estadisticas historicas son insuficientes", async () => {
+  let eventCalls = 0;
+  const result = await getHistoricalEstimatedXgXga(input(1, 1, {
+    getFixtureStatistics: async () => [
+      statistics(1, "Equipo 1", { ...completeStats, totalShots: null, shotsOnGoal: null }),
+      statistics(1100, "Rival 1100", { ...completeStats, totalShots: 6, shotsOnGoal: 2 })
+    ],
+    getFixtureEvents: async () => { eventCalls += 1; return []; }
+  }));
+  assert.equal(result.status, "not_available");
+  assert.equal(eventCalls, 0);
+  assert.equal(result.homeTeam.diagnostics.skippedFixtures[0].reason, "insufficient_statistics");
+});
+
 test("limita la concurrencia al recopilar estadisticas y eventos historicos", async () => {
   let active = 0;
   let maximum = 0;

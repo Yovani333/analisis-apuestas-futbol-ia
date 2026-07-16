@@ -145,6 +145,9 @@ test("la búsqueda en vivo envía estados activos a API-Football", async () => {
 test("solo carga estadísticas del fixture actual cuando ya inició", () => {
   assert.equal(shouldLoadCurrentFixtureData("NS"), false);
   assert.equal(shouldLoadCurrentFixtureData("TBD"), false);
+  assert.equal(shouldLoadCurrentFixtureData("PST"), false);
+  assert.equal(shouldLoadCurrentFixtureData("CANC"), false);
+  assert.equal(shouldLoadCurrentFixtureData("SUSP"), false);
   assert.equal(shouldLoadCurrentFixtureData("2H"), true);
   assert.equal(shouldLoadCurrentFixtureData("FT"), true);
 });
@@ -154,6 +157,7 @@ test("selecciona cuotas live únicamente durante el encuentro", () => {
   assert.equal(resolveFixtureOddsRequest("LIVE").mode, "live");
   assert.equal(resolveFixtureOddsRequest("NS").endpoint, "/odds");
   assert.equal(resolveFixtureOddsRequest("FT").mode, "pre_match");
+  assert.equal(resolveFixtureOddsRequest("PST").mode, "not_available");
 });
 
 test("normaliza tipo, región y ronda de una clasificatoria", () => {
