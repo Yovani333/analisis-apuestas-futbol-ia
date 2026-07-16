@@ -821,6 +821,54 @@ function fixtureQualityView(fixture) {
   };
 }
 
+function evidenceFixtureSnapshot(fixtureOrId) {
+  const fixtureId = typeof fixtureOrId === "object" ? fixtureOrId?.id : fixtureOrId;
+  return fixtureId ? latestEvidenceForFixture(allEvidenceSnapshots(), fixtureId) : null;
+}
+
+function numericQualityScore(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function hydrateFixtureFromEvidence(fixture) {
+  const evidence = evidenceFixtureSnapshot(fixture);
+  if (!fixture || !evidence) return fixture;
+  const currentScore = numericQualityScore(fixture.dataQuality?.score ?? fixture.researchData?.totalConfidenceScore);
+  const evidenceScore = numericQualityScore(evidence.dataQuality?.score);
+  const shouldUseEvidence = evidenceScore !== null && (currentScore === null || evidenceScore > currentScore);
+  if (!shouldUseEvidence) return fixture;
+  return {
+    ...fixture,
+    dataQuality: evidence.dataQuality || fixture.dataQuality,
+    preMatch: evidence.preMatch || fixture.preMatch,
+    marketAnalysis: evidence.marketAnalysis?.length ? evidence.marketAnalysis : fixture.marketAnalysis,
+    researchData: evidence.researchData || fixture.researchData,
+    evidenceFallback: {
+      capturedAt: evidence.capturedAt,
+      score: evidenceScore,
+      currentScore,
+      source: evidence.auditMetadata?.captureMode || "saved_pre_match_evidence"
+    },
+    qualityAlerts: [
+      ...new Set([
+        ...(fixture.qualityAlerts || []),
+        `Evidencia prepartido disponible: se conserva snapshot ${evidenceScore}/100 cuando API-Football actual llega incompleta.`
+      ])
+    ]
+  };
+}
+
+function hydrateModulesFromEvidence(fixture) {
+  const evidence = evidenceFixtureSnapshot(fixture);
+  if (!fixture?.id || !evidence?.modules) return;
+  const modules = evidence.modules;
+  if (modules.dataPicks?.picks?.length && !state.dataPicksByFixture.has(fixture.id)) state.dataPicksByFixture.set(fixture.id, modules.dataPicks);
+  if (modules.poisson && modules.poisson.status !== "not_available" && !state.poissonByFixture.has(fixture.id)) state.poissonByFixture.set(fixture.id, modules.poisson);
+  if (modules.teamGoals && modules.teamGoals.status !== "not_available" && !state.teamGoalsByFixture.has(fixture.id)) state.teamGoalsByFixture.set(fixture.id, modules.teamGoals);
+  if (modules.corners && modules.corners.status !== "not_available" && !state.cornersByFixture.has(fixture.id)) state.cornersByFixture.set(fixture.id, modules.corners);
+}
+
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
@@ -897,8 +945,9 @@ function selectedFixture() {
 }
 
 function renderFixtureData() {
-  const fixture = selectedFixture();
+  const fixture = hydrateFixtureFromEvidence(selectedFixture());
   if (!fixture) return;
+  hydrateModulesFromEvidence(fixture);
 
   const statuses = Object.values(fixture.dataAvailability);
   const overall = statuses.some((status) => status !== "Disponible") ? "Necesita revisión" : "Disponible";
@@ -1014,7 +1063,7 @@ function renderFixtureData() {
   elements.specificMarketsContent.hidden = false;
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
   elements.openOddsDetail.disabled = false;
-  const evidence = latestEvidenceForFixture(state.evidenceSnapshots, fixture.id);
+  const evidence = evidenceFixtureSnapshot(fixture.id);
   elements.evidenceToolbar.hidden = fixture.status !== "scheduled";
   elements.savePreMatchEvidence.disabled = fixture.status !== "scheduled" || state.isCapturingEvidence;
   elements.downloadEvidenceTxt.disabled = fixture.status !== "scheduled" || !evidence;
@@ -3332,7 +3381,7 @@ async function selectFixture(fixtureId, analysisMode = null) {
   const fixtureIndex = state.fixtures.findIndex((fixture) => fixture.id === fixtureId);
 
   try {
-    const detailedFixture = await footballDataService.getFixtureData(selectedFixture());
+    const detailedFixture = hydrateFixtureFromEvidence(await footballDataService.getFixtureData(selectedFixture()));
     if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
     renderMatches();
     renderFixtureData();
@@ -3446,7 +3495,7 @@ async function refreshResearchData() {
   elements.refreshCoverage.textContent = "Actualizando…";
   elements.refreshResearch.textContent = "Actualizando…";
   try {
-    const detailedFixture = await footballDataService.getFixtureData(fixture, true);
+    const detailedFixture = hydrateFixtureFromEvidence(await footballDataService.getFixtureData(fixture, true));
     const previousSignature = JSON.stringify((fixture.researchData?.sourceCoverage || []).map((item) => [item.moduleKey, item.status]));
     const nextSignature = JSON.stringify((detailedFixture.researchData?.sourceCoverage || []).map((item) => [item.moduleKey, item.status]));
     const fixtureIndex = state.fixtures.findIndex((item) => item.id === fixture.id);

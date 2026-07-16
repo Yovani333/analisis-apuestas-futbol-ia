@@ -59,6 +59,14 @@ test("frontend conserva datos cargados cuando una respuesta nueva llega parcial"
   assert.match(services, /return mergeFixtureData\(fixture,/);
 });
 
+test("Dashboard hidrata fixtures y modulos desde evidencia prepartido guardada", () => {
+  assert.match(app, /function hydrateFixtureFromEvidence/);
+  assert.match(app, /function hydrateModulesFromEvidence/);
+  assert.match(app, /Evidencia prepartido disponible: se conserva snapshot/);
+  assert.match(app, /hydrateFixtureFromEvidence\(await footballDataService\.getFixtureData\(selectedFixture\(\)\)\)/);
+  assert.match(app, /state\.dataPicksByFixture\.set\(fixture\.id, modules\.dataPicks\)/);
+});
+
 test("la busqueda muestra solo encuentros validos sin exponer errores de ligas vacias", () => {
   const searchBody = app.match(/async function searchFixtures\(event\)[\s\S]+?function handleFilterChange/)[0];
   assert.match(searchBody, /encuentros válidos/);
