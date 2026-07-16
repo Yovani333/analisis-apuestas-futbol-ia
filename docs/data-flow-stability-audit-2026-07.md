@@ -65,12 +65,38 @@ Conclusion de la prueba:
 - El xG/xGA de fixture se activo correctamente en partido finalizado.
 - No se observaron calidades extremadamente bajas en esta muestra.
 
+## Validacion real de Simulacion
+
+Fecha de ejecucion local: 2026-07-15 PT.
+
+Fixture usado:
+
+- `1490325` - CF Montreal vs Toronto FC, MLS 2026.
+
+Resultado:
+
+- Comparador de equipos: `available`.
+- Partidos con estadisticas por equipo: 3 y 3.
+- Metricas completas: 10.
+- Simulacion avanzada: `available`.
+- Decision generada: `apuesta_con_valor_pero_riesgo_alto`.
+- Suma 1X2 final: 100.
+- Errores de validacion: 0.
+- Segunda ejecucion de simulacion: `cache hit`.
+- Delta de la segunda ejecucion: 0 requests, 0 cache hits adicionales, 0 failures.
+
+Conclusion:
+
+- Simulacion reutilizo el expediente y la cache interna.
+- La segunda ejecucion no volvio a consultar API-Football.
+- El motor avanzado no produjo NaN, infinitos ni probabilidades fuera de rango.
+
 ## Pruebas locales
 
 Ultimo resultado verificado:
 
 - `npm test`
-- `339/339` pruebas correctas.
+- `341/341` pruebas correctas.
 
 ## Limitaciones actuales
 
@@ -82,9 +108,8 @@ Ultimo resultado verificado:
 
 ## Pendientes recomendados
 
-1. Revisar Simulacion con un fixture real para confirmar reutilizacion de expediente y consumo incremental.
-2. Monitorear 2 o 3 partidos programados adicionales en ligas distintas.
-3. Documentar cualquier caso donde API-Football muestre venue o cuotas faltantes para determinar si es cobertura del proveedor o mapeo local.
+1. Monitorear 2 o 3 partidos programados adicionales en ligas distintas.
+2. Documentar cualquier caso donde API-Football muestre venue o cuotas faltantes para determinar si es cobertura del proveedor o mapeo local.
 
 ## Confirmaciones
 
