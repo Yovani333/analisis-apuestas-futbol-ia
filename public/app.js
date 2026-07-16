@@ -1194,7 +1194,7 @@ function renderResearchData(research) {
   const fixture = selectedFixture();
   const quality = fixtureQualityView(fixture);
   const currentScore = Math.max(0, Math.min(100, Number(research.totalConfidenceScore) || 0));
-  const score = quality?.source === "evidence" ? quality.score : currentScore;
+  const score = quality?.score ?? currentScore;
   const analysisLabel = analysisStatusLabels[research.analysisStatus] || "Necesita revisión";
   const critical = (research.criticalMissingData || []).map((item) => item.label).filter(Boolean);
   const consultedSources = Object.values(research.sources || {}).filter((source) => ["available", "partial"].includes(source.status)).map((source) => source.label);

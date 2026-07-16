@@ -41,7 +41,9 @@ const HISTORICAL_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 const SCHEDULED_DATASET_CACHE_TTL = 30 * 60 * 1000;
 const FINISHED_DATASET_CACHE_TTL = 24 * 60 * 60 * 1000;
 const LEAGUE_CACHE_TTL = 6 * 60 * 60 * 1000;
+const SEARCH_LEAGUE_CONCURRENCY = 2;
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const hasArrayData = (value) => Array.isArray(value) && value.length > 0;
 const hasObjectData = (value) => value && typeof value === "object" && Object.values(value).some((item) => {
@@ -206,10 +208,38 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
       { status: response.status }
     );
   }
-  const payload = await response.json();
-  const providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
+  let payload = await response.json();
+  let providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
   if (providerErrors?.length) {
     recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_PROVIDER_ERROR", headers: response.headers });
+    if (cachePolicy.providerErrorsAsEmpty) {
+      if (cachePolicy.providerErrorRetry !== false) {
+        await delay(cachePolicy.providerErrorRetryDelayMs || 300);
+        try {
+          const retryResponse = await fetch(url, {
+            headers: { "x-apisports-key": env.apiFootballKey },
+            signal: AbortSignal.timeout(12000)
+          });
+          recordApiFootballResponse({ endpoint: url.pathname, headers: retryResponse.headers });
+          if (retryResponse.ok) {
+            payload = await retryResponse.json();
+            providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
+            if (!providerErrors?.length) {
+              const retryValue = payload.response || [];
+              const retryTtl = resolveApiResponseCacheTtl(retryValue, cacheTtl, cachePolicy);
+              requestCache.set(cacheKey, { value: retryValue, expiresAt: Date.now() + retryTtl });
+              negativeRequestCache.delete(cacheKey);
+              return retryValue;
+            }
+          }
+        } catch {
+          recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_PROVIDER_RETRY_ERROR" });
+        }
+      }
+      const emptyTtl = Math.min(cacheTtl, cachePolicy.emptyTtl || NEGATIVE_CACHE_TTL);
+      requestCache.set(cacheKey, { value: [], expiresAt: Date.now() + emptyTtl });
+      return [];
+    }
     throw new AppError("API-Football rechazó la consulta.", 502, "API_FOOTBALL_PROVIDER_ERROR");
   }
   const value = payload.response || [];
@@ -260,6 +290,10 @@ export async function getFixtureLineups(fixtureId) {
 
 export function chooseSeason(seasons, requestedSeason, targetDate) {
   if (requestedSeason !== "auto") return requestedSeason;
+  if (!Array.isArray(seasons) || !seasons.length) {
+    const year = Number(String(targetDate || "").slice(0, 4));
+    return Number.isFinite(year) && year > 1900 ? year : null;
+  }
   const byDate = seasons.find((season) => season.start <= targetDate && season.end >= targetDate);
   const current = seasons.find((season) => season.current);
   const latest = [...seasons].sort((a, b) => b.year - a.year)[0];
@@ -460,14 +494,24 @@ async function mapWithConcurrency(items, limit, worker) {
 }
 
 export async function searchFixtures(filters, { request = apiRequest, leagueResolver = resolveLeague, onLeagueError = () => {} } = {}) {
-  const groups = await mapWithConcurrency(filters.leagues, 4, async (slug) => {
+  const groups = await mapWithConcurrency(filters.leagues, SEARCH_LEAGUE_CONCURRENCY, async (slug) => {
     try {
-      const league = await leagueResolver(slug, filters.season === "auto");
+      let league;
+      try {
+        league = await leagueResolver(slug, filters.season === "auto");
+      } catch (error) {
+        const configured = getAllowedLeague(slug);
+        if (filters.season === "auto" && configured?.apiId) {
+          league = { ...configured, seasons: [] };
+        } else {
+          throw error;
+        }
+      }
       const season = chooseSeason(league.seasons, filters.season, filters.dateFrom);
       if (!season) throw new AppError(`No se encontró temporada válida para ${league.name}.`, 422, "SEASON_NOT_RESOLVED");
       const fixtures = await request("/fixtures", {
         league: league.apiId, season, from: filters.dateFrom, to: filters.dateTo, status: providerStatus(filters.status), timezone: PACIFIC_TIME_ZONE
-      }, LIVE_CACHE_TTL);
+      }, LIVE_CACHE_TTL, { providerErrorsAsEmpty: true, emptyTtl: LIVE_CACHE_TTL });
       return fixtures
         .filter((item) => matchesConfiguredRound(item, league))
         .map((item) => normalizeFixture(item, league))
