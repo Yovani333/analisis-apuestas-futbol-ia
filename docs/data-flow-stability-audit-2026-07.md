@@ -152,9 +152,74 @@ Ultimo resultado verificado:
 - La calidad puede ser menor en competiciones con cobertura parcial.
 - La prueba real fue controlada y pequena; no representa una auditoria estadistica completa.
 
+## Criterio para datos faltantes de API-Football
+
+Este criterio queda como referencia para futuras revisiones cuando falten venue, cuotas o alineaciones.
+
+### Venue / estadio
+
+Se considera cobertura correcta si API-Football devuelve `fixture.venue.name`, `fixture.venue.city` o permite hidratar el venue por `venue.id`.
+
+Se considera posible falta de cobertura del proveedor cuando:
+
+- `fixture.venue.id` no existe.
+- `fixture.venue.name` viene vacio.
+- `/venues?id={venueId}` no devuelve nombre, ciudad ni coordenadas.
+
+Se considera posible problema de mapeo local cuando:
+
+- API-Football devuelve `venue.id` y `/venues` devuelve datos, pero la UI sigue mostrando `No disponible`.
+- El dataset normalizado conserva `venueId`, pero `stadiumSource` queda como `not_available`.
+- Otro modulo muestra ciudad/estadio y Dashboard no lo refleja.
+
+Resultado observado en el monitoreo:
+
+- Botafogo vs Santos: venue disponible desde API-Football.
+- CF Montreal vs Toronto FC: venue disponible desde API-Football.
+- Necaxa vs Atlante FC: venue disponible desde API-Football.
+
+### Cuotas
+
+Se considera cobertura correcta si `/odds?fixture={fixtureId}` o el fallback `/odds?league={leagueId}&season={season}&date={date}` devuelve mercados y el normalizador produce selecciones.
+
+Se considera posible falta de cobertura del proveedor cuando:
+
+- `/odds` devuelve arreglo vacio para fixture y para liga-fecha.
+- El partido ya esta muy cerca del inicio y el mercado fue retirado.
+- La competicion no tiene cobertura de odds en el plan actual.
+
+Se considera posible problema de mapeo local cuando:
+
+- `confirmed.odds` tiene filas, pero `researchData.odds.markets` queda vacio.
+- Existen cuotas normalizadas, pero Transparencia de datos muestra una tabla vacia.
+- Las cuotas existen sin EV y la UI las oculta por no tener calculo de modelo.
+
+Resultado observado en el monitoreo:
+
+- Los tres partidos programados devolvieron una fila cruda de odds y 12 cuotas normalizadas.
+
+### Alineaciones
+
+Se considera cobertura correcta si `/fixtures/lineups?fixture={fixtureId}` devuelve titulares, suplentes o formacion.
+
+Se considera posible falta de cobertura del proveedor cuando:
+
+- El partido esta programado y faltan muchas horas para iniciar.
+- API-Football no publica alineaciones probables para esa competicion.
+- El endpoint devuelve vacio pero no hay error tecnico.
+
+Se considera posible problema de mapeo local cuando:
+
+- `/fixtures/lineups` devuelve filas con `startXI`, `substitutes` o `formation`, pero la UI muestra `Alineaciones no disponibles`.
+- El fallback externo marca probable/confirmada y la matriz no distingue la fuente.
+
+Resultado observado en el monitoreo:
+
+- Los tres partidos programados quedaron sin alineaciones disponibles. Esto es coherente con la cobertura prepartido de API-Football y debe mostrarse como parcial/no disponible, no como error.
+
 ## Pendientes recomendados
 
-1. Documentar cualquier caso donde API-Football muestre venue o cuotas faltantes para determinar si es cobertura del proveedor o mapeo local.
+- Ninguno critico despues de esta fase. Mantener monitoreo manual cuando se detecten casos nuevos de cobertura faltante.
 
 ## Confirmaciones
 
