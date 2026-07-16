@@ -109,7 +109,17 @@ export function getH2HData(dataset) {
 
 export function getOddsData(dataset) {
   const oddsMeta = dataset.preMatch?.odds || {};
-  const apiMarkets = (dataset.marketAnalysis || []).map((market) => ({
+  const baseApiMarkets = Array.isArray(dataset.marketAnalysis) && dataset.marketAnalysis.length
+    ? dataset.marketAnalysis
+    : (oddsMeta.selections || []).map((selection) => ({
+      ...selection,
+      estimatedProbabilityPct: null,
+      expectedValuePct: null,
+      noVigImpliedProbabilityPct: null,
+      bookmakerMarginPct: null,
+      method: "Cuota disponible desde API-Football; falta contexto suficiente para calcular modelo y EV."
+    }));
+  const apiMarkets = baseApiMarkets.map((market) => ({
     marketKey: market.marketKey, selectionKey: market.selectionKey, market: market.market,
     selection: market.selection, decimalOdds: market.decimalOdds, bookmaker: market.bookmaker || dataset.preMatch?.odds?.bookmaker || "",
     bookmakerId: market.bookmakerId ?? null, sourceProvider: market.sourceProvider || "api-football",

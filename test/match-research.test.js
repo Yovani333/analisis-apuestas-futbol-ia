@@ -187,6 +187,28 @@ test("cuotas por liga y fecha se muestran como ultima captura disponible", () =>
   assert.equal(normalized.odds.providerUpdatedAt, "2026-06-21T10:00:00Z");
 });
 
+test("muestra cuotas de API-Football aunque no exista calculo de EV", () => {
+  const dataset = datasetFixture();
+  dataset.marketAnalysis = [];
+  dataset.preMatch.odds = {
+    bookmaker: "Casa",
+    updatedAt: "2026-06-21T10:00:00Z",
+    selections: [
+      { marketKey: "match_winner", selectionKey: "home_win", market: "Resultado 1X2", selection: "Equipo Local", decimalOdds: 1.95 },
+      { marketKey: "match_winner", selectionKey: "draw", market: "Resultado 1X2", selection: "Empate", decimalOdds: 3.2 },
+      { marketKey: "match_winner", selectionKey: "away_win", market: "Resultado 1X2", selection: "Equipo Visitante", decimalOdds: 3.8 },
+      { marketKey: "over_under_2_5", selectionKey: "over_2_5", market: "Total de goles 2.5", selection: "Más de 2.5 goles", decimalOdds: 1.85 }
+    ]
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+
+  assert.equal(normalized.odds.status, DATA_STATUS.AVAILABLE);
+  assert.equal(normalized.odds.markets.length, 4);
+  assert.equal(normalized.odds.markets[0].decimalOdds, 1.95);
+  assert.equal(normalized.odds.markets[0].expectedValuePct, null);
+  assert.match(normalized.odds.markets[0].method, /falta contexto suficiente/i);
+});
+
 test("FotMob complementa módulos críticos como parciales sin confirmar alineaciones", () => {
   const dataset = datasetFixture();
   dataset.confirmed.injuries = [];
