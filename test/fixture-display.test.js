@@ -8,6 +8,7 @@ import {
   resolveApiResponseCacheTtl,
   resolveFixtureOddsRequest,
   searchFixtures,
+  scheduledDatasetNeedsRevalidation,
   shouldLoadCurrentFixtureData
 } from "../server/services/api-football.service.js";
 
@@ -22,6 +23,26 @@ test("respuestas xG vacias usan cache corto y datos utiles conservan cache histo
 test("temporada automatica usa el año de busqueda si API-Football no entrega metadatos de liga", () => {
   assert.equal(chooseSeason([], "auto", "2026-07-16"), 2026);
   assert.equal(chooseSeason(null, "auto", "2026-07-16"), 2026);
+});
+
+test("cache persistente de programados se revalida cuando quedó con calidad baja o historial incompleto", () => {
+  const now = Date.parse("2026-07-16T12:00:00.000Z");
+  const staleLow = {
+    fixture: { id: "1490328", status: "scheduled" },
+    fetchedAt: "2026-07-16T11:40:00.000Z",
+    dataQuality: { score: 20 },
+    preMatch: { home: { played: 0 }, away: { played: 5 } }
+  };
+  const freshLow = { ...staleLow, fetchedAt: "2026-07-16T11:58:00.000Z" };
+  const healthy = {
+    ...staleLow,
+    fetchedAt: "2026-07-16T11:40:00.000Z",
+    dataQuality: { score: 85 },
+    preMatch: { home: { played: 5 }, away: { played: 5 } }
+  };
+  assert.equal(scheduledDatasetNeedsRevalidation(staleLow, now), true);
+  assert.equal(scheduledDatasetNeedsRevalidation(freshLow, now), false);
+  assert.equal(scheduledDatasetNeedsRevalidation(healthy, now), false);
 });
 
 const league = {

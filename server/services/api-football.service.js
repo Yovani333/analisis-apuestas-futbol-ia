@@ -863,6 +863,18 @@ function datasetCacheTtl(fixture) {
   return SCHEDULED_DATASET_CACHE_TTL;
 }
 
+export function scheduledDatasetNeedsRevalidation(dataset, now = Date.now()) {
+  if (dataset?.fixture?.status !== "scheduled") return false;
+  const score = Number(dataset.dataQuality?.score ?? dataset.researchData?.totalConfidenceScore);
+  const homePlayed = Number(dataset.preMatch?.home?.played ?? dataset.researchData?.statsForm?.homePlayed);
+  const awayPlayed = Number(dataset.preMatch?.away?.played ?? dataset.researchData?.statsForm?.awayPlayed);
+  const updatedAt = Date.parse(dataset.persistentCache?.updatedAt || dataset.fetchedAt || "");
+  const ageMs = Number.isFinite(updatedAt) ? now - updatedAt : SCHEDULED_DATASET_CACHE_TTL;
+  const lowQuality = Number.isFinite(score) && score < 55;
+  const incompleteHistory = !Number.isFinite(homePlayed) || !Number.isFinite(awayPlayed) || homePlayed < 3 || awayPlayed < 3;
+  return ageMs >= 5 * 60 * 1000 && (lowQuality || incompleteHistory);
+}
+
 function withCacheInfo(dataset, info) {
   return {
     ...dataset,
@@ -885,6 +897,15 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
   }
   const persistedDataset = !forceRefresh ? await loadPersistedFixtureDataset(key) : null;
   if (!forceRefresh && persistedDataset && (!includeHistorical || persistedDataset.historicalEstimatedXg)) {
+    if (scheduledDatasetNeedsRevalidation(persistedDataset)) {
+      persistedDataset.cacheRevalidation = {
+        reason: "scheduled_low_quality_or_incomplete_history",
+        previousScore: persistedDataset.dataQuality?.score ?? persistedDataset.researchData?.totalConfidenceScore ?? null,
+        previousHomePlayed: persistedDataset.preMatch?.home?.played ?? null,
+        previousAwayPlayed: persistedDataset.preMatch?.away?.played ?? null,
+        checkedAt: new Date().toISOString()
+      };
+    } else {
     const ttlMs = datasetCacheTtl(persistedDataset.fixture);
     const expiresAt = Date.now() + ttlMs;
     const value = withCacheInfo(persistedDataset, cacheMeta({
@@ -896,6 +917,7 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
     }));
     datasetCache.set(key, { value, expiresAt });
     return value;
+    }
   }
   if (!forceRefresh && pendingDatasetRequests.has(key)) {
     recordApiFootballPendingHit();
