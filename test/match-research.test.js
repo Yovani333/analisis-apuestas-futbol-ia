@@ -83,6 +83,8 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.supportingData.fixtureEvents.summary.goals, 1);
   assert.equal(normalized.supportingData.playerPerformance.teams[0].players[0].rating, 7.5);
   assert.equal(normalized.supportingData.teamSeasonStatistics.home.played, 3);
+  assert.equal(normalized.supportingData.offensiveSideProduction.status, DATA_STATUS.NOT_AVAILABLE);
+  assert.match(normalized.supportingData.offensiveSideProduction.message, /ubicaci/i);
   assert.equal(normalized.supportingData.teamSeasonStatistics.cutoffDate, "2026-06-21");
   assert.equal(normalized.sources.apiFootball.status, "available");
   assert.equal(normalized.sources.sofaScore.status, "not_configured");
@@ -93,6 +95,21 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.deepEqual(oddsCoverage.activeSources, ["API-Football"]);
   assert.ok(normalized.missingData.some((item) => item.module === "xgXga"));
   assert.equal(normalized.analysisStatus, ANALYSIS_STATUS.COMPLETE);
+});
+
+test("lado ofensivo solo se calcula con ubicacion estructurada de eventos", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.events = [
+    { type: "Shot", detail: "Shot on Goal", coordinates: { x: 82, y: 44 } },
+    { type: "Goal", detail: "Normal Goal", coordinates: { x: 78, y: 40 } },
+    { type: "Shot", detail: "Missed Shot", coordinates: { x: 75, y: 30 } },
+    { type: "Shot", detail: "Blocked Shot", coordinates: { x: 48, y: 50 } }
+  ];
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.supportingData.offensiveSideProduction.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.supportingData.offensiveSideProduction.tendency, "Derecha");
+  assert.equal(normalized.supportingData.offensiveSideProduction.sampleSize, 4);
+  assert.equal(normalized.supportingData.offensiveSideProduction.zones.find((zone) => zone.zone === "Derecha").dangerousActionsPct, 75);
 });
 
 test("H2H conserva solo partidos finalizados anteriores al fixture actual", () => {

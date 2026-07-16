@@ -486,6 +486,7 @@ const CATEGORY_TO_RESEARCH_MODULE = Object.freeze({
 
 const SUPPORTING_MODULES = Object.freeze([
   { key: "teamSeasonStatistics", label: "Estadísticas de temporada", use: "Contexto prepartido" },
+  { key: "offensiveSideProduction", label: "Lado ofensivo", use: "Disponible solo con ubicación de jugadas" },
   { key: "fixtureEvents", label: "Eventos del partido", use: "Solo auditoría posterior" },
   { key: "playerPerformance", label: "Rendimiento de jugadores", use: "Solo auditoría posterior" }
 ]);
@@ -1422,6 +1423,9 @@ function renderSupportingDetail(moduleKey, research) {
   } else if (moduleKey === "teamSeasonStatistics") {
     const seasonCard = (teamName, data) => researchTeamStats(teamName, [["Forma", data?.form], ["Partidos", data?.played], ["G / E / P", data ? `${displayValue(data.wins)} / ${displayValue(data.draws)} / ${displayValue(data.losses)}` : null], ["Goles a favor", data?.goalsFor], ["Goles en contra", data?.goalsAgainst], ["Promedio GF / GC", data ? `${displayValue(data.averageGoalsFor)} / ${displayValue(data.averageGoalsAgainst)}` : null], ["Porterías a cero", data?.cleanSheets], ["Sin marcar", data?.failedToScore], ["Formación más usada", data?.commonLineups?.[0]?.formation]]);
     content = `<div class="team-stat-grid">${seasonCard(research.homeTeam.name, module.home)}${seasonCard(research.awayTeam.name, module.away)}</div>`;
+  } else if (moduleKey === "offensiveSideProduction") {
+    const rows = (module.zones || []).map((zone) => [displayValue(zone.zone), `${displayValue(zone.dangerousActionsPct)}%`, `${displayValue(zone.shotsPct)}%`, `${displayValue(zone.goalsOriginPct)}%`]);
+    content = `<div class="research-kpis"><span>Tendencia <strong>${escapeHtml(module.tendency || "Sin tendencia clara")}</strong></span><span>Muestra <strong>${displayValue(module.sampleSize, 0)}</strong></span><span>Confianza <strong>${escapeHtml(module.confidence || "No disponible")}</strong></span></div>${rows.length ? detailTable(["Zona", "Acciones peligrosas", "Tiros", "Goles originados"], rows) : emptyDetail("No hay ubicación de jugadas para clasificar zonas.")}<div class="detail-note detail-note--info"><strong>Regla de seguridad</strong><span>${escapeHtml(module.sourceDetail || "No se deduce el lado ofensivo por posiciones nominales ni se inventan zonas.")}</span></div>`;
   }
   return `${researchMeta(moduleKey, module)}${caution}${content || emptyDetail("No hay detalle complementario disponible.")}`;
 }

@@ -545,6 +545,80 @@ export function getPlayerPerformanceData(dataset) {
   };
 }
 
+function eventZoneFromStructuredLocation(event = {}) {
+  const candidates = [
+    event.coordinates, event.location, event.position, event.zone,
+    event.start, event.end, event.shot, event.pass
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const x = Number(candidate.x ?? candidate.X ?? candidate[0]);
+    if (Number.isFinite(x)) {
+      if (x < 33.34) return "left";
+      if (x > 66.66) return "right";
+      return "center";
+    }
+    const text = `${candidate.side || candidate.zone || candidate.name || ""}`.toLowerCase();
+    if (/(left|izquierda)/.test(text)) return "left";
+    if (/(right|derecha)/.test(text)) return "right";
+    if (/(center|centre|central|centro)/.test(text)) return "center";
+  }
+  return "";
+}
+
+export function getOffensiveSideProductionData(dataset) {
+  const rows = Array.isArray(dataset.confirmed?.events) ? dataset.confirmed.events : [];
+  const dangerousEvents = rows.filter((event) => /goal|shot|assist|penalty/i.test(`${event.type || ""} ${event.detail || ""}`));
+  const zones = { left: 0, center: 0, right: 0 };
+  for (const event of dangerousEvents) {
+    const zone = eventZoneFromStructuredLocation(event);
+    if (zone) zones[zone] += 1;
+  }
+  const total = zones.left + zones.center + zones.right;
+  if (!total) {
+    return {
+      ...moduleBase(DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, "",
+        "Lado ofensivo no disponible: la fuente actual no proporciona ubicación suficiente de las jugadas."),
+      analysisUse: "pre_match_context",
+      tendency: "Sin tendencia clara",
+      zones: [
+        { zone: "Izquierda", dangerousActionsPct: null, shotsPct: null, goalsOriginPct: null },
+        { zone: "Centro", dangerousActionsPct: null, shotsPct: null, goalsOriginPct: null },
+        { zone: "Derecha", dangerousActionsPct: null, shotsPct: null, goalsOriginPct: null }
+      ],
+      sampleSize: 0,
+      matchesEvaluated: 0,
+      confidence: "not_available",
+      sourceDetail: "API-Football events sin coordenadas o zona de origen."
+    };
+  }
+  const zoneRows = [
+    ["Izquierda", zones.left],
+    ["Centro", zones.center],
+    ["Derecha", zones.right]
+  ].map(([zone, count]) => ({
+    zone,
+    dangerousActionsPct: Number((count / total * 100).toFixed(1)),
+    shotsPct: null,
+    goalsOriginPct: null
+  }));
+  const leader = zoneRows.reduce((best, row) => row.dangerousActionsPct > best.dangerousActionsPct ? row : best, zoneRows[0]);
+  const sorted = [...zoneRows].sort((a, b) => b.dangerousActionsPct - a.dangerousActionsPct);
+  const hasClearTrend = sorted[0].dangerousActionsPct >= 45 && sorted[0].dangerousActionsPct - sorted[1].dangerousActionsPct >= 12;
+  return {
+    ...moduleBase(hasClearTrend ? DATA_STATUS.PARTIAL : DATA_STATUS.NOT_AVAILABLE, dataset.fetchedAt, SOURCE,
+      hasClearTrend
+        ? "Tendencia ofensiva calculada solo con eventos que incluyen ubicación estructurada; requiere muestra mayor."
+        : "Sin tendencia clara: la distribución por zonas no supera el umbral mínimo."),
+    analysisUse: "pre_match_context",
+    tendency: hasClearTrend ? leader.zone : "Sin tendencia clara",
+    zones: zoneRows,
+    sampleSize: total,
+    matchesEvaluated: 1,
+    confidence: total >= 20 ? "medium" : "low",
+    sourceDetail: "API-Football events con ubicación estructurada."
+  };
+}
+
 function compactTeamSeasonStatistics(data) {
   if (!data || Array.isArray(data) || !data.team) return null;
   return {
@@ -671,6 +745,7 @@ export function normalizeMatchResearchData(dataset) {
     supportingData: {
       fixtureEvents: safeModule("fixtureEvents", getFixtureEventsData, dataset),
       playerPerformance: safeModule("playerPerformance", getPlayerPerformanceData, dataset),
+      offensiveSideProduction: safeModule("offensiveSideProduction", getOffensiveSideProductionData, dataset),
       teamSeasonStatistics: safeModule("teamSeasonStatistics", getTeamSeasonStatisticsData, dataset)
     },
     missingData: [], moduleScores: {}, totalConfidenceScore: 0,
