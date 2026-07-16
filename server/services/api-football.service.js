@@ -564,7 +564,7 @@ export function resolveFixtureOddsRequest(status) {
   return { endpoint: "/odds", mode: "pre_match", cacheTtl: CACHE_TTL };
 }
 
-async function loadFixtureOdds(fixtureId, status) {
+async function loadFixtureOdds(fixtureId, status, fixtureContext = {}) {
   const request = resolveFixtureOddsRequest(status);
   if (request.mode === "not_available") return { ...request, rows: [] };
   const rows = await apiRequest(request.endpoint, { fixture: fixtureId }, request.cacheTtl, {
@@ -576,6 +576,26 @@ async function loadFixtureOdds(fixtureId, status) {
     });
     return [];
   });
+  if (request.mode === "pre_match" && !rows.length && fixtureContext.leagueId && fixtureContext.season && fixtureContext.date) {
+    const leagueDateRows = await apiRequest("/odds", {
+      league: fixtureContext.leagueId,
+      season: fixtureContext.season,
+      date: fixtureContext.date
+    }, CACHE_TTL, {
+      providerErrorRetry: true,
+      providerErrorRetryDelayMs: 500
+    }).catch((error) => {
+      console.warn("[api-football-odds-league-date-fallback-error]", {
+        endpoint: "/odds", fixtureId, league: fixtureContext.leagueId, season: fixtureContext.season,
+        date: fixtureContext.date, code: error?.code || "", message: error?.message || ""
+      });
+      return [];
+    });
+    const fixtureRows = leagueDateRows.filter((row) => String(row?.fixture?.id || "") === String(fixtureId));
+    if (fixtureRows.length) {
+      return { ...request, mode: "pre_match_league_date_fallback", rows: fixtureRows };
+    }
+  }
   if (request.mode !== "live" || rows.length) return { ...request, rows };
 
   const fallbackRows = await apiRequest("/odds", { fixture: fixtureId }, CACHE_TTL).catch((error) => {
@@ -708,7 +728,11 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
     safe(apiRequest("/fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 })),
     queryFixtureScopedData && allows("injuries") ? safe(apiRequest("/injuries", { fixture: fixtureId })) : Promise.resolve([]),
     queryFixtureScopedData && allows("fixtures.lineups") ? safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })) : Promise.resolve([]),
-    queryFixtureScopedData && allows("odds") ? loadFixtureOdds(fixtureId, base.fixture.status?.short) : Promise.resolve({ endpoint: "/odds", mode: "not_available", cacheTtl: CACHE_TTL, rows: [] }),
+    queryFixtureScopedData && allows("odds") ? loadFixtureOdds(fixtureId, base.fixture.status?.short, {
+      leagueId: base.league.id,
+      season,
+      date: base.fixture.date?.slice(0, 10)
+    }) : Promise.resolve({ endpoint: "/odds", mode: "not_available", cacheTtl: CACHE_TTL, rows: [] }),
     queryFixtureScopedData && allows("predictions") ? safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)) : Promise.resolve([]),
     loadCurrentFixtureData && allows("fixtures.events") ? safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
     loadCurrentFixtureData && allows("fixtures.statistics_players") ? safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
