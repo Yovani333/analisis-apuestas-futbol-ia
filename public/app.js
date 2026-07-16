@@ -805,9 +805,20 @@ function fixtureQualityView(fixture) {
   const baseScore = numericScore(fixture?.dataQuality?.score);
   const researchScore = numericScore(fixture?.researchData?.totalConfidenceScore);
   const score = baseScore ?? researchScore;
-  if (score === null) return null;
-  const level = score >= 80 ? "Alta" : score >= 55 ? "Media" : score > 0 ? "Baja" : "No disponible";
-  return { score: Math.max(0, Math.min(100, Math.round(score))), level };
+  const currentScore = score;
+  const evidence = fixture?.id ? latestEvidenceForFixture(allEvidenceSnapshots(), fixture.id) : null;
+  const evidenceScore = numericScore(evidence?.dataQuality?.score);
+  const displayScore = evidenceScore !== null && (currentScore === null || evidenceScore > currentScore) ? evidenceScore : currentScore;
+  if (displayScore === null) return null;
+  const level = displayScore >= 80 ? "Alta" : displayScore >= 55 ? "Media" : displayScore > 0 ? "Baja" : "No disponible";
+  return {
+    score: Math.max(0, Math.min(100, Math.round(displayScore))),
+    level,
+    source: evidenceScore !== null && evidenceScore === displayScore ? "evidence" : "current",
+    currentScore,
+    evidence,
+    evidenceScore
+  };
 }
 
 function renderMatches() {
@@ -861,7 +872,7 @@ function renderMatches() {
             <div class="match-card__meta">
               <time datetime="${escapeHtml(fixture.utcDateTime || `${fixture.date}T${fixture.time}`)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT</time>
               <span>${escapeHtml(fixture.stadium && fixture.stadium !== "No disponible" ? fixture.stadium : "Estadio pendiente en API-Football")}</span>
-              ${quality ? `<span class="data-quality data-quality--${escapeHtml(String(quality.level || "").toLowerCase())}">Calidad ${escapeHtml(quality.level)} · ${escapeHtml(quality.score)}/100</span>` : '<span class="data-quality">Calidad pendiente · abre el encuentro</span>'}
+              ${quality ? `<span class="data-quality data-quality--${escapeHtml(String(quality.level || "").toLowerCase())}" title="${quality.source === "evidence" ? "Calidad respaldada por evidencia prepartido guardada/importada." : "Calidad calculada con la respuesta actual de API-Football."}">Calidad ${escapeHtml(quality.level)} · ${escapeHtml(quality.score)}/100${quality.source === "evidence" ? " · evidencia" : ""}</span>` : '<span class="data-quality">Calidad pendiente · abre el encuentro</span>'}
               ${fixture.status === "live" && fixture.elapsed !== null ? `<small>${escapeHtml(fixture.elapsed)} minutos</small>` : ""}
             </div>
             <div class="match-card__actions">
@@ -921,8 +932,10 @@ function renderFixtureData() {
       <span>${escapeHtml(fixture.stadium && fixture.stadium !== "No disponible" ? fixture.stadium : "Estadio pendiente en API-Football")}${escapeHtml(venueLabel)} · ${escapeHtml(fixture.stadiumSource === "api-football-venues" ? "Catálogo de estadios API-Football" : fixture.stadiumSource === "api-football-fixture" ? "Fixture API-Football" : "Sin ubicación verificable")}</span>
       <span class="source-chip source-chip--api">${escapeHtml(sourceLabel)}</span>
       <span class="source-chip source-chip--model">${escapeHtml(cacheStatus)}${escapeHtml(cacheReason)}</span>
-      ${quality ? `<span class="data-quality data-quality--${escapeHtml(String(quality.level || "").toLowerCase())}">Confianza de datos ${escapeHtml(quality.score)}/100</span>` : '<span class="data-quality">Calidad pendiente</span>'}
-      <small>La cobertura prepartido puede aumentar cuando API-Football publica cuotas, alineaciones o lesiones cerca del inicio.</small>
+      ${quality ? `<span class="data-quality data-quality--${escapeHtml(String(quality.level || "").toLowerCase())}">Confianza de datos ${escapeHtml(quality.score)}/100${quality.source === "evidence" ? " · evidencia" : ""}</span>` : '<span class="data-quality">Calidad pendiente</span>'}
+      <small>${quality?.source === "evidence"
+        ? `Se conserva evidencia prepartido de ${formatUpdatedAt(quality.evidence?.capturedAt)}. API actual: ${displayValue(quality.currentScore, 0)}/100; no se reemplaza el snapshot por una respuesta posterior incompleta.`
+        : "La cobertura prepartido puede aumentar cuando API-Football publica cuotas, alineaciones o lesiones cerca del inicio."}</small>
     </div>
     ${probabilityLine}`;
   updateAnalysisActionState();
@@ -1024,7 +1037,9 @@ function renderGuideCoverageSummary(fixture) {
     elements.guideCoverageSummary.innerHTML = '<div class="research-empty">No hay investigación normalizada para construir el resumen de cobertura.</div>';
     return;
   }
-  const score = Number(research.totalConfidenceScore ?? fixture.dataQuality?.score ?? 0);
+  const currentScore = Number(research.totalConfidenceScore ?? fixture.dataQuality?.score ?? 0);
+  const quality = fixtureQualityView(fixture);
+  const score = quality?.score ?? currentScore;
   const status = research.analysisStatus === "complete" ? "Completo" : research.analysisStatus === "partial" ? "Parcial" : score > 0 ? "Parcial" : "No disponible";
   const activeSources = [...new Set((research.sourceCoverage || []).flatMap((item) => item.activeSources || []))];
   const criticalKeys = ["statsForm", "odds", "injuriesSuspensions", "lineups", "xgXga"];
@@ -1036,8 +1051,9 @@ function renderGuideCoverageSummary(fixture) {
     ? "high" : ["standings", "contextCalendar"].includes(item.module) ? "medium" : "low";
   const impactLabel = { high: "Alto impacto", medium: "Impacto medio", low: "Bajo impacto" };
   elements.guideCoverageSummary.innerHTML = `
-    <div class="coverage-executive__score" style="--coverage-score:${Math.max(0, Math.min(100, score))}"><strong>${escapeHtml(score)}</strong><span>Confianza / 100</span></div>
+    <div class="coverage-executive__score" style="--coverage-score:${Math.max(0, Math.min(100, score))}"><strong>${escapeHtml(score)}</strong><span>${quality?.source === "evidence" ? "Evidencia / 100" : "Confianza / 100"}</span></div>
     <div class="coverage-executive__kpis"><article><span>Estado</span>${statusBadge(status)}</article><article><span>Fuentes activas</span><strong>${activeSources.length}</strong><small>${escapeHtml(activeSources.slice(0, 3).join(" · ") || "Sin fuente activa")}</small></article><article><span>Críticos disponibles</span><strong>${availableCritical.length}/${criticalKeys.length}</strong><small>${escapeHtml(availableCritical.map((key) => criticalLabels[key]).join(" · ") || "Ninguno")}</small></article><article><span>Críticos faltantes</span><strong>${criticalKeys.length - availableCritical.length}</strong><small>Revisar antes de decidir</small></article></div>
+    ${quality?.source === "evidence" ? `<div class="detail-note detail-note--info"><strong>Snapshot prepartido disponible</strong><span>Calidad guardada ${escapeHtml(quality.evidenceScore)}/100 el ${escapeHtml(formatUpdatedAt(quality.evidence?.capturedAt))}. La consulta actual de API-Football marca ${escapeHtml(displayValue(currentScore, 0))}/100, pero no se descarta la evidencia histórica.</span></div>` : ""}
     <div class="coverage-impact"><strong>Impacto de datos faltantes</strong>${missing.length ? missing.map((item) => { const level = impact(item); return `<span class="impact-chip impact-chip--${level}"><b>${impactLabel[level]}</b>${escapeHtml(item.label || item.module || "Dato")}</span>`; }).join("") : '<span class="impact-chip impact-chip--ok"><b>Sin bloqueo</b>No se reportan faltantes en la matriz.</span>'}</div>`;
 }
 
@@ -1126,7 +1142,10 @@ function renderResearchData(research) {
     return;
   }
 
-  const score = Math.max(0, Math.min(100, Number(research.totalConfidenceScore) || 0));
+  const fixture = selectedFixture();
+  const quality = fixtureQualityView(fixture);
+  const currentScore = Math.max(0, Math.min(100, Number(research.totalConfidenceScore) || 0));
+  const score = quality?.source === "evidence" ? quality.score : currentScore;
   const analysisLabel = analysisStatusLabels[research.analysisStatus] || "Necesita revisión";
   const critical = (research.criticalMissingData || []).map((item) => item.label).filter(Boolean);
   const consultedSources = Object.values(research.sources || {}).filter((source) => ["available", "partial"].includes(source.status)).map((source) => source.label);
@@ -1140,6 +1159,7 @@ function renderResearchData(research) {
       <div class="confidence-track" role="progressbar" aria-label="Nivel de confianza" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${score}"><span style="width:${score}%"></span></div>
       <p>${critical.length ? `<strong>Datos críticos faltantes:</strong> ${escapeHtml(critical.join(", "))}` : "No se detectaron tres o más faltantes críticos."}</p>
       <p><strong>Fuentes consultadas:</strong> ${escapeHtml(consultedSources.join(", ") || "Ninguna fuente activa")}</p>
+      ${quality?.source === "evidence" ? `<p><strong>Respaldo histórico:</strong> evidencia prepartido ${escapeHtml(quality.evidenceScore)}/100 capturada ${escapeHtml(formatUpdatedAt(quality.evidence?.capturedAt))}. API actual: ${escapeHtml(displayValue(currentScore, 0))}/100.</p>` : ""}
       <small>Última actualización: ${escapeHtml(formatUpdatedAt(research.lastUpdated))}</small>
     </div>`;
   renderSourceCoverage(research);
@@ -3990,6 +4010,7 @@ async function initializeApp() {
   applyTeamPerformanceVisibility(teamPerformanceVisible());
   await initializeCloudAccount();
   const runtime = await footballDataService.getRuntime();
+  if (runtime.mode === "live") await loadEvidenceLibrary();
   const releaseElement = document.querySelector("#site-last-update");
   const releaseDate = runtime.release?.deployedAt || document.lastModified;
   const releaseCommit = runtime.release?.commit ? ` · versión ${runtime.release.commit}` : "";
