@@ -1,21 +1,5 @@
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
-import { env } from "../config/env.js";
-import { AppError } from "../errors.js";
-import { AnalysisSchema } from "../schemas/analysis.schema.js";
 import { ANALYSIS_STATUS } from "../constants/match-research.js";
-import { buildOpenAIPromptFromMatchData } from "./match-research.service.js";
-import { buildCompactAiMatchData, selectAiModelForMatch } from "./ai-model-selector.service.js";
 
-const MARKET_INSTRUCTIONS = `
-Solo puedes sugerir double_chance, over_under_2_5 o btts incluidos en matchData.odds.markets.
-Usa marketKey como codigo_mercado, selectionKey como codigo_seleccion, decimalOdds como cuota_decimal, estimatedProbabilityPct como probabilidad_modelo y expectedValuePct como valor_esperado.
-No sugieras mercados sin positiveValue=true, con requiresReview=true ni más de tres selecciones.
-Si matchData.analysisStatus es needs_review, devuelve mercados_sugeridos vacío y apto_para_parlay No.
-El mayor EV no equivale automáticamente al mejor pick.
-No uses como pick principal una doble oportunidad contra un favorito fuerte sin al menos dos o tres confirmaciones deportivas.
-Usa matchData.favorite como señal de jerarquía, sin tratar su porcentaje como garantía.
-Head to head es una señal secundaria. EV, jerarquía, confianza y coherencia deportiva deben evaluarse por separado.`;
 
 function neutralizeVenueLanguage(value, homeTeam, awayTeam) {
   if (Array.isArray(value)) return value.map((item) => neutralizeVenueLanguage(item, homeTeam, awayTeam));
@@ -187,83 +171,4 @@ export function applyResearchGuardrails(parsed, dataset) {
       } : null
     }
   };
-}
-
-function controlledOpenAiError(error) {
-  if (error instanceof AppError) return error;
-  if (error?.code === "insufficient_quota") {
-    return new AppError("OpenAI no tiene cuota disponible. Revisa la facturación y los límites del proyecto.", 429, "OPENAI_INSUFFICIENT_QUOTA");
-  }
-  if (error?.status === 401) return new AppError("La clave de OpenAI fue rechazada.", 502, "OPENAI_AUTH_ERROR");
-  if (error?.status === 429) return new AppError("OpenAI aplicó un límite temporal de solicitudes.", 429, "OPENAI_RATE_LIMIT");
-  if (error?.status === 400) return new AppError("OpenAI rechazó el modelo o el formato configurado.", 422, "OPENAI_REQUEST_ERROR");
-  return new AppError("No fue posible completar el análisis con OpenAI.", 502, "OPENAI_PROVIDER_ERROR");
-}
-
-async function requestStructuredAnalysis(client, model, prompt) {
-  const response = await client.responses.parse({
-    model,
-    instructions: `${prompt.instructions}\n${MARKET_INSTRUCTIONS}`,
-    input: prompt.input,
-    text: { format: zodTextFormat(AnalysisSchema, "football_analysis") }
-  });
-  if (!response.output_parsed) throw new AppError("OpenAI no devolvió un análisis estructurado.", 502, "OPENAI_INVALID_OUTPUT");
-  return response.output_parsed;
-}
-
-export async function generateAnalysis(dataset, {
-  client = null,
-  config = env,
-  logger = console
-} = {}) {
-  if (!config.openaiApiKey || !config.openaiModelDefault || !config.openaiModelPremium) {
-    throw new AppError("OpenAI no está configurado.", 503, "OPENAI_NOT_CONFIGURED");
-  }
-  const openai = client || new OpenAI({ apiKey: config.openaiApiKey, timeout: 45000, maxRetries: 1 });
-  const selection = selectAiModelForMatch(dataset, {
-    defaultModel: config.openaiModelDefault,
-    premiumModel: config.openaiModelPremium
-  });
-  const compactMatchData = buildCompactAiMatchData(dataset);
-  const prompt = buildOpenAIPromptFromMatchData(compactMatchData);
-  logger.info("[openai-model-selection]", {
-    selectedModel: selection.selectedModel,
-    modelReason: selection.modelReason,
-    costOptimizationApplied: selection.costOptimizationApplied
-  });
-
-  let parsed;
-  let usedModel = selection.selectedModel;
-  let fallbackApplied = false;
-  try {
-    parsed = await requestStructuredAnalysis(openai, usedModel, prompt);
-  } catch (primaryError) {
-    const canFallback = usedModel === config.openaiModelDefault
-      && config.openaiModelPremium
-      && config.openaiModelPremium !== usedModel;
-    if (!canFallback) throw controlledOpenAiError(primaryError);
-    fallbackApplied = true;
-    usedModel = config.openaiModelPremium;
-    logger.warn("[openai-model-fallback]", {
-      selectedModel: usedModel,
-      modelReason: "El modelo económico falló; se aplica un único intento premium.",
-      costOptimizationApplied: true
-    });
-    try {
-      parsed = await requestStructuredAnalysis(openai, usedModel, prompt);
-    } catch (fallbackError) {
-      throw controlledOpenAiError(fallbackError);
-    }
-  }
-
-  const guarded = applyResearchGuardrails(parsed, dataset);
-  return config.aiDebug ? {
-    ...guarded,
-    _debug: {
-      selectedModel: usedModel,
-      modelReason: selection.modelReason,
-      costOptimizationApplied: true,
-      fallbackApplied
-    }
-  } : guarded;
 }

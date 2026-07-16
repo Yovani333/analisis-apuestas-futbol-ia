@@ -50,7 +50,7 @@ function buildMockAnalysis(fixture) {
   };
 }
 
-// Capa mock reemplazable. El navegador nunca debe llamar directamente a API-Football u OpenAI.
+// Capa mock reemplazable. El navegador nunca debe llamar directamente a API-Football.
 export const footballDataService = {
   lastSearchWarnings: [],
   getAllowedLeagues() {
@@ -116,10 +116,7 @@ export const footballDataService = {
   },
 
   async generateAnalysis(fixture) {
-    const runtime = await this.getRuntime();
-    if (runtime.mode !== "live") return this.generateMockAnalysis(fixture);
-    const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/analysis`, { method: "POST" });
-    return { ...payload.analysis, _source: "openai" };
+    return this.generateDataAnalysis(fixture);
   },
 
   async generateDataAnalysis(fixture) {

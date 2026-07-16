@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ANALYSIS_STATUS, DATA_STATUS, MODULE_WEIGHTS } from "../server/constants/match-research.js";
 import { calculateMatchConfidenceScore, detectMissingCriticalData, scoreModule } from "../server/services/match-confidence.service.js";
-import { buildOpenAIPromptFromMatchData, normalizeMatchResearchData } from "../server/services/match-research.service.js";
-import { applyResearchGuardrails } from "../server/services/openai.service.js";
+import { buildAnalysisContextFromMatchData, normalizeMatchResearchData } from "../server/services/match-research.service.js";
+import { applyResearchGuardrails } from "../server/services/analysis-guardrails.service.js";
 import { buildEstimatedXgFromDataset } from "../server/services/xg/estimated-xg.service.js";
 
 function lineup(teamId, name) {
@@ -113,10 +113,10 @@ test("H2H conserva solo partidos finalizados anteriores al fixture actual", () =
   assert.deepEqual(normalized.h2h.matches.map((item) => item.fixtureId), ["9"]);
 });
 
-test("el constructor para OpenAI usa solo matchData normalizado", () => {
+test("el constructor de contexto usa solo matchData normalizado", () => {
   const normalized = normalizeMatchResearchData(datasetFixture());
   normalized.lineups.errorCode = "INTERNAL_TEST";
-  const prompt = buildOpenAIPromptFromMatchData(normalized);
+  const prompt = buildAnalysisContextFromMatchData(normalized);
   assert.match(prompt.instructions, /No inventes datos deportivos/);
   assert.match(prompt.input, /"matchData"/);
   assert.doesNotMatch(prompt.input, /INTERNAL_TEST/);
@@ -426,7 +426,7 @@ test("el prompt explica el tratamiento obligatorio del xG estimado", () => {
     completeFixtureStatistics(20, "Equipo Visitante", 9, 3)
   ];
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
-  const prompt = buildOpenAIPromptFromMatchData(normalizeMatchResearchData(dataset));
+  const prompt = buildAnalysisContextFromMatchData(normalizeMatchResearchData(dataset));
   assert.match(prompt.instructions, /llámalo siempre "xG\/xGA estimado del partido"/);
   assert.match(prompt.instructions, /live_match_context_only/);
   assert.match(prompt.input, /fixture-estimated-xg-v1/);
@@ -509,7 +509,7 @@ test("las guardas conservan la atribución cuando el xG sí es oficial", () => {
   assert.match(guarded.analisis_cuantitativo.xg_xga, /oficial atribuido a fbref/i);
 });
 
-test("OpenAI no puede convertir un research parcial en análisis completo", () => {
+test("Las guardas no pueden convertir un research parcial en análisis completo", () => {
   const researchData = normalizeMatchResearchData(datasetFixture());
   researchData.analysisStatus = ANALYSIS_STATUS.PARTIAL;
   researchData.missingData = [{ label: "xG / xGA", status: DATA_STATUS.NOT_AVAILABLE, message: "No disponible" }];

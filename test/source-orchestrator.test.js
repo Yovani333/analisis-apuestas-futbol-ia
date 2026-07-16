@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { collectExternalSourceData } from "../server/services/source-orchestrator.service.js";
 
 const config = {
-  openaiApiKey: "test", openaiModel: "test-model",
   sofaScoreAccessMode: "enabled", oddspediaAccessMode: "enabled", fotmobAccessMode: "enabled",
   whoScoredAccessMode: "enabled", fbrefAccessMode: "enabled", weatherAccessMode: "enabled", soccerwayAccessMode: "enabled"
 };

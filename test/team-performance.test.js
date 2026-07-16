@@ -4,7 +4,7 @@ import {
   buildTeamPerformancePromptContext, calculateTeamPerformance, clearTeamPerformanceCache,
   getTeamPerformanceForFixture, selectPreviousCompleteFixtures
 } from "../server/services/team-performance.service.js";
-import { buildOpenAIPromptFromMatchData } from "../server/services/match-research.service.js";
+import { buildAnalysisContextFromMatchData } from "../server/services/match-research.service.js";
 
 const fixture = (id, teamId, date, status = "FT") => ({
   fixture: { id, date, status: { short: status } },
@@ -104,7 +104,7 @@ test("inyecta el contexto de rendimiento al principio del prompt", () => {
     equipo_visitante: { nombre: "B", metricas: { entradas: 5, tarjetas: 1, tiros: 2, pases_acertados: 80, faltas: 3 } }
   };
   const context = buildTeamPerformancePromptContext(performance);
-  const prompt = buildOpenAIPromptFromMatchData({ teamPerformance: performance });
+  const prompt = buildAnalysisContextFromMatchData({ teamPerformance: performance });
   assert.match(context, /ventana de k=3 partidos/);
   assert.ok(prompt.instructions.startsWith("CONTEXTO DE RENDIMIENTO PREVIO"));
   assert.match(prompt.instructions, /Pases Acertados=75%/);

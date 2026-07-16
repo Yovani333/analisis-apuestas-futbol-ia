@@ -1,5 +1,5 @@
 import { ANALYSIS_STATUS, MODULE_LABELS } from "../constants/match-research.js";
-import { applyResearchGuardrails } from "./openai.service.js";
+import { applyResearchGuardrails } from "./analysis-guardrails.service.js";
 
 const RESPONSIBLE_WARNING = "Este análisis es únicamente informativo. No garantiza resultados ni beneficios. Las apuestas implican riesgo y deben hacerse con responsabilidad.";
 
@@ -91,7 +91,7 @@ export function generateRuleBasedAnalysis(dataset = {}) {
     estado_analisis: research.analysisStatus === ANALYSIS_STATUS.COMPLETE ? "Completo" : "Necesita revisión",
     liga: fixture.leagueName || "",
     partido: { local: fixture.home || "", visitante: fixture.away || "", fecha: fixture.date || "", estadio: fixture.stadium || "", pais: fixture.country || "" },
-    resumen_partido: `Análisis generado por el Motor de Reglas con ${research.totalConfidenceScore || 0}/100 de cobertura. No se utilizó OpenAI para calcular picks.`,
+    resumen_partido: `Análisis generado por el Motor de Reglas con ${research.totalConfidenceScore || 0}/100 de cobertura. Los picks se calcularon con datos normalizados y modelos internos.`,
     datos_confirmados: confirmed,
     datos_faltantes: missing,
     alertas_de_calidad_de_datos: [...(dataset.qualityAlerts || []), ...(research.criticalMissingData || []).map((item) => `${item.label}: dato crítico faltante.`)],

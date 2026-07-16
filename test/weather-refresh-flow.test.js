@@ -14,11 +14,11 @@ test("el clima usa un endpoint ligero separado del dataset completo", () => {
   assert.doesNotMatch(weatherRefresh, /getFixtureData|getResearchData/);
 });
 
-test("Transparencia actualiza clima periodicamente solo con la pagina visible", () => {
-  assert.match(app, /WEATHER_REFRESH_INTERVAL_MS = 10 \* 60 \* 1000/);
-  assert.match(app, /state\.currentView !== "transparency"/);
-  assert.match(app, /document\.visibilityState === "visible"/);
-  assert.match(app, /refreshWeatherData\(\{ silent: true \}\)/);
+test("Transparencia no deja un refresco meteorologico automatico oculto", () => {
+  assert.doesNotMatch(app, /WEATHER_REFRESH_INTERVAL_MS/);
+  assert.doesNotMatch(app, /syncWeatherRefreshTimer/);
+  assert.doesNotMatch(app, /refreshWeatherData\(\{ silent: true \}\)/);
+  assert.match(app, /async function refreshWeatherData/);
 });
 
 test("los partidos finalizados no quedan en sondeo meteorologico", () => {

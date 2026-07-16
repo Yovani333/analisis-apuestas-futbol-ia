@@ -1,7 +1,7 @@
 {
   "name": "analisis-apuestas-futbol-ia",
   "version": "1.0.0",
-  "description": "Dashboard web responsive para explorar partidos, revisar la cobertura de datos y preparar análisis deportivos asistidos por IA con criterios de calidad explícitos.",
+  "description": "Dashboard web responsive para explorar partidos, revisar cobertura de datos y preparar analisis deportivos con modelos internos.",
   "main": "server/server.js",
   "directories": {
     "doc": "docs"
@@ -28,7 +28,6 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
-    "openai": "^6.44.0",
     "zod": "^4.4.3"
   }
 }

@@ -40,7 +40,7 @@ function dataset() {
   };
 }
 
-test("Motor de Reglas genera análisis y picks sin OpenAI", () => {
+test("Motor de Reglas genera análisis y picks sin proveedor externo", () => {
   const result = generateRuleBasedAnalysis(dataset());
   assert.equal(result.analysisMode, "rule_engine");
   assert.equal(result.generatedBy, "internal-rule-engine");

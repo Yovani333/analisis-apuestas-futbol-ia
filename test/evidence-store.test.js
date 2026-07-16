@@ -7,7 +7,7 @@ function storage() {
   return { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
 }
 
-test("crea evidencia compacta prepartido sin OpenAI ni estadísticas actuales", () => {
+test("crea evidencia compacta prepartido sin proveedor externo ni estadísticas actuales", () => {
   const fixture = { id: 12, status: "scheduled", home: "A", away: "B", confirmedData: { statistics: [{ leaked: true }] }, researchData: { odds: { markets: [] } } };
   const snapshot = createEvidenceSnapshot({ fixture, dataPicks: { status: "available", picks: [{ selection: "1X" }] } }, new Date("2026-07-02T18:00:00Z"));
   assert.equal(snapshot.fixture.id, 12);

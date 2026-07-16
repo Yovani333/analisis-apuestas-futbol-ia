@@ -8,7 +8,6 @@ import { parseFixtureId, parseFixtureQuery } from "../middleware/validate.js";
 import {
   getFixtureDataset, getFixtureEvents, getFixtureLineups, getFixturePlayers, getFixtureResult, getFixtureStatistics, getPlayerGoalFixtureDataset, getPreviousFixturesForTeam, refreshFixtureWeather, resolveLeague, searchFixtures
 } from "../services/api-football.service.js";
-import { generateAnalysis } from "../services/openai.service.js";
 import { generateRuleBasedAnalysis } from "../services/rule-analysis.service.js";
 import { generateDataPicks } from "../services/data-picks.service.js";
 import { calculatePoissonModel } from "../services/poisson-model.service.js";
@@ -64,7 +63,6 @@ apiRouter.get("/health", (req, res) => {
         configured: Boolean(env.apiFootballKey),
         observability: getApiFootballObservability()
       },
-      openai: { configured: Boolean(env.openaiApiKey && env.openaiModelDefault && env.openaiModelPremium) },
       cloudSync: {
         configured: Boolean(env.supabaseUrl && env.supabasePublishableKey),
         automaticEvidence: cloudConfiguration().automaticEvidence,
@@ -392,6 +390,13 @@ apiRouter.post("/fixtures/:fixtureId/analysis", requireLiveMode, analysisLimiter
     getPreviousFixtures: getPreviousFixturesForTeam,
     getFixturePlayers
   });
-  const analysis = await generateAnalysis(dataset);
-  res.json({ source: "openai", generatedAt: new Date().toISOString(), analysis });
+  dataset.poissonModel ||= calculatePoissonModel(dataset);
+  dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
+  dataset.cornersModel ||= calculateCornersModel(dataset);
+  res.json({
+    source: "rule-engine",
+    generatedAt: new Date().toISOString(),
+    analysis: generateRuleBasedAnalysis(dataset),
+    providerDisabled: "external-ai"
+  });
 }));

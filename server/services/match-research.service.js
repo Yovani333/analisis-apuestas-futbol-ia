@@ -688,7 +688,7 @@ export function normalizeMatchResearchData(dataset) {
   return normalized;
 }
 
-export const OPENAI_ANALYSIS_INSTRUCTIONS = `
+export const RULE_ANALYSIS_CONTEXT_INSTRUCTIONS = `
 Actúa como analista profesional de fútbol y apuestas deportivas.
 Usa únicamente la información estructurada proporcionada en matchData.
 No inventes datos deportivos, lesiones, sanciones, alineaciones, xG, xGA, clima, cancha, resultados, cuotas ni noticias.
@@ -721,7 +721,7 @@ Si warning contiene "Modo Mundial", menciona que la muestra es limitada, reduce 
 No inventes valores, no completes campos faltantes y no redondees de forma engañosa.
 `;
 
-export function buildOpenAIPromptFromMatchData(matchData) {
+export function buildAnalysisContextFromMatchData(matchData) {
   const safeData = JSON.parse(JSON.stringify(matchData, (key, value) => key === "errorCode" ? undefined : value));
   for (const key of ["fixtureEvents", "playerPerformance"]) {
     const module = safeData.supportingData?.[key];
@@ -734,7 +734,7 @@ export function buildOpenAIPromptFromMatchData(matchData) {
   }
   const performanceContext = buildTeamPerformancePromptContext(safeData.teamPerformance);
   return {
-    instructions: `${performanceContext}\n\n${OPENAI_ANALYSIS_INSTRUCTIONS.trim()}\n${XG_ANALYSIS_RULES.trim()}`,
+    instructions: `${performanceContext}\n\n${RULE_ANALYSIS_CONTEXT_INSTRUCTIONS.trim()}\n${XG_ANALYSIS_RULES.trim()}`,
     input: JSON.stringify({ matchData: safeData })
   };
 }

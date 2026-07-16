@@ -42,6 +42,81 @@ const FINISHED_DATASET_CACHE_TTL = 24 * 60 * 60 * 1000;
 const LEAGUE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
+const hasArrayData = (value) => Array.isArray(value) && value.length > 0;
+const hasObjectData = (value) => value && typeof value === "object" && Object.values(value).some((item) => {
+  if (Array.isArray(item)) return item.length > 0;
+  if (item && typeof item === "object") return Object.values(item).some((nested) => nested !== null && nested !== undefined && nested !== "");
+  return item !== null && item !== undefined && item !== "";
+});
+const hasResearchModuleData = (value) => {
+  if (!value || typeof value !== "object") return false;
+  const status = String(value.status || "").toLowerCase();
+  if (["available", "partial", "complete"].includes(status)) return true;
+  return Object.entries(value).some(([key, item]) => {
+    if (["status", "message", "warning", "updatedAt", "source"].includes(key)) return false;
+    if (Array.isArray(item)) return item.length > 0;
+    if (item && typeof item === "object") return hasObjectData(item);
+    return item !== null && item !== undefined && item !== "";
+  });
+};
+
+function mergeNonEmpty(previous, next) {
+  if (next === null || next === undefined || next === "") return previous;
+  if (Array.isArray(next)) return next.length ? next : previous;
+  if (next && typeof next === "object") {
+    const base = previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {};
+    const merged = { ...base };
+    for (const [key, value] of Object.entries(next)) {
+      merged[key] = mergeNonEmpty(base[key], value);
+    }
+    return merged;
+  }
+  return next;
+}
+
+export function preserveValidFixtureDataset(previous, next, { reason = "" } = {}) {
+  if (!previous) return next;
+  const merged = mergeNonEmpty(previous, next);
+  const preserved = [];
+  const modules = [
+    ["confirmed", "odds", hasArrayData],
+    ["confirmed", "standings", hasArrayData],
+    ["confirmed", "h2h", hasArrayData],
+    ["confirmed", "injuries", hasArrayData],
+    ["confirmed", "lineups", hasArrayData],
+    ["confirmed", "statistics", hasArrayData],
+    ["confirmed", "events", hasArrayData],
+    ["confirmed", "players", hasArrayData],
+    ["preMatch", "odds", hasObjectData],
+    ["researchData", "odds", hasResearchModuleData],
+    ["researchData", "sourceCoverage", hasArrayData],
+    ["marketAnalysis", null, hasArrayData]
+  ];
+  for (const [section, key, predicate] of modules) {
+    const previousValue = key ? previous?.[section]?.[key] : previous?.[section];
+    const nextValue = key ? next?.[section]?.[key] : next?.[section];
+    if (predicate(previousValue) && !predicate(nextValue)) {
+      if (key) merged[section] = { ...(merged[section] || {}), [key]: previousValue };
+      else merged[section] = previousValue;
+      preserved.push(key ? `${section}.${key}` : section);
+    }
+  }
+  if (preserved.length) {
+    merged.dataPreservation = {
+      preservedFields: preserved,
+      reason: reason || "consulta_parcial_conserva_ultimo_dato_valido",
+      updatedAt: new Date().toISOString()
+    };
+    merged.qualityAlerts = [
+      ...new Set([
+        ...(merged.qualityAlerts || []),
+        "Consulta fallida o parcial: se conserva la última información válida disponible."
+      ])
+    ];
+  }
+  return merged;
+}
+
 export function resolveApiResponseCacheTtl(value, requestedTtl, { emptyTtl = CACHE_TTL, hasUsableData } = {}) {
   if (typeof hasUsableData !== "function") return requestedTtl;
   return hasUsableData(value) ? requestedTtl : Math.min(requestedTtl, emptyTtl);
@@ -414,10 +489,20 @@ export function resolveFixtureOddsRequest(status) {
 
 async function loadFixtureOdds(fixtureId, status) {
   const request = resolveFixtureOddsRequest(status);
-  const rows = await apiRequest(request.endpoint, { fixture: fixtureId }, request.cacheTtl).catch(() => []);
+  const rows = await apiRequest(request.endpoint, { fixture: fixtureId }, request.cacheTtl).catch((error) => {
+    console.warn("[api-football-odds-error]", {
+      endpoint: request.endpoint, fixtureId, status, code: error?.code || "", message: error?.message || ""
+    });
+    return [];
+  });
   if (request.mode !== "live" || rows.length) return { ...request, rows };
 
-  const fallbackRows = await apiRequest("/odds", { fixture: fixtureId }, CACHE_TTL).catch(() => []);
+  const fallbackRows = await apiRequest("/odds", { fixture: fixtureId }, CACHE_TTL).catch((error) => {
+    console.warn("[api-football-odds-fallback-error]", {
+      endpoint: "/odds", fixtureId, code: error?.code || "", message: error?.message || ""
+    });
+    return [];
+  });
   return {
     endpoint: "/odds",
     mode: fallbackRows.length ? "pre_match_fallback" : "live",
@@ -449,6 +534,17 @@ export function invalidateFixtureCache(fixtureId) {
       const sameFixture = url.searchParams.get("fixture") === String(fixtureId) || url.searchParams.get("id") === String(fixtureId);
       const sameTeam = relatedTeamIds.has(url.searchParams.get("team"));
       if (sameFixture || sameTeam) cache.delete(cacheKey);
+    }
+  }
+}
+
+function invalidateFixtureRequestCache(fixtureId) {
+  const key = String(fixtureId);
+  for (const cache of [requestCache, negativeRequestCache]) {
+    for (const cacheKey of cache.keys()) {
+      const url = new URL(cacheKey);
+      const sameFixture = url.searchParams.get("fixture") === key || url.searchParams.get("id") === key;
+      if (sameFixture) cache.delete(cacheKey);
     }
   }
 }
@@ -691,9 +787,8 @@ function withCacheInfo(dataset, info) {
 
 export async function getFixtureDataset(fixtureId, { forceRefresh = false, includeHistorical = false } = {}) {
   const key = String(fixtureId);
-  if (forceRefresh) invalidateFixtureCache(key);
   const cachedDataset = datasetCache.get(key);
-  if (cachedDataset?.expiresAt > Date.now() && (!includeHistorical || cachedDataset.value.historicalEstimatedXg)) {
+  if (!forceRefresh && cachedDataset?.expiresAt > Date.now() && (!includeHistorical || cachedDataset.value.historicalEstimatedXg)) {
     return withCacheInfo(cachedDataset.value, cacheMeta({
       status: "hit",
       source: "memory-dataset-cache",
@@ -708,7 +803,38 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
   }
   const request = (async () => {
     const updateReason = forceRefresh ? "refresh_forzado_por_usuario" : cachedDataset ? "cache_expirado" : "primera_carga";
-    const dataset = await buildFixtureDataset(key, { forceRefresh, includeHistorical });
+    if (forceRefresh) invalidateFixtureRequestCache(key);
+    let dataset;
+    try {
+      dataset = await buildFixtureDataset(key, { forceRefresh, includeHistorical });
+    } catch (error) {
+      if (cachedDataset?.value) {
+        const fallback = {
+          ...cachedDataset.value,
+          dataRefreshError: {
+            code: error?.code || "DATASET_REFRESH_FAILED",
+            message: error?.message || "No fue posible refrescar el expediente del partido.",
+            updatedAt: new Date().toISOString(),
+            preservedPreviousDataset: true
+          },
+          qualityAlerts: [
+            ...new Set([
+              ...(cachedDataset.value.qualityAlerts || []),
+              "Consulta fallida: se conserva la última información válida."
+            ])
+          ]
+        };
+        return withCacheInfo(fallback, cacheMeta({
+          status: "stale",
+          source: "memory-dataset-cache",
+          ttlMs: Math.max(0, cachedDataset.expiresAt - Date.now()),
+          expiresAt: cachedDataset.expiresAt,
+          reason: "refresh_fallido_conserva_ultimo_dataset_valido"
+        }));
+      }
+      throw error;
+    }
+    dataset = preserveValidFixtureDataset(cachedDataset?.value, dataset, { reason: updateReason });
     const ttlMs = datasetCacheTtl(dataset.fixture);
     const expiresAt = Date.now() + ttlMs;
     const value = withCacheInfo(dataset, cacheMeta({

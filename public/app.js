@@ -18,9 +18,7 @@ const PREFERENCES_KEY = "football-ai.preferences.v1";
 const ANALYSIS_USAGE_KEY = "football-ai.analysis-usage.v1";
 const TEAM_PERFORMANCE_VISIBILITY_KEY = "football-ai.team-performance-visible.v1";
 const PICK_COLLECTION_CACHE_KEY = "football-ai.pick-collection-cache.v1";
-const WEATHER_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 let cloudSyncTimer = null;
-let weatherRefreshTimer = null;
 const readLocalJson = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 };
@@ -1089,7 +1087,7 @@ function updateAnalysisActionState() {
   elements.generateSelectedAnalysis.disabled = !fixture || state.isAnalyzing;
   elements.explainSelectedAnalysis.disabled = !fixture || fixture.status === "finished" || state.isAnalyzing;
   elements.generateSelectedAnalysis.textContent = state.isAnalyzing ? "Procesando…" : "Analizar con datos";
-  elements.explainSelectedAnalysis.textContent = state.isAnalyzing ? "Procesando…" : "Explicar con IA";
+  elements.explainSelectedAnalysis.textContent = state.isAnalyzing ? "Procesando…" : "Explicar con datos";
 }
 
 function researchStatusLabel(status) {
@@ -1343,7 +1341,7 @@ function renderSupportingDetail(moduleKey, research) {
   const module = research?.supportingData?.[moduleKey];
   if (!module) return emptyDetail("No existe información complementaria para este módulo.");
   const caution = module.analysisUse === "post_match_audit_only"
-    ? '<div class="detail-note"><strong>Solo auditoría posterior</strong><span>Estos datos no se envían como evidencia a OpenAI para justificar una predicción prepartido.</span></div>'
+    ? '<div class="detail-note"><strong>Solo auditoría posterior</strong><span>Estos datos no se usan como evidencia para justificar una predicción prepartido.</span></div>'
     : `<div class="detail-note detail-note--info"><strong>Corte temporal protegido</strong><span>Estadísticas consultadas hasta ${displayValue(module.cutoffDate)}, antes del fixture.</span></div>`;
   let content = "";
   if (moduleKey === "fixtureEvents") {
@@ -1910,7 +1908,7 @@ function addMarketToParlay(analysis, marketIndex) {
     requiresReview: Boolean(market.requiere_revision),
     analysisStatus: analysis.estado_analisis,
     sourceModule: market.sourceModule || (analysis.analysisMode === "rule_engine" ? "odds_rule_engine" : "odds"),
-    source: analysis._source || "openai",
+    source: analysis._source || "rule-engine",
     supportingData: market.datos_que_apoyan || [], contradictingData: market.datos_que_contradicen || []
   }, "Selección agregada a Mi parlay.");
 }
@@ -1969,7 +1967,7 @@ function saveAnalysisMarket(analysis, marketIndex) {
     expectedValue: market.valor_esperado ?? calculation?.expectedValuePct ?? null, fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: fixture.fetchedAt || null,
     confidence: market.confianza || "No disponible", result: "pending",
     sourceModule: market.sourceModule || (analysis.analysisMode === "rule_engine" ? "odds_rule_engine" : "odds"),
-    source: analysis._source || "openai"
+    source: analysis._source || "rule-engine"
   });
 }
 
@@ -2001,7 +1999,7 @@ function renderSavedPicks() {
   elements.savedParlayCount.textContent = state.savedParlays.filter((parlay) => !parlay.trashed).length + state.savedPicks.length;
   elements.updateIndividualResults.disabled = state.savedPicks.length === 0;
   if (!state.savedPicks.length) {
-    elements.savedPicksList.innerHTML = '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis IA.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
+    elements.savedPicksList.innerHTML = '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis con datos.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
   }
   elements.savedPicksList.innerHTML = state.savedPicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}" data-pick-id="${escapeHtml(pick.id)}">
@@ -2039,7 +2037,7 @@ function renderSavedParlays() {
   renderOriginPerformance();
   elements.updateParlayResults.disabled = activeParlays.length === 0 && state.savedPicks.length === 0;
   if (!activeParlays.length) {
-    elements.savedParlaysList.innerHTML = '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis IA y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
+    elements.savedParlaysList.innerHTML = '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis con datos y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
   }
 
@@ -2191,9 +2189,7 @@ function switchView(view) {
     elements.collectPickInfo.disabled = !selectedFixture() || state.isCollectingPickInfo;
     renderPickCollection(state.pickCollectionByFixture.get(selectedFixture()?.id));
   }
-  if (["transparency", "guide", "markets"].includes(view)) void refreshCurrentViewData(view);
   if (window.matchMedia("(max-width: 980px)").matches) setSidebarOpen(false);
-  syncWeatherRefreshTimer();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -2431,26 +2427,6 @@ function addCollectionPick(index) {
   if (leg) appendPickToParlay(leg, "Pick recomendado agregado a Mi parlay.");
 }
 
-async function refreshCurrentViewData(view) {
-  const fixture = selectedFixture();
-  if (!fixture) return;
-  if (view === "transparency") {
-    await refreshResearchData();
-    return;
-  }
-  if (view === "markets") {
-    await loadSpecificMarkets(true);
-    return;
-  }
-  if (view === "guide") {
-    await refreshResearchData();
-    if (elements.outcomeContent && !elements.outcomeContent.hidden) await loadOutcomeScenarios(true);
-    if (elements.playerGoalContent && !elements.playerGoalContent.hidden) await loadPlayerGoalCandidates(selectedFixture(), true, true);
-    if (elements.teamPerformanceContent && !elements.teamPerformanceContent.hidden) await loadTeamPerformance(selectedFixture(), true, true);
-    if (elements.cornersContent && !elements.cornersContent.hidden) await loadCorners(true);
-  }
-}
-
 function renderAnalysis(analysis) {
   elements.analysisStatus.className = `status-badge status-badge--${statusClass(analysis.estado_analisis)}`;
   elements.analysisStatus.textContent = analysis.estado_analisis;
@@ -2508,7 +2484,7 @@ function renderAnalysis(analysis) {
 
   elements.analysisContent.innerHTML = `
     <div class="analysis-hero">
-      <div class="analysis-hero__title"><h3>${escapeHtml(analysis.partido.local)} vs ${escapeHtml(analysis.partido.visitante)}</h3><div class="analysis-mode-badges">${analysis.analysisMode === "rule_engine" ? '<span class="source-chip source-chip--model">Solo datos · Motor de Reglas</span>' : '<span class="source-chip source-chip--external">Explicación IA</span>'}${quality ? `<span class="quality-badge quality-badge--${quality.level.toLowerCase()}">Cobertura ${escapeHtml(quality.level)} · ${quality.score}/100</span>` : ""}</div></div>
+      <div class="analysis-hero__title"><h3>${escapeHtml(analysis.partido.local)} vs ${escapeHtml(analysis.partido.visitante)}</h3><div class="analysis-mode-badges"><span class="source-chip source-chip--model">Solo datos · Motor de Reglas</span>${quality ? `<span class="quality-badge quality-badge--${quality.level.toLowerCase()}">Cobertura ${escapeHtml(quality.level)} · ${quality.score}/100</span>` : ""}</div></div>
       <p>${escapeHtml(analysis.resumen_partido)}</p>
     </div>
     ${pickReviewHtml}
@@ -2519,7 +2495,7 @@ function renderAnalysis(analysis) {
       <p class="market-disclaimer">Agregar conserva la sugerencia para seguimiento; no realiza una apuesta.</p>
     </section>
     <section class="analysis-card analysis-card--avoid"><h3>Mercados a evitar</h3>${avoidMarketsHtml}</section>
-    ${context ? `<section class="analysis-context"><div class="form-summary">${formCard(context.preMatch?.home)}${formCard(context.preMatch?.away)}</div>${calculationRows ? `<div class="calculation-table"><h3>Cálculos verificados antes de la IA</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Selección</th><th>Cuota</th><th>Prob. estimada</th><th>EV</th></tr></thead><tbody>${calculationRows}</tbody></table></div></div>` : '<p class="analysis-context__empty">No hubo cuotas suficientes para calcular valor esperado.</p>'}</section>` : ""}
+    ${context ? `<section class="analysis-context"><div class="form-summary">${formCard(context.preMatch?.home)}${formCard(context.preMatch?.away)}</div>${calculationRows ? `<div class="calculation-table"><h3>Cálculos verificados del motor de reglas</h3><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Selección</th><th>Cuota</th><th>Prob. estimada</th><th>EV</th></tr></thead><tbody>${calculationRows}</tbody></table></div></div>` : '<p class="analysis-context__empty">No hubo cuotas suficientes para calcular valor esperado.</p>'}</section>` : ""}
     <div class="analysis-grid">
       <section class="analysis-card">
         <h3>Datos confirmados</h3>
@@ -2555,7 +2531,7 @@ function openGuideCoverage() {
 function showAnalysisEmpty() {
   elements.analysisStatus.className = "status-badge status-badge--unavailable";
   elements.analysisStatus.textContent = "No disponible";
-  elements.analysisContent.innerHTML = '<div class="empty-state"><span class="empty-state__icon" aria-hidden="true">✦</span><h3>Partido seleccionado</h3><p>Analiza primero con el Motor de Reglas. OpenAI queda como explicación opcional.</p></div>';
+  elements.analysisContent.innerHTML = '<div class="empty-state"><span class="empty-state__icon" aria-hidden="true">✦</span><h3>Partido seleccionado</h3><p>Analiza con el Motor de Reglas. El sistema usa datos normalizados y modelos internos.</p></div>';
 }
 
 function allEvidenceSnapshots() {
@@ -2639,7 +2615,7 @@ async function capturePreMatchEvidence() {
   state.isCapturingEvidence = true;
   elements.savePreMatchEvidence.disabled = true;
   elements.savePreMatchEvidence.textContent = "Guardando…";
-  elements.evidenceStatus.textContent = "Recopilando módulos sin usar OpenAI…";
+  elements.evidenceStatus.textContent = "Recopilando módulos con datos normalizados…";
   try {
     const snapshot = await footballDataService.captureEvidence(fixture.id);
     state.dataPicksByFixture.set(fixture.id, snapshot.modules?.dataPicks);
@@ -2648,7 +2624,7 @@ async function capturePreMatchEvidence() {
     state.cornersByFixture.set(fixture.id, snapshot.modules?.corners);
     state.evidenceSnapshots = saveEvidenceSnapshot(snapshot);
     queueCloudSync();
-    showNotice("Evidencia fresca guardada desde el mismo snapshot del servidor usado por la automatización. No se utilizó OpenAI.");
+    showNotice("Evidencia fresca guardada desde el mismo snapshot del servidor usado por la automatización.");
   } catch (error) {
     showNotice(error.message || "No fue posible guardar la evidencia prepartido.");
   } finally {
@@ -3340,8 +3316,6 @@ async function selectFixture(fixtureId, analysisMode = null) {
     if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
     renderMatches();
     renderFixtureData();
-    void loadSpecificMarkets();
-    syncWeatherRefreshTimer();
     if (!analysisMode) showFixtureReadyDialog();
   } catch (error) {
     elements.filterError.hidden = false;
@@ -3467,7 +3441,9 @@ async function refreshResearchData() {
     try {
       const researchData = await footballDataService.getResearchData(fixture.id, true);
       const fixtureIndex = state.fixtures.findIndex((item) => item.id === fixture.id);
-      if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = { ...state.fixtures[fixtureIndex], researchData };
+      if (fixtureIndex >= 0 && researchData) {
+        state.fixtures[fixtureIndex] = { ...state.fixtures[fixtureIndex], researchData };
+      }
       renderMatches();
       renderFixtureData();
       showNotice("Fuentes actualizadas; algunos datos del partido no se pudieron refrescar.");
@@ -3488,15 +3464,6 @@ function weatherCanChange(fixture = selectedFixture(), now = Date.now()) {
   const kickoff = Date.parse(fixture.utcDateTime || `${fixture.date || ""}T${fixture.time || "00:00"}`);
   if (!Number.isFinite(kickoff)) return fixture.status === "live";
   return fixture.status === "live" || (kickoff - now <= 16 * 24 * 60 * 60 * 1000 && now - kickoff <= 3 * 60 * 60 * 1000);
-}
-
-function syncWeatherRefreshTimer() {
-  if (weatherRefreshTimer) clearInterval(weatherRefreshTimer);
-  weatherRefreshTimer = null;
-  if (state.currentView !== "transparency" || !weatherCanChange()) return;
-  weatherRefreshTimer = setInterval(() => {
-    if (document.visibilityState === "visible") void refreshWeatherData({ silent: true });
-  }, WEATHER_REFRESH_INTERVAL_MS);
 }
 
 async function refreshWeatherData({ silent = false } = {}) {
@@ -3532,7 +3499,14 @@ async function refreshWeatherData({ silent = false } = {}) {
 }
 
 async function refreshLiveDataNow() {
-  if (!selectedFixture() || state.isRefreshingLive) return;
+  const fixture = selectedFixture();
+  if (!fixture || state.isRefreshingLive) return;
+  if (fixture.status !== "live") {
+    state.lastLiveRefreshAt = new Date().toISOString();
+    renderLiveData(fixture.researchData, fixture);
+    showNotice(`El encuentro está ${fixture.statusLabel || fixture.status}; En vivo solo consulta partidos activos.`);
+    return;
+  }
   state.isRefreshingLive = true;
   elements.refreshLiveNow.disabled = true;
   elements.refreshLiveNow.textContent = "Actualizando...";
@@ -3998,12 +3972,6 @@ document.querySelectorAll("[data-nav-label]").forEach((button) => {
 
 initializeInfoTooltips();
 
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && state.currentView === "transparency" && weatherCanChange()) {
-    void refreshWeatherData({ silent: true });
-  }
-});
-
 async function initializeApp() {
   renderLeagueOptions();
   renderCompetitionFilters();
@@ -4027,14 +3995,14 @@ async function initializeApp() {
   const releaseCommit = runtime.release?.commit ? ` · versión ${runtime.release.commit}` : "";
   releaseElement.textContent = `Última actualización: ${formatSiteRelease(releaseDate)} PT${releaseCommit}`;
   document.querySelector("#runtime-api").textContent = `API · ${runtime.providers?.apiFootball?.configured ? "activa" : "no disponible"}`;
-  document.querySelector("#runtime-ai").textContent = `IA · ${runtime.providers?.openai?.configured ? "disponible" : "no configurada"}`;
+  document.querySelector("#runtime-ai").textContent = "Reglas · activo";
   document.querySelector("#runtime-version").textContent = `Versión · ${runtime.release?.commit || "local"}`;
   if (runtime.mode === "live") {
     document.querySelector("#runtime-mode").textContent = runtime.liveReady ? "Datos reales" : "Configuración pendiente";
     document.querySelector("#runtime-description").textContent = runtime.liveReady
-      ? "API-Football y OpenAI están configurados en el backend."
+      ? "API-Football y el motor de reglas están configurados en el backend."
       : `Faltan variables del servidor: ${(runtime.missing || []).join(", ")}.`;
-    document.querySelector("#data-mode-note").textContent = "Los partidos y la cobertura se consultan desde API-Football. El análisis IA solo se ejecuta al solicitarlo.";
+    document.querySelector("#data-mode-note").textContent = "Los partidos y la cobertura se consultan desde API-Football. El análisis se ejecuta con modelos internos y reglas deterministas.";
   } else if (window.location.hostname.endsWith("github.io")) {
     document.querySelector("#runtime-mode").textContent = "Demo pública sin APIs";
     document.querySelector("#runtime-description").textContent = "GitHub Pages no ejecuta el backend; los partidos y análisis mostrados son sintéticos.";

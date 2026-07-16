@@ -24,7 +24,7 @@ test("calcula distribución Poisson y probabilidades coherentes", () => {
   assert.equal(result.likelyScores.length, 5);
 });
 
-test("deriva mercados sin OpenAI y conserva sourceModule", () => {
+test("deriva mercados sin proveedor externo y conserva sourceModule", () => {
   const result = calculatePoissonModel(dataset());
   assert.ok(result.suggestedMarkets.length);
   assert.equal(result.suggestedMarkets.every((pick) => pick.sourceModule === "poisson"), true);

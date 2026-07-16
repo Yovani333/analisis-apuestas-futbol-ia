@@ -30,31 +30,31 @@ export const SOURCE_DEFINITIONS = Object.freeze({
     label: "Oddspedia",
     role: "Respaldo de mercado y cuotas",
     defaultStatus: SOURCE_STATUS.BLOCKED,
-    notes: ["Acceso directo rechazado con HTTP 403; adaptador opcional mediante web_search de OpenAI, desactivado por defecto."]
+    notes: ["Acceso directo rechazado con HTTP 403; adaptador opcional desactivado; no se realizan solicitudes externas."]
   },
   fotmob: {
     label: "FotMob",
     role: "Bajas, alineaciones probables y métricas",
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["Adaptador opcional mediante web_search de OpenAI, desactivado por defecto."]
+    notes: ["Adaptador opcional desactivado; no se realizan solicitudes externas."]
   },
   whoScored: {
     label: "WhoScored",
     role: "Bajas y alineaciones probables",
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["Adaptador de respaldo mediante web_search de OpenAI, desactivado por defecto."]
+    notes: ["Adaptador de respaldo desactivado; no se realizan solicitudes externas."]
   },
   fbref: {
     label: "FBref",
     role: "xG/xGA y estadísticas avanzadas",
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["Adaptador opcional mediante web_search de OpenAI, desactivado por defecto y sujeto a cobertura de la competición."]
+    notes: ["Adaptador opcional desactivado; requiere conector estructurado para activarse."]
   },
   soccerway: {
     label: "Soccerway",
     role: "Respaldo de clasificación y resultados previos",
     defaultStatus: SOURCE_STATUS.NOT_CONFIGURED,
-    notes: ["Adaptador condicionado mediante web_search de OpenAI, desactivado por defecto."]
+    notes: ["Adaptador condicionado desactivado; no se realizan solicitudes externas."]
   },
   weather: {
     label: "Open-Meteo",

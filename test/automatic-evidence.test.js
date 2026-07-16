@@ -44,7 +44,7 @@ test("identifica la ventana de una hora sin usar partidos iniciados", () => {
   assert.equal(evidenceWindowStatus("2026-07-12T17:59:59.000Z", NOW), "started");
 });
 
-test("crea evidencia automatica auditable sin OpenAI ni datos actuales", () => {
+test("crea evidencia automatica auditable sin proveedor externo ni datos actuales", () => {
   const snapshot = createAutomaticEvidenceSnapshot(dataset(), NOW);
   assert.equal(snapshot.fixture.id, "12345");
   assert.equal(snapshot.auditMetadata.captureMode, "automatic_one_hour");

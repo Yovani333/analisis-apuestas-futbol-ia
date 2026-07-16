@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Dashboard de demostración para análisis responsable de apuestas de fútbol con IA." />
-    <title>Análisis de Apuestas de Fútbol con IA</title>
+    <meta name="description" content="Dashboard de análisis responsable de apuestas de fútbol con datos, API-Football y modelos internos." />
+    <title>Análisis de Apuestas de Fútbol con Datos</title>
     <link rel="stylesheet" href="styles.css?v=20260715-expected-corners-v1" />
   </head>
   <body>
@@ -57,7 +57,7 @@
     <div class="demo-strip control-status" aria-label="Estado del sistema">
       <span id="runtime-mode" class="status-badge status-badge--demo">Modo demostración</span>
       <span id="runtime-api" class="control-chip control-chip--data">API · comprobando</span>
-      <span id="runtime-ai" class="control-chip control-chip--ai">IA · comprobando</span>
+      <span id="runtime-ai" class="control-chip control-chip--ai">Reglas · comprobando</span>
       <span id="runtime-version" class="control-chip">Versión · local</span>
       <span id="runtime-description" class="control-status__description">Todos los equipos, partidos y datos mostrados son sintéticos.</span>
       <small id="site-last-update" class="site-last-update">Última actualización: consultando…</small>
@@ -293,7 +293,7 @@
               <span id="analysis-status" class="status-badge status-badge--unavailable">No disponible</span>
             </div>
           </div>
-          <div class="intelligence-legend" aria-label="Leyenda de clasificación"><span><i class="legend-signal legend-signal--strong"></i>Fuerte</span><span><i class="legend-signal legend-signal--validate"></i>Validar</span><span><i class="legend-signal legend-signal--avoid"></i>Evitar</span><span><i class="legend-signal legend-signal--info"></i>Informativo</span><span><i class="legend-signal legend-signal--ai"></i>IA / avanzado</span></div>
+          <div class="intelligence-legend" aria-label="Leyenda de clasificación"><span><i class="legend-signal legend-signal--strong"></i>Fuerte</span><span><i class="legend-signal legend-signal--validate"></i>Validar</span><span><i class="legend-signal legend-signal--avoid"></i>Evitar</span><span><i class="legend-signal legend-signal--info"></i>Informativo</span><span><i class="legend-signal legend-signal--ai"></i>Modelo avanzado</span></div>
           <div id="analysis-content" aria-live="polite" hidden>
             <div class="empty-state">
               <span class="empty-state__icon" aria-hidden="true">✦</span>
@@ -473,7 +473,7 @@
 
     <main class="utility-view" data-view-panel="audit" hidden>
       <section class="utility-heading">
-        <div><p class="eyebrow">Validación retrospectiva</p><h2>Auditoría de Picks / Backtesting</h2><p>Reconstruye el análisis prepartido y lo compara con el resultado final, sin usar OpenAI.</p></div>
+        <div><p class="eyebrow">Validación retrospectiva</p><h2>Auditoría de Picks / Backtesting</h2><p>Reconstruye el análisis prepartido y lo compara con el resultado final usando el snapshot guardado.</p></div>
         <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
       </section>
       <section class="panel audit-controls">
