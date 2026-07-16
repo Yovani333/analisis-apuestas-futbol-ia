@@ -624,15 +624,17 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
   const statisticsCutoffDate = new Date(Date.parse(base.fixture.date) - 86400000).toISOString().slice(0, 10);
   const safe = (promise) => promise.catch(() => []);
   const safeAdvanced = (promise) => promise.then((data) => ({ data, failed: false })).catch(() => ({ data: null, failed: true }));
-  const [statistics, standings, h2h, injuries, lineups, oddsResult, homeRecentRows, awayRecentRows, predictions, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
+  const [homeRecentRows, awayRecentRows] = await Promise.all([
+    safe(getPreviousFixturesForTeam(homeId, 10)),
+    safe(getPreviousFixturesForTeam(awayId, 10))
+  ]);
+  const [statistics, standings, h2h, injuries, lineups, oddsResult, predictions, eventsResult, playersResult, homeTeamStatsResult, awayTeamStatsResult] = await Promise.all([
     loadCurrentFixtureData && allows("fixtures.statistics_fixtures") ? safe(apiRequest("/fixtures/statistics", { fixture: fixtureId })) : Promise.resolve([]),
     allows("standings") ? safe(apiRequest("/standings", { league: base.league.id, season })) : Promise.resolve([]),
     safe(apiRequest("/fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 })),
     queryFixtureScopedData && allows("injuries") ? safe(apiRequest("/injuries", { fixture: fixtureId })) : Promise.resolve([]),
     queryFixtureScopedData && allows("fixtures.lineups") ? safe(apiRequest("/fixtures/lineups", { fixture: fixtureId })) : Promise.resolve([]),
     queryFixtureScopedData && allows("odds") ? loadFixtureOdds(fixtureId, base.fixture.status?.short) : Promise.resolve({ endpoint: "/odds", mode: "not_available", cacheTtl: CACHE_TTL, rows: [] }),
-    safe(apiRequest("/fixtures", { team: homeId, last: 10, timezone: "UTC" })),
-    safe(apiRequest("/fixtures", { team: awayId, last: 10, timezone: "UTC" })),
     queryFixtureScopedData && allows("predictions") ? safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)) : Promise.resolve([]),
     loadCurrentFixtureData && allows("fixtures.events") ? safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
     loadCurrentFixtureData && allows("fixtures.statistics_players") ? safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
