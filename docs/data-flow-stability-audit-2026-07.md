@@ -91,6 +91,52 @@ Conclusion:
 - La segunda ejecucion no volvio a consultar API-Football.
 - El motor avanzado no produjo NaN, infinitos ni probabilidades fuera de rango.
 
+## Monitoreo de partidos programados en ligas distintas
+
+Fecha de ejecucion local: 2026-07-15 PT.
+
+Filtro usado:
+
+- Rango: `2026-07-16` a `2026-07-20`.
+- Ligas revisadas: `mls`, `liga-mx`, `brasileirao-serie-a`, `conmebol-libertadores`.
+- Fixtures encontrados: 20.
+- Fixtures monitoreados: 3.
+
+Resultados:
+
+| Fixture | Partido | Liga | Calidad | Venue | Cuotas | xG/xGA | Estadisticas de temporada |
+| --- | --- | --- | ---: | --- | ---: | --- | --- |
+| `1492291` | Botafogo vs Santos | Brasileirao Serie A | 80/100 | Estadio Olimpico Nilton Santos | 12 | Parcial | Disponible, ultimos oficiales |
+| `1490325` | CF Montreal vs Toronto FC | MLS | 70/100 | Saputo Stadium | 12 | Parcial | Disponible, ultimos oficiales |
+| `1550894` | Necaxa vs Atlante FC | Liga MX Apertura | 60/100 | Estadio Victoria | 12 | No disponible | Disponible, ultimos oficiales |
+
+Observaciones:
+
+- Los tres fixtures programados devolvieron venue desde API-Football.
+- Los tres fixtures devolvieron cuotas normalizadas.
+- `Estadisticas de temporada` uso correctamente la fuente de fallback: ultimos partidos oficiales anteriores al encuentro.
+- `xG/xGA` quedo parcial o no disponible segun la cobertura historica real de tiros/eventos por equipo.
+- La calidad fue media o alta; no se reprodujo una calidad deficiente extrema en esta muestra.
+
+Consumo observado:
+
+- Network requests: 152.
+- Cache misses: 116.
+- Failures degradados: 46.
+- Rate limit informado al final: 4129 solicitudes diarias restantes de 7500.
+
+Endpoints con mas degradaciones:
+
+- `/fixtures/statistics`: 24 fallos degradados.
+- `/fixtures/events`: 9 fallos degradados.
+- `/teams/statistics`: 5 fallos degradados.
+
+Conclusion:
+
+- La informacion principal de programados se recupero correctamente.
+- Los fallos observados corresponden principalmente a cobertura historica incompleta de API-Football para algunos fixtures anteriores.
+- El sistema no debe interpretar esos fallos como perdida total de datos; debe conservar la informacion disponible y mostrar estado parcial cuando aplique.
+
 ## Pruebas locales
 
 Ultimo resultado verificado:
@@ -108,8 +154,7 @@ Ultimo resultado verificado:
 
 ## Pendientes recomendados
 
-1. Monitorear 2 o 3 partidos programados adicionales en ligas distintas.
-2. Documentar cualquier caso donde API-Football muestre venue o cuotas faltantes para determinar si es cobertura del proveedor o mapeo local.
+1. Documentar cualquier caso donde API-Football muestre venue o cuotas faltantes para determinar si es cobertura del proveedor o mapeo local.
 
 ## Confirmaciones
 
