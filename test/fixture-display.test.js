@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   normalizeFavorite,
   normalizeFixture,
+  chooseSeason,
   isCoverageAvailable,
   resolveApiResponseCacheTtl,
   resolveFixtureOddsRequest,
@@ -16,6 +17,11 @@ test("respuestas xG vacias usan cache corto y datos utiles conservan cache histo
   const policy = { emptyTtl: fiveMinutes, hasUsableData: (rows) => rows.length > 0 };
   assert.equal(resolveApiResponseCacheTtl([], week, policy), fiveMinutes);
   assert.equal(resolveApiResponseCacheTtl([{ team: { id: 1 } }], week, policy), week);
+});
+
+test("temporada automatica usa el año de busqueda si API-Football no entrega metadatos de liga", () => {
+  assert.equal(chooseSeason([], "auto", "2026-07-16"), 2026);
+  assert.equal(chooseSeason(null, "auto", "2026-07-16"), 2026);
 });
 
 const league = {
@@ -119,8 +125,8 @@ test("la búsqueda envía completo un rango de varios días sin usar OpenAI", as
   await searchFixtures({
     leagues: ["world-cup"], season: "2026", dateFrom: "2026-06-24", dateTo: "2026-06-27", status: "scheduled"
   }, {
-    request: async (path, params) => {
-      calls.push({ path, params });
+    request: async (path, params, cacheTtl, cachePolicy) => {
+      calls.push({ path, params, cacheTtl, cachePolicy });
       return [];
     },
     leagueResolver: async () => ({ ...league, apiId: 1, seasons: [] })
@@ -130,6 +136,7 @@ test("la búsqueda envía completo un rango de varios días sin usar OpenAI", as
   assert.equal(calls[0].params.from, "2026-06-24");
   assert.equal(calls[0].params.to, "2026-06-27");
   assert.equal(calls[0].params.status, "NS-TBD");
+  assert.equal(calls[0].cachePolicy.providerErrorsAsEmpty, true);
 });
 
 test("la búsqueda en vivo envía estados activos a API-Football", async () => {

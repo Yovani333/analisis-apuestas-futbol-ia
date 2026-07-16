@@ -212,6 +212,29 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
   let providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
   if (providerErrors?.length) {
     recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_PROVIDER_ERROR", headers: response.headers });
+    if (cachePolicy.providerErrorRetry && !cachePolicy.providerErrorsAsEmpty) {
+      await delay(cachePolicy.providerErrorRetryDelayMs || 300);
+      try {
+        const retryResponse = await fetch(url, {
+          headers: { "x-apisports-key": env.apiFootballKey },
+          signal: AbortSignal.timeout(12000)
+        });
+        recordApiFootballResponse({ endpoint: url.pathname, headers: retryResponse.headers });
+        if (retryResponse.ok) {
+          payload = await retryResponse.json();
+          providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
+          if (!providerErrors?.length) {
+            const retryValue = payload.response || [];
+            const retryTtl = resolveApiResponseCacheTtl(retryValue, cacheTtl, cachePolicy);
+            requestCache.set(cacheKey, { value: retryValue, expiresAt: Date.now() + retryTtl });
+            negativeRequestCache.delete(cacheKey);
+            return retryValue;
+          }
+        }
+      } catch {
+        recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_PROVIDER_RETRY_ERROR" });
+      }
+    }
     if (cachePolicy.providerErrorsAsEmpty) {
       if (cachePolicy.providerErrorRetry !== false) {
         await delay(cachePolicy.providerErrorRetryDelayMs || 300);
@@ -261,7 +284,10 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
 }
 
 export async function getPreviousFixturesForTeam(teamId, limit = 5) {
-  return apiRequest("/fixtures", { team: teamId, last: limit, timezone: "UTC" }, SCHEDULED_DATASET_CACHE_TTL);
+  return apiRequest("/fixtures", { team: teamId, last: limit, timezone: "UTC" }, SCHEDULED_DATASET_CACHE_TTL, {
+    providerErrorRetry: true,
+    providerErrorRetryDelayMs: 500
+  });
 }
 
 export async function getFixtureStatistics(fixtureId) {
@@ -541,7 +567,10 @@ export function resolveFixtureOddsRequest(status) {
 async function loadFixtureOdds(fixtureId, status) {
   const request = resolveFixtureOddsRequest(status);
   if (request.mode === "not_available") return { ...request, rows: [] };
-  const rows = await apiRequest(request.endpoint, { fixture: fixtureId }, request.cacheTtl).catch((error) => {
+  const rows = await apiRequest(request.endpoint, { fixture: fixtureId }, request.cacheTtl, {
+    providerErrorRetry: true,
+    providerErrorRetryDelayMs: 500
+  }).catch((error) => {
     console.warn("[api-football-odds-error]", {
       endpoint: request.endpoint, fixtureId, status, code: error?.code || "", message: error?.message || ""
     });
