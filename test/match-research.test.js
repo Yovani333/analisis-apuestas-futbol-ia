@@ -97,6 +97,79 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.analysisStatus, ANALYSIS_STATUS.COMPLETE);
 });
 
+test("Estadisticas de temporada usa fallback de ultimos partidos oficiales con transparencia", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.teamStatistics = {
+    cutoffDate: "2026-06-21",
+    sourceType: "recent_official_matches",
+    sourceLabel: "Ultimos partidos oficiales anteriores al encuentro",
+    competition: "Historial oficial multicompeticion",
+    season: "historial_reciente",
+    matchesUsed: 4,
+    confidence: "medium",
+    reason: "La temporada actual aun no tiene partidos disputados. Se utilizaron los ultimos partidos oficiales anteriores al encuentro.",
+    warning: "Muestra reducida. Interpretar con precaucion.",
+    updatedAt: "2026-06-21T12:30:00.000Z",
+    sampleMatches: {
+      home: [{ fixtureId: "1", date: "2026-06-10", competition: "Copa", opponent: "Rival A", venue: "Local", goalsFor: 2, goalsAgainst: 0, result: "W" }],
+      away: [{ fixtureId: "2", date: "2026-06-09", competition: "Copa", opponent: "Rival B", venue: "Visitante", goalsFor: 1, goalsAgainst: 1, result: "D" }]
+    },
+    home: {
+      team: { id: 10, name: "Equipo Local" },
+      form: "WWDL",
+      fixtures: { played: { total: 4 }, wins: { total: 2 }, draws: { total: 1 }, loses: { total: 1 } },
+      goals: { for: { total: { total: 7 }, average: { total: 1.75 } }, against: { total: { total: 4 }, average: { total: 1 } } },
+      clean_sheet: { total: 2 },
+      failed_to_score: { total: 0 },
+      lineups: []
+    },
+    away: {
+      team: { id: 20, name: "Equipo Visitante" },
+      form: "DLWD",
+      fixtures: { played: { total: 4 }, wins: { total: 1 }, draws: { total: 2 }, loses: { total: 1 } },
+      goals: { for: { total: { total: 5 }, average: { total: 1.25 } }, against: { total: { total: 5 }, average: { total: 1.25 } } },
+      clean_sheet: { total: 1 },
+      failed_to_score: { total: 1 },
+      lineups: []
+    }
+  };
+
+  const normalized = normalizeMatchResearchData(dataset);
+  const module = normalized.supportingData.teamSeasonStatistics;
+  assert.equal(module.status, DATA_STATUS.PARTIAL);
+  assert.equal(module.sourceType, "recent_official_matches");
+  assert.equal(module.sourceLabel, "Ultimos partidos oficiales anteriores al encuentro");
+  assert.equal(module.matchesUsed, 4);
+  assert.equal(module.confidence, "medium");
+  assert.match(module.message, /ultimos partidos oficiales/i);
+  assert.doesNotMatch(module.message, /No existen partidos de temporada anteriores/i);
+  assert.equal(module.sampleMatches.home[0].fixtureId, "1");
+});
+
+test("Estadisticas de temporada muestra motivo real cuando no hay historial oficial", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.teamStatistics = {
+    cutoffDate: "2026-06-21",
+    sourceType: "not_available",
+    sourceLabel: "Sin informacion",
+    competition: "Liga de prueba",
+    season: 2026,
+    matchesUsed: 0,
+    confidence: "not_available",
+    reason: "No fue posible construir una muestra estadistica valida porque no existen partidos oficiales anteriores al encuentro.",
+    updatedAt: "2026-06-21T12:30:00.000Z",
+    home: null,
+    away: null
+  };
+
+  const normalized = normalizeMatchResearchData(dataset);
+  const module = normalized.supportingData.teamSeasonStatistics;
+  assert.equal(module.status, DATA_STATUS.NOT_AVAILABLE);
+  assert.equal(module.matchesUsed, 0);
+  assert.match(module.message, /no existen partidos oficiales anteriores/i);
+  assert.doesNotMatch(module.message, /No existen partidos de temporada anteriores/i);
+});
+
 test("lado ofensivo solo se calcula con ubicacion estructurada de eventos", () => {
   const dataset = datasetFixture();
   dataset.confirmed.events = [

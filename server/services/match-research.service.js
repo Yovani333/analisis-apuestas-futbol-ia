@@ -659,6 +659,75 @@ export function getTeamSeasonStatisticsData(dataset) {
   };
 }
 
+function compactResolvedTeamSeasonStatistics(data) {
+  if (!data || Array.isArray(data) || !data.team) return null;
+  return {
+    teamId: data.team.id || null,
+    team: data.team.name || "",
+    form: data.form || "",
+    played: data.fixtures?.played?.total ?? null,
+    wins: data.fixtures?.wins?.total ?? null,
+    draws: data.fixtures?.draws?.total ?? null,
+    losses: data.fixtures?.loses?.total ?? null,
+    goalsFor: data.goals?.for?.total?.total ?? null,
+    goalsAgainst: data.goals?.against?.total?.total ?? null,
+    averageGoalsFor: data.goals?.for?.average?.total ?? null,
+    averageGoalsAgainst: data.goals?.against?.average?.total ?? null,
+    cleanSheets: data.clean_sheet?.total ?? null,
+    failedToScore: data.failed_to_score?.total ?? null,
+    penaltiesScored: data.penalty?.scored?.total ?? null,
+    penaltiesMissed: data.penalty?.missed?.total ?? null,
+    commonLineups: (data.lineups || []).slice(0, 3).map((lineup) => ({ formation: lineup.formation || "", played: lineup.played ?? null })),
+    matchesUsed: data._sampleMatches || []
+  };
+}
+
+export function getResolvedTeamSeasonStatisticsData(dataset) {
+  const failedHome = Boolean(dataset.advancedFailures?.homeTeamStatistics);
+  const failedAway = Boolean(dataset.advancedFailures?.awayTeamStatistics);
+  const raw = dataset.confirmed?.teamStatistics || {};
+  const home = compactResolvedTeamSeasonStatistics(raw.home);
+  const away = compactResolvedTeamSeasonStatistics(raw.away);
+  const homeHasSample = Number(home?.played || 0) > 0;
+  const awayHasSample = Number(away?.played || 0) > 0;
+  const sourceType = raw.sourceType || "";
+  const confidence = raw.confidence || "";
+  const noData = sourceType === "not_available" || (!homeHasSample && !awayHasSample);
+  const currentSeasonFailed = (!sourceType || sourceType === "current_season" || sourceType === "not_available") && failedHome && failedAway;
+  const status = currentSeasonFailed
+    ? DATA_STATUS.FAILED
+    : noData
+      ? DATA_STATUS.NOT_AVAILABLE
+      : confidence === "high"
+        ? DATA_STATUS.AVAILABLE
+        : DATA_STATUS.PARTIAL;
+  const fallbackMessage = status === DATA_STATUS.AVAILABLE
+    ? "Estadisticas de temporada con corte anterior al fixture."
+    : status === DATA_STATUS.FAILED
+      ? "API-Football no pudo entregar estadisticas agregadas de los equipos."
+      : status === DATA_STATUS.PARTIAL
+        ? "Muestra reducida. Interpretar con precaucion."
+        : "No fue posible construir una muestra estadistica valida porque no existen partidos oficiales anteriores al encuentro.";
+  return {
+    ...moduleBase(status, raw.updatedAt || dataset.fetchedAt, SOURCE, raw.reason || fallbackMessage),
+    analysisUse: "pre_match_context",
+    cutoffDate: raw.cutoffDate || "",
+    sourceType,
+    sourceLabel: raw.sourceLabel || "",
+    competition: raw.competition || dataset.fixture?.leagueName || "",
+    season: raw.season ?? dataset.fixture?.season ?? null,
+    matchesUsed: raw.matchesUsed ?? Math.min(Number(home?.played || 0), Number(away?.played || 0)),
+    confidence: confidence || (status === DATA_STATUS.AVAILABLE ? "high" : status === DATA_STATUS.PARTIAL ? "medium" : "not_available"),
+    warning: raw.warning || "",
+    reason: raw.reason || fallbackMessage,
+    updatedAt: raw.updatedAt || dataset.fetchedAt,
+    sampleMatches: raw.sampleMatches || { home: home?.matchesUsed || [], away: away?.matchesUsed || [] },
+    home,
+    away,
+    failedSides: { home: failedHome, away: failedAway }
+  };
+}
+
 function failedModule(name, error, updatedAt) {
   console.error(`[match-research] No fue posible normalizar ${name}:`, error?.message || error);
   return { ...moduleBase(DATA_STATUS.FAILED, updatedAt, "", "El módulo no pudo procesarse."), errorCode: "MODULE_NORMALIZATION_FAILED" };
@@ -756,7 +825,7 @@ export function normalizeMatchResearchData(dataset) {
       fixtureEvents: safeModule("fixtureEvents", getFixtureEventsData, dataset),
       playerPerformance: safeModule("playerPerformance", getPlayerPerformanceData, dataset),
       offensiveSideProduction: safeModule("offensiveSideProduction", getOffensiveSideProductionData, dataset),
-      teamSeasonStatistics: safeModule("teamSeasonStatistics", getTeamSeasonStatisticsData, dataset)
+      teamSeasonStatistics: safeModule("teamSeasonStatistics", getResolvedTeamSeasonStatisticsData, dataset)
     },
     missingData: [], moduleScores: {}, totalConfidenceScore: 0,
     analysisStatus: "needs_review", lastUpdated: updatedAt

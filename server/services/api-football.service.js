@@ -43,6 +43,8 @@ const FINISHED_DATASET_CACHE_TTL = 24 * 60 * 60 * 1000;
 const LEAGUE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const SEARCH_LEAGUE_CONCURRENCY = 2;
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
+const TEAM_SEASON_HIGH_CONFIDENCE_SAMPLE = 5;
+const TEAM_SEASON_MEDIUM_CONFIDENCE_SAMPLE = 3;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const hasArrayData = (value) => Array.isArray(value) && value.length > 0;
@@ -90,6 +92,7 @@ export function preserveValidFixtureDataset(previous, next, { reason = "" } = {}
     ["confirmed", "statistics", hasArrayData],
     ["confirmed", "events", hasArrayData],
     ["confirmed", "players", hasArrayData],
+    ["confirmed", "teamStatistics", hasObjectData],
     ["preMatch", "odds", hasObjectData],
     ["researchData", "odds", hasResearchModuleData],
     ["researchData", "sourceCoverage", hasArrayData],
@@ -582,6 +585,220 @@ export function shouldLoadCurrentFixtureData(status) {
   return ["live", "finished"].includes(fixtureStatus(status));
 }
 
+function teamSeasonSampleConfidence(sampleSize) {
+  const played = Number(sampleSize || 0);
+  if (played >= TEAM_SEASON_HIGH_CONFIDENCE_SAMPLE) return "high";
+  if (played >= TEAM_SEASON_MEDIUM_CONFIDENCE_SAMPLE) return "medium";
+  if (played > 0) return "low";
+  return "not_available";
+}
+
+function teamStatisticsPlayed(data) {
+  return Number(data?.fixtures?.played?.total || 0);
+}
+
+function hasSufficientTeamStatistics(home, away) {
+  return teamStatisticsPlayed(home) >= TEAM_SEASON_HIGH_CONFIDENCE_SAMPLE
+    && teamStatisticsPlayed(away) >= TEAM_SEASON_HIGH_CONFIDENCE_SAMPLE;
+}
+
+function isOfficialFinishedBeforeFixture(row, fixtureDate) {
+  const status = row?.fixture?.status?.short;
+  const date = Date.parse(row?.fixture?.date || "");
+  const cutoff = Date.parse(fixtureDate || "");
+  const label = `${row?.league?.name || ""} ${row?.league?.type || ""} ${row?.league?.round || ""}`;
+  return ["FT", "AET", "PEN"].includes(status)
+    && Number.isFinite(date)
+    && Number.isFinite(cutoff)
+    && date < cutoff
+    && !/friendly|amistos|exhibition/i.test(label);
+}
+
+function teamGoalsFromFixture(row, teamId) {
+  const isHome = Number(row?.teams?.home?.id) === Number(teamId);
+  const goalsFor = Number(isHome ? row?.goals?.home : row?.goals?.away);
+  const goalsAgainst = Number(isHome ? row?.goals?.away : row?.goals?.home);
+  return {
+    isHome,
+    goalsFor: Number.isFinite(goalsFor) ? goalsFor : 0,
+    goalsAgainst: Number.isFinite(goalsAgainst) ? goalsAgainst : 0,
+    opponent: isHome ? row?.teams?.away?.name : row?.teams?.home?.name
+  };
+}
+
+function buildStatisticsShapeFromFixtures({ teamId, teamName, rows = [], fixtureDate, limit = 5 }) {
+  const selected = [];
+  const seen = new Set();
+  const filtered = rows
+    .filter((row) => isOfficialFinishedBeforeFixture(row, fixtureDate))
+    .sort((a, b) => Date.parse(b.fixture.date) - Date.parse(a.fixture.date));
+  for (const row of filtered) {
+    const fixtureId = String(row?.fixture?.id || "");
+    if (!fixtureId || seen.has(fixtureId)) continue;
+    seen.add(fixtureId);
+    selected.push(row);
+    if (selected.length >= limit) break;
+  }
+  const matches = selected.map((row) => {
+    const goals = teamGoalsFromFixture(row, teamId);
+    const result = goals.goalsFor > goals.goalsAgainst ? "W" : goals.goalsFor < goals.goalsAgainst ? "L" : "D";
+    return {
+      fixtureId: String(row.fixture.id),
+      date: row.fixture.date?.slice(0, 10) || "",
+      competition: row.league?.name || "",
+      season: row.league?.season ?? null,
+      round: row.league?.round || "",
+      opponent: goals.opponent || "",
+      venue: goals.isHome ? "Local" : "Visitante",
+      goalsFor: goals.goalsFor,
+      goalsAgainst: goals.goalsAgainst,
+      result
+    };
+  });
+  const played = matches.length;
+  const sum = (key) => matches.reduce((total, match) => total + Number(match[key] || 0), 0);
+  const wins = matches.filter((match) => match.result === "W").length;
+  const draws = matches.filter((match) => match.result === "D").length;
+  const losses = matches.filter((match) => match.result === "L").length;
+  const goalsFor = sum("goalsFor");
+  const goalsAgainst = sum("goalsAgainst");
+  return {
+    team: { id: teamId, name: teamName },
+    form: matches.map((match) => match.result).join(""),
+    fixtures: {
+      played: { total: played },
+      wins: { total: wins },
+      draws: { total: draws },
+      loses: { total: losses }
+    },
+    goals: {
+      for: { total: { total: goalsFor }, average: { total: played ? Number((goalsFor / played).toFixed(2)) : null } },
+      against: { total: { total: goalsAgainst }, average: { total: played ? Number((goalsAgainst / played).toFixed(2)) : null } }
+    },
+    clean_sheet: { total: matches.filter((match) => match.goalsAgainst === 0).length },
+    failed_to_score: { total: matches.filter((match) => match.goalsFor === 0).length },
+    lineups: [],
+    _sampleMatches: matches
+  };
+}
+
+function previousSeasonForLeague(leagueConfig, season) {
+  const current = Number(season);
+  const seasons = (leagueConfig?.seasons || []).map((item) => Number(item.year)).filter(Number.isFinite).sort((a, b) => b - a);
+  return seasons.find((year) => year < current) || (Number.isFinite(current) ? current - 1 : null);
+}
+
+function buildTeamSeasonPackage({ sourceType, home, away, cutoffDate, fixture, season, competition, reason, updatedAt }) {
+  const homePlayed = teamStatisticsPlayed(home);
+  const awayPlayed = teamStatisticsPlayed(away);
+  const minSample = Math.min(homePlayed, awayPlayed);
+  const confidence = teamSeasonSampleConfidence(minSample);
+  return {
+    home,
+    away,
+    cutoffDate,
+    sourceType,
+    sourceLabel: sourceType === "current_season"
+      ? "Temporada actual"
+      : sourceType === "recent_official_matches"
+        ? "Ultimos partidos oficiales anteriores al encuentro"
+        : sourceType === "previous_season"
+          ? "Temporada anterior"
+          : "Sin informacion",
+    competition: competition || fixture?.leagueName || "",
+    season: season ?? fixture?.season ?? null,
+    matchesUsed: minSample,
+    confidence,
+    reason,
+    updatedAt,
+    warning: minSample > 0 && minSample < TEAM_SEASON_HIGH_CONFIDENCE_SAMPLE ? "Muestra reducida. Interpretar con precaucion." : "",
+    sampleMatches: {
+      home: home?._sampleMatches || [],
+      away: away?._sampleMatches || []
+    }
+  };
+}
+
+async function resolveTeamSeasonStatistics({
+  base, fixture, leagueConfig, season, cutoffDate,
+  homeId, awayId, homeRecentRows, awayRecentRows,
+  homeTeamStatsResult, awayTeamStatsResult, allows, safeAdvanced
+}) {
+  const fetchedAt = new Date().toISOString();
+  const currentHome = homeTeamStatsResult.data || null;
+  const currentAway = awayTeamStatsResult.data || null;
+  if (hasSufficientTeamStatistics(currentHome, currentAway)) {
+    return buildTeamSeasonPackage({
+      sourceType: "current_season",
+      home: currentHome,
+      away: currentAway,
+      cutoffDate,
+      fixture,
+      season,
+      competition: base.league?.name,
+      reason: "La temporada actual tiene una muestra suficiente antes del fixture.",
+      updatedAt: fetchedAt
+    });
+  }
+
+  const recentHome = buildStatisticsShapeFromFixtures({
+    teamId: homeId, teamName: fixture.home, rows: homeRecentRows, fixtureDate: base.fixture.date, limit: 5
+  });
+  const recentAway = buildStatisticsShapeFromFixtures({
+    teamId: awayId, teamName: fixture.away, rows: awayRecentRows, fixtureDate: base.fixture.date, limit: 5
+  });
+  if (teamStatisticsPlayed(recentHome) > 0 || teamStatisticsPlayed(recentAway) > 0) {
+    return buildTeamSeasonPackage({
+      sourceType: "recent_official_matches",
+      home: recentHome,
+      away: recentAway,
+      cutoffDate,
+      fixture,
+      season: "historial_reciente",
+      competition: "Historial oficial multicompeticion",
+      reason: teamStatisticsPlayed(currentHome) || teamStatisticsPlayed(currentAway)
+        ? "La temporada actual no tiene muestra suficiente. Se utilizaron los ultimos partidos oficiales anteriores al encuentro."
+        : "La temporada actual aun no tiene partidos disputados. Se utilizaron los ultimos partidos oficiales anteriores al encuentro.",
+      updatedAt: fetchedAt
+    });
+  }
+
+  const previousSeason = previousSeasonForLeague(leagueConfig, season);
+  if (previousSeason && allows("fixtures.statistics_fixtures")) {
+    const [previousHome, previousAway] = await Promise.all([
+      safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season: previousSeason, team: homeId })),
+      safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season: previousSeason, team: awayId }))
+    ]);
+    if (teamStatisticsPlayed(previousHome.data) > 0 || teamStatisticsPlayed(previousAway.data) > 0) {
+      return buildTeamSeasonPackage({
+        sourceType: "previous_season",
+        home: previousHome.data || null,
+        away: previousAway.data || null,
+        cutoffDate,
+        fixture,
+        season: previousSeason,
+        competition: base.league?.name,
+        reason: "No se encontro una muestra suficiente en la temporada actual ni en el historial reciente. Se muestran estadisticas de la temporada anterior.",
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }
+
+  return buildTeamSeasonPackage({
+    sourceType: "not_available",
+    home: currentHome,
+    away: currentAway,
+    cutoffDate,
+    fixture,
+    season,
+    competition: base.league?.name,
+    reason: currentHome || currentAway
+      ? "No se encontro una muestra suficiente en ninguna fuente oficial disponible."
+      : "No fue posible construir una muestra estadistica valida porque no existen partidos oficiales anteriores al encuentro.",
+    updatedAt: fetchedAt
+  });
+}
+
 export function resolveFixtureOddsRequest(status) {
   const normalizedStatus = fixtureStatus(status);
   if (normalizedStatus === "live") return { endpoint: "/odds/live", mode: "live", cacheTtl: LIVE_CACHE_TTL };
@@ -796,6 +1013,21 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
   fixture.favorite = normalizeFavorite(predictions, fixture);
   const homeForm = summarizeRecentFixtures(homeRecentRows, homeId, base.fixture.date);
   const awayForm = summarizeRecentFixtures(awayRecentRows, awayId, base.fixture.date);
+  const teamStatistics = await resolveTeamSeasonStatistics({
+    base,
+    fixture,
+    leagueConfig,
+    season,
+    cutoffDate: statisticsCutoffDate,
+    homeId,
+    awayId,
+    homeRecentRows,
+    awayRecentRows,
+    homeTeamStatsResult,
+    awayTeamStatsResult,
+    allows,
+    safeAdvanced
+  });
   const odds = oddsResult.rows || [];
   const oddsSummary = normalizeOdds(odds, { homeName: fixture.home, awayName: fixture.away });
   const fetchedAt = new Date().toISOString();
@@ -833,7 +1065,7 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
     confirmed: {
       statistics, standings, h2h, injuries, lineups, odds,
       events: eventsResult.data || [], players: playersResult.data || [],
-      teamStatistics: { home: homeTeamStatsResult.data || null, away: awayTeamStatsResult.data || null, cutoffDate: statisticsCutoffDate }
+      teamStatistics
     },
     advancedFailures: {
       events: eventsResult.failed, players: playersResult.failed,

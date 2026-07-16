@@ -1407,6 +1407,29 @@ function openResearchDetail(moduleKey) {
   showDataDialog();
 }
 
+function renderTeamSeasonStatisticsDetail(module, research, seasonCard) {
+  const sampleRows = [
+    ["Fuente utilizada", module.sourceLabel || "No disponible"],
+    ["Motivo", module.reason || module.message],
+    ["Competicion", module.competition],
+    ["Temporada", module.season],
+    ["Partidos utilizados", module.matchesUsed],
+    ["Nivel de confianza", module.confidence],
+    ["Fecha de corte", module.cutoffDate],
+    ["Fecha de actualizacion", formatUpdatedAt(module.updatedAt)]
+  ];
+  const sampleMatches = ["home", "away"].flatMap((side) => (module.sampleMatches?.[side] || []).map((match) => [
+    side === "home" ? research.homeTeam.name : research.awayTeam.name,
+    match.date,
+    match.competition,
+    match.opponent,
+    match.venue,
+    `${displayValue(match.goalsFor)}-${displayValue(match.goalsAgainst)}`,
+    match.result
+  ]));
+  return `<div class="detail-note detail-note--info"><strong>Transparencia de muestra</strong><span>${detailTable(["Campo", "Valor"], sampleRows)}</span></div>${module.warning ? `<div class="detail-note"><strong>Advertencia</strong><span>${escapeHtml(module.warning)}</span></div>` : ""}<div class="team-stat-grid">${seasonCard(research.homeTeam.name, module.home)}${seasonCard(research.awayTeam.name, module.away)}</div>${sampleMatches.length ? `<section class="detail-section"><h3>Partidos utilizados</h3>${detailTable(["Equipo", "Fecha", "Competicion", "Rival", "Sede", "Marcador", "Resultado"], sampleMatches)}</section>` : ""}`;
+}
+
 function renderSupportingDetail(moduleKey, research) {
   const module = research?.supportingData?.[moduleKey];
   if (!module) return emptyDetail("No existe información complementaria para este módulo.");
@@ -1422,7 +1445,7 @@ function renderSupportingDetail(moduleKey, research) {
     content = `<div class="live-table live-table--players">${rows.length ? detailTable(["Equipo", "Jugador", "Pos.", "Min.", "Rating", "Tiros arco", "Goles", "Asist.", "Pases clave", "Entradas"], rows) : emptyDetail("No hay rendimiento individual publicado.")}</div>`;
   } else if (moduleKey === "teamSeasonStatistics") {
     const seasonCard = (teamName, data) => researchTeamStats(teamName, [["Forma", data?.form], ["Partidos", data?.played], ["G / E / P", data ? `${displayValue(data.wins)} / ${displayValue(data.draws)} / ${displayValue(data.losses)}` : null], ["Goles a favor", data?.goalsFor], ["Goles en contra", data?.goalsAgainst], ["Promedio GF / GC", data ? `${displayValue(data.averageGoalsFor)} / ${displayValue(data.averageGoalsAgainst)}` : null], ["Porterías a cero", data?.cleanSheets], ["Sin marcar", data?.failedToScore], ["Formación más usada", data?.commonLineups?.[0]?.formation]]);
-    content = `<div class="team-stat-grid">${seasonCard(research.homeTeam.name, module.home)}${seasonCard(research.awayTeam.name, module.away)}</div>`;
+    content = renderTeamSeasonStatisticsDetail(module, research, seasonCard);
   } else if (moduleKey === "offensiveSideProduction") {
     const rows = (module.zones || []).map((zone) => [displayValue(zone.zone), `${displayValue(zone.dangerousActionsPct)}%`, `${displayValue(zone.shotsPct)}%`, `${displayValue(zone.goalsOriginPct)}%`]);
     content = `<div class="research-kpis"><span>Tendencia <strong>${escapeHtml(module.tendency || "Sin tendencia clara")}</strong></span><span>Muestra <strong>${displayValue(module.sampleSize, 0)}</strong></span><span>Confianza <strong>${escapeHtml(module.confidence || "No disponible")}</strong></span></div>${rows.length ? detailTable(["Zona", "Acciones peligrosas", "Tiros", "Goles originados"], rows) : emptyDetail("No hay ubicación de jugadas para clasificar zonas.")}<div class="detail-note detail-note--info"><strong>Regla de seguridad</strong><span>${escapeHtml(module.sourceDetail || "No se deduce el lado ofensivo por posiciones nominales ni se inventan zonas.")}</span></div>`;
