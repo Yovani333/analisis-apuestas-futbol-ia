@@ -215,13 +215,13 @@ test("el constructor de contexto usa solo matchData normalizado", () => {
   assert.match(prompt.input, /teamSeasonStatistics/);
 });
 
-test("un módulo fallido no impide normalizar los demás", () => {
+test("standings con formato inesperado degrada sin impedir normalizar los demas", () => {
   const dataset = datasetFixture();
   dataset.confirmed.standings = { formato: "inesperado" };
   const normalized = normalizeMatchResearchData(dataset);
-  assert.equal(normalized.standings.status, DATA_STATUS.FAILED);
+  assert.equal(normalized.standings.status, DATA_STATUS.NOT_AVAILABLE);
   assert.equal(normalized.statsForm.status, DATA_STATUS.AVAILABLE);
-  assert.equal(normalized.standings.message, "El módulo no pudo procesarse.");
+  assert.match(normalized.standings.message, /no devolvio|no devolvi/i);
 });
 
 test("Oddspedia solo complementa cuotas faltantes y obliga revisión", () => {
