@@ -170,6 +170,23 @@ test("Oddspedia solo complementa cuotas faltantes y obliga revisión", () => {
   assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "odds").activeSources, ["Oddspedia"]);
 });
 
+test("cuotas por liga y fecha se muestran como ultima captura disponible", () => {
+  const dataset = datasetFixture();
+  dataset.preMatch.odds = {
+    ...dataset.preMatch.odds,
+    mode: "pre_match_league_date_fallback",
+    endpoint: "/odds",
+    providerUpdatedAt: "2026-06-21T10:00:00Z",
+    queriedAt: "2026-06-21T12:00:00Z",
+    refreshPolicy: "API-Football prepartido: el proveedor puede actualizar aproximadamente cada 3 horas segun la competicion."
+  };
+  const normalized = normalizeMatchResearchData(dataset);
+
+  assert.equal(normalized.odds.oddsMode, "pre_match_league_date_fallback");
+  assert.equal(normalized.odds.isFallbackSnapshot, true);
+  assert.equal(normalized.odds.providerUpdatedAt, "2026-06-21T10:00:00Z");
+});
+
 test("FotMob complementa módulos críticos como parciales sin confirmar alineaciones", () => {
   const dataset = datasetFixture();
   dataset.confirmed.injuries = [];

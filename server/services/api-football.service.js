@@ -591,6 +591,29 @@ export function resolveFixtureOddsRequest(status) {
   return { endpoint: "/odds", mode: "pre_match", cacheTtl: CACHE_TTL };
 }
 
+function filterOddsRowsByFixture(rows = [], fixtureId) {
+  return rows.filter((row) => String(row?.fixture?.id || "") === String(fixtureId));
+}
+
+async function loadLeagueDateFixtureOdds(fixtureId, fixtureContext = {}) {
+  if (!fixtureContext.leagueId || !fixtureContext.season || !fixtureContext.date) return [];
+  const leagueDateRows = await apiRequest("/odds", {
+    league: fixtureContext.leagueId,
+    season: fixtureContext.season,
+    date: fixtureContext.date
+  }, CACHE_TTL, {
+    providerErrorRetry: true,
+    providerErrorRetryDelayMs: 500
+  }).catch((error) => {
+    console.warn("[api-football-odds-league-date-fallback-error]", {
+      endpoint: "/odds", fixtureId, league: fixtureContext.leagueId, season: fixtureContext.season,
+      date: fixtureContext.date, code: error?.code || "", message: error?.message || ""
+    });
+    return [];
+  });
+  return filterOddsRowsByFixture(leagueDateRows, fixtureId);
+}
+
 async function loadFixtureOdds(fixtureId, status, fixtureContext = {}) {
   const request = resolveFixtureOddsRequest(status);
   if (request.mode === "not_available") return { ...request, rows: [] };
@@ -603,22 +626,8 @@ async function loadFixtureOdds(fixtureId, status, fixtureContext = {}) {
     });
     return [];
   });
-  if (request.mode === "pre_match" && !rows.length && fixtureContext.leagueId && fixtureContext.season && fixtureContext.date) {
-    const leagueDateRows = await apiRequest("/odds", {
-      league: fixtureContext.leagueId,
-      season: fixtureContext.season,
-      date: fixtureContext.date
-    }, CACHE_TTL, {
-      providerErrorRetry: true,
-      providerErrorRetryDelayMs: 500
-    }).catch((error) => {
-      console.warn("[api-football-odds-league-date-fallback-error]", {
-        endpoint: "/odds", fixtureId, league: fixtureContext.leagueId, season: fixtureContext.season,
-        date: fixtureContext.date, code: error?.code || "", message: error?.message || ""
-      });
-      return [];
-    });
-    const fixtureRows = leagueDateRows.filter((row) => String(row?.fixture?.id || "") === String(fixtureId));
+  if (request.mode === "pre_match" && !rows.length) {
+    const fixtureRows = await loadLeagueDateFixtureOdds(fixtureId, fixtureContext);
     if (fixtureRows.length) {
       return { ...request, mode: "pre_match_league_date_fallback", rows: fixtureRows };
     }
@@ -631,6 +640,17 @@ async function loadFixtureOdds(fixtureId, status, fixtureContext = {}) {
     });
     return [];
   });
+  if (!fallbackRows.length) {
+    const fixtureRows = await loadLeagueDateFixtureOdds(fixtureId, fixtureContext);
+    if (fixtureRows.length) {
+      return {
+        endpoint: "/odds",
+        mode: "pre_match_league_date_fallback",
+        cacheTtl: CACHE_TTL,
+        rows: fixtureRows
+      };
+    }
+  }
   return {
     endpoint: "/odds",
     mode: fallbackRows.length ? "pre_match_fallback" : "live",
@@ -666,13 +686,18 @@ export function invalidateFixtureCache(fixtureId) {
   }
 }
 
-function invalidateFixtureRequestCache(fixtureId) {
+function invalidateFixtureRequestCache(fixtureId, fixtureContext = {}) {
   const key = String(fixtureId);
   for (const cache of [requestCache, negativeRequestCache]) {
     for (const cacheKey of cache.keys()) {
       const url = new URL(cacheKey);
       const sameFixture = url.searchParams.get("fixture") === key || url.searchParams.get("id") === key;
-      if (sameFixture) cache.delete(cacheKey);
+      const sameOddsLeagueDate = url.pathname.endsWith("/odds")
+        && !url.searchParams.get("fixture")
+        && String(url.searchParams.get("league") || "") === String(fixtureContext.leagueId || "")
+        && String(url.searchParams.get("season") || "") === String(fixtureContext.season || "")
+        && String(url.searchParams.get("date") || "") === String(fixtureContext.date || "").slice(0, 10);
+      if (sameFixture || sameOddsLeagueDate) cache.delete(cacheKey);
     }
   }
 }
@@ -976,10 +1001,14 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
   }
   const request = (async () => {
     const updateReason = forceRefresh ? "refresh_forzado_por_usuario" : cachedDataset ? "cache_expirado" : "primera_carga";
-    if (forceRefresh) invalidateFixtureRequestCache(key);
     const previousDataset = cachedDataset?.value
       || await loadPersistedFixtureDataset(key)
       || await loadPersistedFixtureDataset(key, { includeExpired: true });
+    if (forceRefresh) invalidateFixtureRequestCache(key, {
+      leagueId: previousDataset?.fixture?.leagueId,
+      season: previousDataset?.fixture?.season,
+      date: previousDataset?.fixture?.date
+    });
     let dataset;
     try {
       dataset = await buildFixtureDataset(key, { forceRefresh, includeHistorical });

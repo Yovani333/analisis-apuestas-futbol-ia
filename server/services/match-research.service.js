@@ -144,7 +144,7 @@ export function getOddsData(dataset) {
     oddsMode: oddsMeta.mode || "pre_match",
     endpoint: oddsMeta.endpoint || "/odds",
     refreshPolicy: oddsMeta.refreshPolicy || "La frecuencia depende del proveedor y de la competición.",
-    isFallbackSnapshot: oddsMeta.mode === "pre_match_fallback"
+    isFallbackSnapshot: ["pre_match_fallback", "pre_match_league_date_fallback"].includes(oddsMeta.mode)
   };
 }
 
