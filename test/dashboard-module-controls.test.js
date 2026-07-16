@@ -19,6 +19,11 @@ test("seleccionar un encuentro difiere los modulos historicos pesados hasta most
   const selectFixtureBody = app.match(/async function selectFixture[\s\S]+?async function analyzeSelectedFixture/)[0];
   assert.doesNotMatch(selectFixtureBody, /loadTeamPerformance\(detailedFixture/);
   assert.doesNotMatch(selectFixtureBody, /loadPlayerGoalCandidates\(detailedFixture/);
+  assert.doesNotMatch(selectFixtureBody, /loadSpecificMarkets\(/);
+  assert.doesNotMatch(selectFixtureBody, /loadDataPicks\(/);
+  assert.doesNotMatch(selectFixtureBody, /loadPoisson\(/);
+  assert.doesNotMatch(selectFixtureBody, /loadTeamGoals\(/);
+  assert.doesNotMatch(selectFixtureBody, /loadOutcomeScenarios\(/);
   assert.match(app, /!state\.teamPerformanceByFixture\.has\(fixture\.id\)[\s\S]+?loadTeamPerformance\(fixture, false, true\)/);
   assert.match(app, /!state\.playerGoalByFixture\.has\(fixture\.id\)[\s\S]+?loadPlayerGoalCandidates\(fixture, false, true\)/);
 });
@@ -26,6 +31,16 @@ test("seleccionar un encuentro difiere los modulos historicos pesados hasta most
 test("mostrar mercados especificos no se interpreta como actualizacion forzada", () => {
   assert.match(app, /showSpecificMarkets\.addEventListener\("click", \(\) => loadSpecificMarkets\(false\)\)/);
   assert.doesNotMatch(app, /showSpecificMarkets\.addEventListener\("click", loadSpecificMarkets\)/);
+});
+
+test("Catálogo, Guía y En vivo no tienen intervalos ni refrescos automaticos ocultos", () => {
+  assert.doesNotMatch(app, /setInterval\(/);
+  const renderFixtureBody = app.match(/function renderFixtureData[\s\S]+?function renderGuideCoverageSummary/)[0];
+  assert.doesNotMatch(renderFixtureBody, /loadSpecificMarkets\(/);
+  assert.doesNotMatch(renderFixtureBody, /loadDataPicks\(/);
+  assert.doesNotMatch(renderFixtureBody, /loadPoisson\(/);
+  assert.doesNotMatch(renderFixtureBody, /refreshLiveDataNow\(/);
+  assert.match(app, /refreshLiveNow\.addEventListener\("click", refreshLiveDataNow\)/);
 });
 
 test("Selector 1X2 ofrece un boton para agregar cada escenario al cupon", () => {
