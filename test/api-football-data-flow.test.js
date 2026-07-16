@@ -13,9 +13,12 @@ test("merge seguro conserva datos validos cuando llega una respuesta parcial vac
     },
     preMatch: { odds: [{ market: "Double Chance" }] },
     researchData: {
+      totalConfidenceScore: 88,
+      analysisStatus: "complete",
       odds: { status: "available", markets: [{ market: "Match Winner" }] },
       sourceCoverage: [{ moduleKey: "odds", status: "available" }]
     },
+    dataQuality: { score: 88, level: "Alta" },
     marketAnalysis: [{ market: "Match Winner", selection: "Home" }]
   };
   const next = {
@@ -23,9 +26,12 @@ test("merge seguro conserva datos validos cuando llega una respuesta parcial vac
     confirmed: { odds: [], events: [], statistics: [] },
     preMatch: { odds: [] },
     researchData: {
+      totalConfidenceScore: 30,
+      analysisStatus: "needs_review",
       odds: { status: "not_available", markets: [] },
       sourceCoverage: []
     },
+    dataQuality: { score: 30, level: "Baja" },
     marketAnalysis: []
   };
 
@@ -36,8 +42,11 @@ test("merge seguro conserva datos validos cuando llega una respuesta parcial vac
   assert.equal(merged.confirmed.statistics.length, 1);
   assert.equal(merged.preMatch.odds.length, 1);
   assert.equal(merged.researchData.odds.status, "available");
+  assert.equal(merged.researchData.totalConfidenceScore, 88);
+  assert.equal(merged.dataQuality.score, 88);
   assert.equal(merged.marketAnalysis.length, 1);
   assert.equal(merged.dataPreservation.preservedFields.length > 0, true);
+  assert.ok(merged.dataPreservation.preservedFields.includes("dataQuality.score"));
   assert.match(merged.qualityAlerts.at(-1), /conserva la .ltima informaci.n v.lida/i);
 });
 
@@ -66,4 +75,22 @@ test("cache persistente compacta el expediente sin guardar estadisticas pesadas 
 
 test("cache persistente trata tabla ausente como degradacion segura", () => {
   assert.equal(fixtureDatasetPersistenceInternals.isMissingSchema(new Error("Could not find the table 'public.fixture_analysis_cache' in the schema cache")), true);
+});
+
+test("cache persistente no reemplaza snapshot programado mejor por una respuesta pobre", () => {
+  const existing = {
+    fixture: { id: "200", status: "scheduled" },
+    confirmed: { odds: [{ id: 1 }], statistics: [{ id: 2 }], standings: [{ id: 3 }] },
+    marketAnalysis: [{ market: "1X2" }],
+    researchData: { totalConfidenceScore: 82, odds: { markets: [{ selection: "Local" }] }, sourceCoverage: [{ moduleKey: "odds" }] },
+    dataQuality: { score: 82 }
+  };
+  const incoming = {
+    fixture: { id: "200", status: "scheduled" },
+    confirmed: { odds: [], statistics: [], standings: [] },
+    marketAnalysis: [],
+    researchData: { totalConfidenceScore: 40, odds: { markets: [] }, sourceCoverage: [] },
+    dataQuality: { score: 40 }
+  };
+  assert.equal(fixtureDatasetPersistenceInternals.shouldKeepExistingSnapshot(existing, incoming), true);
 });

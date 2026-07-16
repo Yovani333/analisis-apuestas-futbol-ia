@@ -105,6 +105,19 @@ export function preserveValidFixtureDataset(previous, next, { reason = "" } = {}
     }
   }
   if (preserved.length) {
+    const previousScore = Number(previous.dataQuality?.score ?? previous.researchData?.totalConfidenceScore);
+    const nextScore = Number(next.dataQuality?.score ?? next.researchData?.totalConfidenceScore);
+    if (Number.isFinite(previousScore) && Number.isFinite(nextScore) && previousScore > nextScore) {
+      merged.dataQuality = previous.dataQuality || merged.dataQuality;
+      if (merged.researchData && previous.researchData?.totalConfidenceScore !== undefined) {
+        merged.researchData = {
+          ...merged.researchData,
+          totalConfidenceScore: previous.researchData.totalConfidenceScore,
+          analysisStatus: previous.researchData.analysisStatus || merged.researchData.analysisStatus
+        };
+      }
+      preserved.push("dataQuality.score");
+    }
     merged.dataPreservation = {
       preservedFields: preserved,
       reason: reason || "consulta_parcial_conserva_ultimo_dato_valido",
@@ -964,7 +977,9 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
   const request = (async () => {
     const updateReason = forceRefresh ? "refresh_forzado_por_usuario" : cachedDataset ? "cache_expirado" : "primera_carga";
     if (forceRefresh) invalidateFixtureRequestCache(key);
-    const previousDataset = cachedDataset?.value || await loadPersistedFixtureDataset(key);
+    const previousDataset = cachedDataset?.value
+      || await loadPersistedFixtureDataset(key)
+      || await loadPersistedFixtureDataset(key, { includeExpired: true });
     let dataset;
     try {
       dataset = await buildFixtureDataset(key, { forceRefresh, includeHistorical });

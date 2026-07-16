@@ -83,7 +83,7 @@ function datasetBytes(dataset) {
   return Buffer.byteLength(JSON.stringify(dataset), "utf8");
 }
 
-function rowToDataset(row) {
+function rowToDataset(row, { stale = false } = {}) {
   const dataset = row?.dataset;
   if (!dataset || typeof dataset !== "object") return null;
   return {
@@ -91,26 +91,56 @@ function rowToDataset(row) {
     persistentCache: {
       source: "supabase-fixture-cache",
       updatedAt: row.updated_at || null,
-      qualityScore: row.quality_score ?? null
+      qualityScore: row.quality_score ?? null,
+      stale
     }
   };
 }
 
-export async function loadPersistedFixtureDataset(fixtureId, now = new Date()) {
+export async function loadPersistedFixtureDataset(fixtureId, nowOrOptions = new Date()) {
   if (!configured() || !fixtureId) return null;
+  const options = nowOrOptions instanceof Date ? { now: nowOrOptions } : { ...(nowOrOptions || {}) };
+  const now = options.now || new Date();
   const id = encodeURIComponent(String(fixtureId));
   try {
     const rows = await supabaseAdminRequest(`/rest/v1/${TABLE}?fixture_id=eq.${id}&select=dataset,quality_score,status,expires_at,updated_at&limit=1`);
     const row = Array.isArray(rows) ? rows[0] : null;
     if (!row) return null;
     const expiresAt = row.expires_at ? Date.parse(row.expires_at) : null;
-    if (expiresAt && expiresAt <= now.getTime()) return null;
-    return rowToDataset(row);
+    const stale = Boolean(expiresAt && expiresAt <= now.getTime());
+    if (stale && !options.includeExpired) return null;
+    return rowToDataset(row, { stale });
   } catch (error) {
     if (isMissingSchema(error)) return null;
     console.warn("[fixture-cache] load failed", { fixtureId: String(fixtureId), message: error.message });
     return null;
   }
+}
+
+function coverageCount(dataset = {}) {
+  const research = dataset.researchData || {};
+  return [
+    dataset.confirmed?.odds,
+    dataset.confirmed?.statistics,
+    dataset.confirmed?.standings,
+    dataset.confirmed?.h2h,
+    dataset.confirmed?.injuries,
+    dataset.confirmed?.lineups,
+    dataset.marketAnalysis,
+    research.odds?.markets,
+    research.sourceCoverage
+  ].reduce((total, value) => total + (Array.isArray(value) && value.length ? 1 : 0), 0);
+}
+
+function shouldKeepExistingSnapshot(existing, incoming) {
+  if (!existing || !incoming) return false;
+  const existingScore = numberOrNull(existing.dataQuality?.score ?? existing.researchData?.totalConfidenceScore) ?? 0;
+  const incomingScore = numberOrNull(incoming.dataQuality?.score ?? incoming.researchData?.totalConfidenceScore) ?? 0;
+  const scoreDrop = existingScore - incomingScore;
+  const existingCoverage = coverageCount(existing);
+  const incomingCoverage = coverageCount(incoming);
+  if (incoming.fixture?.status === "finished" && existingScore > incomingScore) return true;
+  return scoreDrop >= 15 && existingCoverage > incomingCoverage;
 }
 
 export async function savePersistedFixtureDataset(dataset, ttlMs = 0, now = new Date()) {
@@ -121,10 +151,17 @@ export async function savePersistedFixtureDataset(dataset, ttlMs = 0, now = new 
   const fixtureId = String(dataset.fixture.id);
   const incomingScore = numberOrNull(dataset.dataQuality?.score ?? dataset.researchData?.totalConfidenceScore) ?? 0;
   try {
-    const existing = await loadPersistedFixtureDataset(fixtureId, now);
+    const existing = await loadPersistedFixtureDataset(fixtureId, { now, includeExpired: true });
     const existingScore = numberOrNull(existing?.dataQuality?.score ?? existing?.researchData?.totalConfidenceScore) ?? 0;
-    if (dataset.fixture.status === "finished" && existingScore > incomingScore) {
-      return { saved: false, reason: "kept_higher_quality_finished_snapshot", existingScore, incomingScore };
+    if (shouldKeepExistingSnapshot(existing, dataset)) {
+      return {
+        saved: false,
+        reason: dataset.fixture.status === "finished" ? "kept_higher_quality_finished_snapshot" : "kept_higher_quality_snapshot",
+        existingScore,
+        incomingScore,
+        existingCoverage: coverageCount(existing),
+        incomingCoverage: coverageCount(dataset)
+      };
     }
     const expiresAt = dataset.fixture.status === "finished" ? null : new Date(now.getTime() + Math.max(60_000, ttlMs || 30 * 60_000)).toISOString();
     const payload = {
@@ -152,4 +189,4 @@ export async function savePersistedFixtureDataset(dataset, ttlMs = 0, now = new 
   }
 }
 
-export const fixtureDatasetPersistenceInternals = { compactDataset, configured, datasetBytes, isMissingSchema };
+export const fixtureDatasetPersistenceInternals = { compactDataset, configured, coverageCount, datasetBytes, isMissingSchema, shouldKeepExistingSnapshot };
