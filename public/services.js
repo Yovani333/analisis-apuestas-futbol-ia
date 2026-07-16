@@ -14,6 +14,43 @@ function fixtureTeamLogos(payload) {
   };
 }
 
+function hasData(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.values(value).some(hasData);
+  return value !== null && value !== undefined && value !== "";
+}
+
+function mergeNonEmpty(previous, next) {
+  if (!hasData(next)) return previous;
+  if (Array.isArray(next)) return next.length ? next : previous;
+  if (next && typeof next === "object") {
+    const base = previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {};
+    return Object.entries(next).reduce((merged, [key, value]) => ({
+      ...merged,
+      [key]: mergeNonEmpty(base[key], value)
+    }), { ...base });
+  }
+  return next;
+}
+
+function mergeFixtureData(previousFixture, nextFixture) {
+  const merged = { ...previousFixture, ...nextFixture };
+  merged.confirmedData = mergeNonEmpty(previousFixture.confirmedData, nextFixture.confirmedData) || {};
+  merged.preMatch = mergeNonEmpty(previousFixture.preMatch, nextFixture.preMatch) || null;
+  merged.marketAnalysis = mergeNonEmpty(previousFixture.marketAnalysis, nextFixture.marketAnalysis) || [];
+  merged.researchData = mergeNonEmpty(previousFixture.researchData, nextFixture.researchData) || null;
+  merged.dataQuality = mergeNonEmpty(previousFixture.dataQuality, nextFixture.dataQuality) || null;
+  merged.qualityAlerts = [...new Set([...(previousFixture.qualityAlerts || []), ...(nextFixture.qualityAlerts || [])])];
+  if (hasData(previousFixture.confirmedData) && !hasData(nextFixture.confirmedData)) {
+    merged.clientDataPreservation = {
+      preserved: true,
+      reason: "respuesta_parcial_no_reemplaza_datos_confirmados",
+      updatedAt: new Date().toISOString()
+    };
+  }
+  return merged;
+}
+
 function buildMockAnalysis(fixture) {
   const confirmed = DATA_CATEGORIES.filter(({ key }) => fixture.dataAvailability[key] === "Disponible").map(({ label }) => `${label}: disponible en el escenario sintético.`);
   const missing = DATA_CATEGORIES.filter(({ key }) => fixture.dataAvailability[key] !== "Disponible").map(({ key, label }) => `${label}: ${fixture.dataAvailability[key].toLowerCase()}.`);
@@ -97,7 +134,7 @@ export const footballDataService = {
     const query = refresh ? "?refresh=true" : "";
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}${query}`);
     const teamLogos = fixtureTeamLogos(payload);
-    return {
+    return mergeFixtureData(fixture, {
       ...fixture,
       ...payload.fixture,
       ...teamLogos,
@@ -112,7 +149,7 @@ export const footballDataService = {
       qualityAlerts: payload.qualityAlerts || [],
       fetchedAt: payload.fetchedAt,
       dataSource: "api-football"
-    };
+    });
   },
 
   async generateAnalysis(fixture) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const services = readFileSync(new URL("../public/services.js", import.meta.url), "utf8");
 
 test("Mostrar de Selector 1X2 y Corners solo cambia visibilidad", () => {
   assert.match(app, /showOutcome\.addEventListener\("click", \(\) => toggleReadyModule\(elements\.showOutcome, elements\.outcomeContent\)\)/);
@@ -49,6 +50,13 @@ test("Dashboard prioriza la calidad canonica y no convierte datos ausentes en ce
   const qualityBody = app.match(/function fixtureQualityView[\s\S]+?function renderMatches/)[0];
   assert.match(qualityBody, /const score = baseScore \?\? researchScore/);
   assert.match(qualityBody, /value === null \|\| value === undefined \|\| value === ""/);
+});
+
+test("frontend conserva datos cargados cuando una respuesta nueva llega parcial", () => {
+  assert.match(services, /function mergeFixtureData/);
+  assert.match(services, /mergeNonEmpty\(previousFixture\.confirmedData, nextFixture\.confirmedData\)/);
+  assert.match(services, /respuesta_parcial_no_reemplaza_datos_confirmados/);
+  assert.match(services, /return mergeFixtureData\(fixture,/);
 });
 
 test("la busqueda muestra solo encuentros validos sin exponer errores de ligas vacias", () => {
