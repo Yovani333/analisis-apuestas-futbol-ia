@@ -6,6 +6,20 @@ const MAX_MATCHES = 5;
 const resultCache = new Map();
 const pendingRequests = new Map();
 
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 const safeNumber = (value) => {
   if (value === null || value === undefined || String(value).trim() === "") return 0;
   const parsed = Number.parseFloat(String(value).replace("%", ""));
@@ -313,12 +327,12 @@ export async function getPlayerGoalCandidates(dataset, dependencies, { forceRefr
     const homeFixtures = selectPlayerHistoryFixtures(homeRows, fixture.utcDateTime);
     const awayFixtures = selectPlayerHistoryFixtures(awayRows, fixture.utcDateTime);
     const uniqueFixtureIds = [...new Set([...homeFixtures, ...awayFixtures].map((row) => String(row.fixture.id)))];
-    const loaded = new Map(await Promise.all(uniqueFixtureIds.map(async (fixtureId) => {
+    const loaded = new Map(await mapWithConcurrency(uniqueFixtureIds, 3, async (fixtureId) => {
       const [players, lineups, events] = await Promise.all([
         dependencies.getFixturePlayers(fixtureId).catch(() => []), dependencies.getFixtureLineups(fixtureId).catch(() => []), dependencies.getFixtureEvents(fixtureId).catch(() => [])
       ]);
       return [fixtureId, { players, lineups, events }];
-    })));
+    }));
     const rowsFor = (fixtures) => fixtures.map((row) => ({ ...(loaded.get(String(row.fixture.id)) || {}), fixture: row.fixture })).filter((row) => row?.players?.length);
     const homeLoaded = rowsFor(homeFixtures);
     const awayLoaded = rowsFor(awayFixtures);

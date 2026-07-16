@@ -292,6 +292,8 @@ export async function getPreviousFixturesForTeam(teamId, limit = 5) {
 
 export async function getFixtureStatistics(fixtureId) {
   return apiRequest("/fixtures/statistics", { fixture: fixtureId }, HISTORICAL_CACHE_TTL, {
+    providerErrorRetry: true,
+    providerErrorRetryDelayMs: 500,
     emptyTtl: CACHE_TTL,
     hasUsableData: (rows) => Array.isArray(rows) && rows.some((row) =>
       Array.isArray(row?.statistics) && row.statistics.some((stat) => stat?.value !== null && stat?.value !== undefined && stat?.value !== "")
@@ -301,17 +303,29 @@ export async function getFixtureStatistics(fixtureId) {
 
 export async function getFixtureEvents(fixtureId) {
   return apiRequest("/fixtures/events", { fixture: fixtureId }, HISTORICAL_CACHE_TTL, {
+    providerErrorRetry: true,
+    providerErrorRetryDelayMs: 500,
     emptyTtl: CACHE_TTL,
     hasUsableData: (rows) => Array.isArray(rows) && rows.length > 0
   });
 }
 
 export async function getFixturePlayers(fixtureId) {
-  return apiRequest("/fixtures/players", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
+  return apiRequest("/fixtures/players", { fixture: fixtureId }, HISTORICAL_CACHE_TTL, {
+    providerErrorRetry: true,
+    providerErrorRetryDelayMs: 500,
+    emptyTtl: CACHE_TTL,
+    hasUsableData: (rows) => Array.isArray(rows) && rows.some((row) => Array.isArray(row?.players) && row.players.length)
+  });
 }
 
 export async function getFixtureLineups(fixtureId) {
-  return apiRequest("/fixtures/lineups", { fixture: fixtureId }, HISTORICAL_CACHE_TTL);
+  return apiRequest("/fixtures/lineups", { fixture: fixtureId }, HISTORICAL_CACHE_TTL, {
+    providerErrorRetry: true,
+    providerErrorRetryDelayMs: 500,
+    emptyTtl: CACHE_TTL,
+    hasUsableData: (rows) => Array.isArray(rows) && rows.length > 0
+  });
 }
 
 export function chooseSeason(seasons, requestedSeason, targetDate) {

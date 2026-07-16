@@ -5,6 +5,20 @@ const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
 const resultCache = new Map();
 const pendingRequests = new Map();
 
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 function numberOrZero(value) {
   if (value === null || value === undefined || value === "") return 0;
   const parsed = Number.parseFloat(String(value).replace("%", ""));
@@ -111,7 +125,7 @@ async function loadCompleteWindows(fixture, { getPreviousFixtures, getFixturePla
   const homeFixtures = selectPreviousCompleteFixtures(homeRows, fixture.utcDateTime, 10);
   const awayFixtures = selectPreviousCompleteFixtures(awayRows, fixture.utcDateTime, 10);
   const loadTeamWindow = async (rows, teamId) => {
-    const loaded = await Promise.all(rows.map(async (row) => {
+    const loaded = await mapWithConcurrency(rows, 3, async (row) => {
       try {
         const players = await getFixturePlayers(row.fixture.id);
         return findTeamPlayers(players, teamId).some((player) => numberOrZero(player?.statistics?.[0]?.games?.minutes) > 0)
@@ -119,7 +133,7 @@ async function loadCompleteWindows(fixture, { getPreviousFixtures, getFixturePla
       } catch {
         return null;
       }
-    }));
+    });
     return loaded.filter(Boolean).slice(0, MAX_WINDOW);
   };
   return Promise.all([
