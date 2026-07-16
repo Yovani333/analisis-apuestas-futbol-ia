@@ -52,6 +52,14 @@ test("Dashboard prioriza la calidad canonica y no convierte datos ausentes en ce
   assert.match(qualityBody, /value === null \|\| value === undefined \|\| value === ""/);
 });
 
+test("Transparencia muestra cuotas normalizadas si la respuesta cruda viene vacia", () => {
+  assert.match(app, /function renderNormalizedOddsDetail\(module\)/);
+  assert.match(app, /function renderOddsDetail\(data, normalizedModule = null\)/);
+  assert.match(app, /renderNormalizedOddsDetail\(normalizedModule\) \|\| emptyDetail/);
+  assert.match(app, /renderOddsDetail\(fixture\.confirmedData\?\.odds \|\| \[\], fixture\.researchData\?\.odds\)/);
+  assert.match(app, /renderOddsDetail\(data, fixture\.researchData\?\.odds\)/);
+});
+
 test("frontend conserva datos cargados cuando una respuesta nueva llega parcial", () => {
   assert.match(services, /function mergeFixtureData/);
   assert.match(services, /mergeNonEmpty\(previousFixture\.confirmedData, nextFixture\.confirmedData\)/);

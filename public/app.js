@@ -1073,7 +1073,7 @@ function renderFixtureData() {
     : fixture.status === "scheduled" && state.cloud.automaticEvidence && cloudSyncClient.session?.accessToken
       ? "Vigilancia automática activa: se guardará alrededor de una hora antes del inicio."
       : fixture.status === "scheduled" ? "Sin evidencia prepartido guardada." : "La evidencia solo puede guardarse antes del inicio.";
-  elements.guideOddsContent.innerHTML = renderOddsDetail(fixture.confirmedData?.odds || []);
+  elements.guideOddsContent.innerHTML = renderOddsDetail(fixture.confirmedData?.odds || [], fixture.researchData?.odds);
   renderGuideCoverageSummary(fixture);
   renderCoverageTable(fixture);
   renderResearchData(fixture.researchData);
@@ -1766,9 +1766,29 @@ function renderOddsMonitor(data) {
   return lowest.length ? `<section class="odds-monitor" aria-label="Alertas de cuotas"><header><div><p class="eyebrow">Panel de monitoreo</p><h3>Alertas de cuotas ${infoTooltip("odds")}</h3></div><span>${lowest.length} detectadas</span></header><div class="odds-monitor__grid">${lowest.map((item) => `<article><span>${escapeHtml(item.market)}</span><strong>${escapeHtml(item.selection)} · ${displayValue(item.odd)}</strong><small>${escapeHtml(item.bookmaker)}</small><p>Cuota baja: menor pago y mayor probabilidad implícita según la casa.</p></article>`).join("")}</div><p class="odds-monitor__warning">Una cuota baja no significa automáticamente que sea una buena apuesta. Solo indica que el mercado paga menos y probablemente tiene mayor probabilidad implícita según la casa.</p></section>` : "";
 }
 
-function renderOddsDetail(data) {
+function renderNormalizedOddsDetail(module) {
+  const markets = module?.markets || [];
+  if (!markets.length) return "";
+  const rows = markets.map((market) => [
+    labelWithTooltip(market.market),
+    displayValue(market.selection),
+    displayValue(market.decimalOdds),
+    `${displayValue(market.impliedProbabilityPct)}%`,
+    market.estimatedProbabilityPct === null || market.estimatedProbabilityPct === undefined ? "No disponible" : `${displayValue(market.estimatedProbabilityPct)}%`,
+    market.expectedValuePct === null || market.expectedValuePct === undefined ? "No disponible" : `${displayValue(market.expectedValuePct)}%`,
+    displayValue(market.bookmaker),
+    displayValue(market.method || "Cuota normalizada desde API-Football.")
+  ]);
+  const modeLabel = module.oddsMode === "live" ? "Cuotas en vivo"
+    : ["pre_match_fallback", "pre_match_league_date_fallback"].includes(module.oddsMode) ? "Última cuota prepartido disponible"
+      : "Cuotas prepartido";
+  const noteClass = module.isFallbackSnapshot ? "detail-note--warning" : "detail-note--info";
+  return `<div class="detail-note ${noteClass}"><strong>${escapeHtml(modeLabel)}</strong><span>${escapeHtml(module.refreshPolicy || "Cuotas normalizadas desde API-Football.")}</span></div>${detailTable(["Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Casa", "Método"], rows)}`;
+}
+
+function renderOddsDetail(data, normalizedModule = null) {
   const bookmaker = data[0]?.bookmakers?.[0];
-  if (!bookmaker) return emptyDetail("No hay cuotas publicadas para este partido.");
+  if (!bookmaker) return renderNormalizedOddsDetail(normalizedModule) || emptyDetail("No hay cuotas publicadas para este partido.");
   const preferred = /match winner|double chance|goals over\/under|both teams score/i;
   const bets = bookmaker.bets || [];
   const markets = bets.filter((bet) => preferred.test(bet.name)).slice(0, 6);
@@ -1800,7 +1820,7 @@ function categoryDetail(categoryKey, fixture) {
   if (categoryKey === "h2h") return renderH2HDetail(data, fixture);
   if (categoryKey === "injuries") return renderInjuriesDetail(data);
   if (categoryKey === "lineups") return renderLineupsDetail(data);
-  if (categoryKey === "odds") return renderOddsDetail(data);
+  if (categoryKey === "odds") return renderOddsDetail(data, fixture.researchData?.odds);
   if (categoryKey === "xg") return renderStatisticsDetail(fixture.confirmedData?.statistics || [], true);
   if (categoryKey === "context") return renderPreMatchDetail(fixture);
   if (categoryKey === "weather") return emptyDetail("La integración actual no consulta clima ni condiciones de cancha.");
