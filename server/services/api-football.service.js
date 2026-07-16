@@ -24,6 +24,7 @@ import { calculateTeamGoalProbability } from "./team-goal-probability.service.js
 import { resolveModuleQuality } from "./module-quality.service.js";
 import { buildCompetitionContext } from "./competition-context.service.js";
 import { getWeatherContextData } from "./sources/weather.service.js";
+import { loadPersistedFixtureDataset, savePersistedFixtureDataset } from "./fixture-dataset-persistence.service.js";
 
 const leagueCache = new Map();
 const leagueCacheExpiry = new Map();
@@ -809,6 +810,20 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
       reason: "Se reutilizo el dataset normalizado del fixture; no se recalcularon historicos."
     }));
   }
+  const persistedDataset = !forceRefresh ? await loadPersistedFixtureDataset(key) : null;
+  if (!forceRefresh && persistedDataset && (!includeHistorical || persistedDataset.historicalEstimatedXg)) {
+    const ttlMs = datasetCacheTtl(persistedDataset.fixture);
+    const expiresAt = Date.now() + ttlMs;
+    const value = withCacheInfo(persistedDataset, cacheMeta({
+      status: "hit",
+      source: "supabase-fixture-cache",
+      ttlMs,
+      expiresAt,
+      reason: "expediente_normalizado_reutilizado_desde_cache_persistente"
+    }));
+    datasetCache.set(key, { value, expiresAt });
+    return value;
+  }
   if (!forceRefresh && pendingDatasetRequests.has(key)) {
     recordApiFootballPendingHit();
     return pendingDatasetRequests.get(key);
@@ -816,13 +831,16 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
   const request = (async () => {
     const updateReason = forceRefresh ? "refresh_forzado_por_usuario" : cachedDataset ? "cache_expirado" : "primera_carga";
     if (forceRefresh) invalidateFixtureRequestCache(key);
+    const previousDataset = cachedDataset?.value || await loadPersistedFixtureDataset(key);
     let dataset;
     try {
       dataset = await buildFixtureDataset(key, { forceRefresh, includeHistorical });
     } catch (error) {
-      if (cachedDataset?.value) {
+      if (previousDataset) {
+        const ttlMs = datasetCacheTtl(previousDataset.fixture);
+        const expiresAt = Date.now() + ttlMs;
         const fallback = {
-          ...cachedDataset.value,
+          ...previousDataset,
           dataRefreshError: {
             code: error?.code || "DATASET_REFRESH_FAILED",
             message: error?.message || "No fue posible refrescar el expediente del partido.",
@@ -831,22 +849,23 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
           },
           qualityAlerts: [
             ...new Set([
-              ...(cachedDataset.value.qualityAlerts || []),
+              ...(previousDataset.qualityAlerts || []),
               "Consulta fallida: se conserva la última información válida."
             ])
           ]
         };
+        datasetCache.set(key, { value: fallback, expiresAt });
         return withCacheInfo(fallback, cacheMeta({
           status: "stale",
-          source: "memory-dataset-cache",
-          ttlMs: Math.max(0, cachedDataset.expiresAt - Date.now()),
-          expiresAt: cachedDataset.expiresAt,
+          source: previousDataset.persistentCache ? "supabase-fixture-cache" : "memory-dataset-cache",
+          ttlMs,
+          expiresAt,
           reason: "refresh_fallido_conserva_ultimo_dataset_valido"
         }));
       }
       throw error;
     }
-    dataset = preserveValidFixtureDataset(cachedDataset?.value, dataset, { reason: updateReason });
+    dataset = preserveValidFixtureDataset(previousDataset, dataset, { reason: updateReason });
     const ttlMs = datasetCacheTtl(dataset.fixture);
     const expiresAt = Date.now() + ttlMs;
     const value = withCacheInfo(dataset, cacheMeta({
@@ -857,6 +876,11 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
       reason: updateReason
     }));
     datasetCache.set(key, { value, expiresAt });
+    void savePersistedFixtureDataset(dataset, ttlMs).then((result) => {
+      if (result?.saved === false && !["not_configured", "schema_missing"].includes(result.reason)) {
+        console.warn("[fixture-cache]", { fixtureId: key, reason: result.reason });
+      }
+    });
     return value;
   })().finally(() => pendingDatasetRequests.delete(key));
   pendingDatasetRequests.set(key, request);
