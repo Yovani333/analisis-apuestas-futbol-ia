@@ -57,6 +57,12 @@ test("normaliza marcador y estado en vivo", () => {
   assert.deepEqual(fixture.penaltyScore, { home: null, away: null });
 });
 
+test("normaliza estados no jugables sin tratarlos como programados activos", () => {
+  assert.equal(normalizeFixture(providerFixture("PST"), league).status, "postponed");
+  assert.equal(normalizeFixture(providerFixture("CANC"), league).status, "cancelled");
+  assert.equal(normalizeFixture(providerFixture("SUSP"), league).status, "suspended");
+});
+
 test("conserva el resultado de la tanda de penales cuando API-Football lo entrega", () => {
   const input = providerFixture("PEN");
   input.goals = { home: 1, away: 1 };

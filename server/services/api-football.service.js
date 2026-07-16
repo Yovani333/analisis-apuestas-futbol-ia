@@ -343,6 +343,9 @@ function pacificDateParts(value) {
 function fixtureStatus(short) {
   if (["FT", "AET", "PEN"].includes(short)) return "finished";
   if (["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(short)) return "live";
+  if (short === "PST") return "postponed";
+  if (short === "CANC") return "cancelled";
+  if (["SUSP", "ABD"].includes(short)) return "suspended";
   return "scheduled";
 }
 
@@ -690,7 +693,8 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
   };
   dataset.estimatedXg = buildEstimatedXgFromDataset(dataset);
   const currentFixtureXgAvailable = ["available", "partial"].includes(dataset.estimatedXg?.status);
-  const historicalXgMode = includeHistorical || fixture.status === "scheduled" || !currentFixtureXgAvailable;
+  const inactiveFixtureStatus = ["postponed", "cancelled", "suspended"].includes(fixture.status);
+  const historicalXgMode = !inactiveFixtureStatus && (includeHistorical || fixture.status === "scheduled" || !currentFixtureXgAvailable);
   const retainOfficialHistoryForCorners = fixture.leagueSlug === "world-cup";
   console.info("[xg-mode]", {
     fixtureId: fixture.id,
