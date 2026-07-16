@@ -82,10 +82,9 @@ Ultimo resultado verificado:
 
 ## Pendientes recomendados
 
-1. Ejecutar una prueba real con un partido en vivo cuando exista uno disponible.
-2. Revisar Simulacion con un fixture real para confirmar reutilizacion de expediente y consumo incremental.
-3. Monitorear 2 o 3 partidos programados adicionales en ligas distintas.
-4. Documentar cualquier caso donde API-Football muestre venue o cuotas faltantes para determinar si es cobertura del proveedor o mapeo local.
+1. Revisar Simulacion con un fixture real para confirmar reutilizacion de expediente y consumo incremental.
+2. Monitorear 2 o 3 partidos programados adicionales en ligas distintas.
+3. Documentar cualquier caso donde API-Football muestre venue o cuotas faltantes para determinar si es cobertura del proveedor o mapeo local.
 
 ## Confirmaciones
 
