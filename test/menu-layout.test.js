@@ -104,3 +104,14 @@ test("Mis apuestas separa picks, resultados ganados, perdidos, mejores picks, pa
 test("En vivo permite scroll vertical interno y continuar en la pagina", () => {
   assert.match(styles, /\.live-data-content \.detail-table-wrap \{[^}]*max-height: min\(72vh, 720px\)[^}]*overflow: auto[^}]*overscroll-behavior-y: auto/);
 });
+
+test("la capa movil final adapta controles, pestañas y ventanas al telefono", () => {
+  const mobile = styles.slice(styles.lastIndexOf("/* Consolidated phone layout"));
+  assert.match(mobile, /@media \(max-width: 640px\)/);
+  assert.match(mobile, /\.quick-filters \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(mobile, /\.panel-actions,[\s\S]*grid-template-columns: 1fr/);
+  assert.match(mobile, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(mobile, /\.data-dialog \{[\s\S]*height: 100dvh;[\s\S]*max-height: 100dvh/);
+  assert.match(mobile, /\.data-dialog__content \{[\s\S]*overflow-y: auto;[\s\S]*overscroll-behavior: contain/);
+  assert.match(mobile, /\.parlay-slip \{[\s\S]*right: 8px;[\s\S]*left: 8px/);
+});

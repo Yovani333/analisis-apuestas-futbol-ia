@@ -2638,3 +2638,246 @@ body {
   .evidence-readiness-actions { grid-template-columns: 1fr; }
   .evidence-readiness-actions .button { width: 100%; }
 }
+
+/* Consolidated phone layout. Keep this final so older component rules cannot
+   restore desktop widths after a mobile breakpoint. */
+@media (max-width: 640px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  main,
+  .app-shell,
+  .dashboard,
+  .panel,
+  .utility-view,
+  .saved-view,
+  .simulation-view,
+  .guide-view,
+  .markets-view,
+  .live-view,
+  .transparency-view {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .dashboard,
+  .filters,
+  .filters form,
+  .simple-filters,
+  .simple-filters > *,
+  .date-fields,
+  .field,
+  .advanced-filters {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .helper-text,
+  .muted-text,
+  .panel-heading p {
+    overflow-wrap: anywhere;
+  }
+
+  .button,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
+  .button {
+    max-width: 100%;
+    justify-content: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .demo-strip.control-status {
+    display: grid;
+    min-height: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    padding: 56px 8px 10px;
+  }
+
+  .control-chip {
+    min-width: 0;
+    justify-content: center;
+    white-space: normal;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .control-status__description,
+  .site-last-update {
+    width: 100%;
+    grid-column: 1 / -1;
+    margin-left: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .quick-filters {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .quick-filters .button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .quick-filters .button:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .panel-heading,
+  .saved-view__heading,
+  .utility-heading,
+  .research-heading,
+  .collection-list-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panel-heading > div,
+  .saved-view__heading > div,
+  .utility-heading > div {
+    min-width: 0;
+  }
+
+  .panel-actions,
+  .saved-view__actions,
+  .account-cloud__actions,
+  .filter-actions,
+  .pick-actions,
+  .favorite-team-card__actions,
+  .live-refresh-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .panel-actions .button,
+  .saved-view__actions .button,
+  .account-cloud__actions .button,
+  .filter-actions .button,
+  .pick-actions .button,
+  .favorite-team-card__actions .button,
+  .live-refresh-actions .button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .panel-actions .status-badge {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .saved-tabs {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    overflow: visible;
+  }
+
+  .saved-tabs .button {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
+  }
+
+  .saved-pick,
+  .saved-leg,
+  .simulation-form,
+  .simulation-summary-grid,
+  .simulation-team-grid,
+  .simulation-step-grid,
+  .grid-two,
+  .guide-module-grid,
+  .specific-market-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .saved-market-metrics,
+  .history-metrics,
+  .evidence-readiness-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .data-dialog {
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .data-dialog__header {
+    padding: max(12px, env(safe-area-inset-top)) 14px 12px;
+  }
+
+  .data-dialog__content {
+    min-height: 0;
+    padding: 12px 12px calc(22px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .detail-table-wrap,
+  .live-data-content .detail-table-wrap,
+  .audit-table-wrap,
+  .origin-performance__table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .notification-popover {
+    top: 56px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-height: calc(100dvh - 68px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .parlay-slip {
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    width: auto;
+    max-width: none;
+    max-height: min(72dvh, 620px);
+  }
+
+  .evidence-readiness-card > header {
+    align-items: start;
+  }
+}
+
+@media (max-width: 380px) {
+  .saved-tabs,
+  .saved-market-metrics,
+  .history-metrics,
+  .evidence-readiness-counts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
