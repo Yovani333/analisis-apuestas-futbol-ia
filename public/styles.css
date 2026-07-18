@@ -862,7 +862,8 @@ tr.pick-signal--fail > td { background-color: color-mix(in srgb, var(--danger-so
 .audit-evidence-preview > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .audit-evidence-preview h3 { margin: 2px 0 0; }
 .audit-evidence-preview pre { max-height: 62vh; margin: 0; padding: 12px; overflow: auto; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; font: .72rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.audit-table-wrap { max-height: 68vh; overflow: auto; overscroll-behavior: contain; }
+.audit-view { width: min(1500px, 100%); }
+.audit-table-wrap { max-height: none; overflow-x: auto; overflow-y: visible; overscroll-behavior-x: contain; overscroll-behavior-y: auto; }
 .audit-row--green { box-shadow: inset 4px 0 var(--success); }
 .audit-row--orange { box-shadow: inset 4px 0 var(--warning); }
 .audit-row--red { box-shadow: inset 4px 0 var(--danger); }
@@ -2592,6 +2593,10 @@ body {
 .evidence-readiness-progress i { display: block; height: 100%; background: linear-gradient(90deg, #d84752 0 29%, #d68a12 30% 69%, #15956d 70%); border-radius: inherit; }
 :root[data-theme="dark"] .evidence-readiness-card { background: #172435; }
 :root[data-theme="dark"] .evidence-readiness-counts div { background: #1e2e42; }
+
+@media (min-width: 1280px) {
+  .audit-view .evidence-readiness-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
 @media (max-width: 700px) {
   .evidence-readiness-grid { grid-template-columns: 1fr; }

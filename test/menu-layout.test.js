@@ -36,6 +36,13 @@ test("el menu lateral es fijo en escritorio y funciona como cajon accesible en m
   assert.match(app, /themeToggle\.querySelector\("\.nav-label"\)\.textContent/);
 });
 
+test("Auditoria aprovecha el ancho y permite continuar el scroll de pagina", () => {
+  assert.match(html, /class="utility-view audit-view" data-view-panel="audit"/);
+  assert.match(styles, /\.audit-view \{ width: min\(1500px, 100%\); \}/);
+  assert.match(styles, /\.audit-table-wrap \{[^}]*max-height: none;[^}]*overflow-x: auto;[^}]*overflow-y: visible;[^}]*overscroll-behavior-y: auto;/);
+  assert.match(styles, /@media \(min-width: 1280px\)[\s\S]*\.audit-view \.evidence-readiness-grid \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
+});
+
 test("la Guia conserva el orden Cobertura, Ataque, Poisson, Mercado y Decision", () => {
   const ids = ["guide-coverage-module", "guide-team-goals-module", "guide-poisson-module", "guide-odds-module", "guide-data-picks-module"];
   const positions = ids.map((id) => html.indexOf(`id="${id}"`));
