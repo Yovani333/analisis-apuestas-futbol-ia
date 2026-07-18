@@ -16,6 +16,7 @@ test("el menu lateral agrupa las vistas en un orden profesional", () => {
   assert.match(html, /data-view-panel="markets"/);
   assert.match(html, /data-view-panel="pick-collection"[\s\S]*id="collect-pick-info"[\s\S]*Actualizar picks/);
   assert.match(html, /data-view-panel="favorite-teams"[\s\S]*id="favorite-teams-list"/);
+  assert.match(html, /data-view-panel="audit"[\s\S]*id="evidence-readiness-list"[\s\S]*id="audit-fixture"/);
   assert.match(html, /data-view="pick-collection"[\s\S]*Picks recomendados/);
   assert.doesNotMatch(app, /<h3>Datos recopilados<\/h3>/);
   assert.doesNotMatch(html, /data-view="alerts"|data-view-panel="alerts"|>Avisos</);

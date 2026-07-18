@@ -13,6 +13,7 @@ import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260718-favorite-teams-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-expected-corners-v1";
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
+import { summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260718-evidence-readiness-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -208,6 +209,10 @@ Object.assign(elements, {
   viewAuditEvidence: document.querySelector("#view-audit-evidence"), auditEvidencePreview: document.querySelector("#audit-evidence-preview"),
   auditEvidenceTitle: document.querySelector("#audit-evidence-title"), auditEvidenceText: document.querySelector("#audit-evidence-text"),
   closeAuditEvidence: document.querySelector("#close-audit-evidence")
+});
+Object.assign(elements, {
+  evidenceReadinessTotal: document.querySelector("#evidence-readiness-total"),
+  evidenceReadinessList: document.querySelector("#evidence-readiness-list")
 });
 Object.assign(elements, {
   favoriteTeamCount: document.querySelector("#favorite-team-count"),
@@ -2770,6 +2775,48 @@ function allEvidenceSnapshots() {
   return [...rows.values()];
 }
 
+function renderEvidenceReadiness() {
+  if (!elements.evidenceReadinessList) return;
+  const groups = summarizeEvidenceByCompetition(allEvidenceSnapshots());
+  const collected = groups.reduce((sum, group) => sum + group.collected, 0);
+  const evaluated = groups.reduce((sum, group) => sum + group.evaluated, 0);
+  elements.evidenceReadinessTotal.textContent = `${collected} recolectada${collected === 1 ? "" : "s"} · ${evaluated} evaluada${evaluated === 1 ? "" : "s"}`;
+  elements.evidenceReadinessTotal.className = `status-badge status-badge--${evaluated >= 100 ? "available" : evaluated >= 30 ? "partial" : "unavailable"}`;
+  if (!groups.length) {
+    elements.evidenceReadinessList.innerHTML = '<div class="research-empty"><strong>Sin evidencias prepartido</strong><p>Las evidencias aparecerán aquí al guardarlas manual o automáticamente.</p></div>';
+    return;
+  }
+  elements.evidenceReadinessList.innerHTML = groups.map((group) => `<article class="evidence-readiness-card evidence-readiness-card--${escapeHtml(group.color)}">
+    <header><span class="evidence-light evidence-light--${escapeHtml(group.color)}" aria-hidden="true"></span><div><h3>${escapeHtml(group.competition)}</h3><p>${group.leagueId ? `Liga API-Football ${escapeHtml(group.leagueId)}` : "Competición identificada por nombre"}</p></div><strong>${escapeHtml(group.label)}</strong></header>
+    <div class="evidence-readiness-counts"><div><span>Recolectadas</span><strong>${escapeHtml(group.collected)}</strong></div><div><span>Evaluadas</span><strong>${escapeHtml(group.evaluated)}</strong></div><div><span>Pendientes</span><strong>${escapeHtml(group.pendingEvaluation)}</strong></div></div>
+    <div class="evidence-readiness-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(group.progressPct)}" aria-label="Progreso hacia cien evidencias evaluadas"><i style="width:${group.progressPct}%"></i></div>
+    <p>${escapeHtml(group.recommendation)}</p>
+    <small>${group.nextTarget === null ? "Ya alcanzó el umbral orientativo de 100 evidencias evaluadas." : `Faltan ${escapeHtml(group.remaining)} auditorías para el siguiente nivel.`}</small>
+  </article>`).join("");
+}
+
+function markEvidenceAudited(evidence, audit) {
+  if (!evidence?.id || !audit) return;
+  const records = Array.isArray(audit.records) ? audit.records : [];
+  const evaluablePicks = records.filter((row) => ["HIT", "MISS", "VOID"].includes(row?.outcome)).length;
+  const finalScore = records.find((row) => row?.finalScore && row.finalScore !== "Pendiente")?.finalScore || null;
+  const updated = {
+    ...evidence,
+    auditMetadata: { ...(evidence.auditMetadata || {}), auditedAt: new Date().toISOString() },
+    auditSummary: {
+      evaluablePicks,
+      completed: Boolean(finalScore),
+      hits: Number(audit.metrics?.hits || 0),
+      misses: Number(audit.metrics?.misses || 0),
+      voids: Number(audit.metrics?.voids || 0),
+      finalScore
+    }
+  };
+  state.evidenceSnapshots = saveEvidenceSnapshot(updated);
+  queueCloudSync();
+  renderEvidenceReadiness();
+}
+
 function selectedAuditEvidence() {
   return latestEvidenceForFixture(allEvidenceSnapshots(), elements.auditFixture.value);
 }
@@ -2799,6 +2846,7 @@ function renderAuditFixtureOptions() {
     : '<option value="">No hay evidencias prepartido guardadas</option>';
   elements.runAudit.disabled = true;
   elements.viewAuditEvidence.disabled = true;
+  renderEvidenceReadiness();
 }
 
 function showAuditEvidencePreview() {
@@ -2832,7 +2880,9 @@ async function runSelectedAudit() {
   elements.runAudit.textContent = "Auditando…";
   try {
     const evidence = selectedAuditEvidence();
-    renderAuditResults(await footballDataService.auditFixture(elements.auditFixture.value, evidence));
+    const audit = await footballDataService.auditFixture(elements.auditFixture.value, evidence);
+    renderAuditResults(audit);
+    markEvidenceAudited(evidence, audit);
   }
   catch (error) { elements.auditResults.innerHTML = `<div class="saved-empty"><h3>No se pudo ejecutar la auditoría</h3><p>${escapeHtml(error.message)}</p></div>`; }
   finally { elements.runAudit.disabled = false; elements.runAudit.textContent = "Ejecutar auditoría"; }
@@ -2854,6 +2904,7 @@ async function capturePreMatchEvidence() {
     state.cornersByFixture.set(fixture.id, snapshot.modules?.corners);
     state.evidenceSnapshots = saveEvidenceSnapshot(snapshot);
     queueCloudSync();
+    renderEvidenceReadiness();
     showNotice("Evidencia fresca guardada desde el mismo snapshot del servidor usado por la automatización.");
   } catch (error) {
     showNotice(error.message || "No fue posible guardar la evidencia prepartido.");

@@ -1,0 +1,73 @@
+const PRELIMINARY_MINIMUM = 30;
+const SUFFICIENT_MINIMUM = 100;
+
+function timestamp(value) {
+  return Date.parse(value || "") || 0;
+}
+
+function isValidPreMatchSnapshot(snapshot) {
+  if (!snapshot?.fixture?.id || !snapshot?.capturedAt) return false;
+  const capturedAt = timestamp(snapshot.capturedAt);
+  const kickoffAt = timestamp(snapshot.fixture.utcDateTime);
+  return capturedAt > 0 && (!kickoffAt || capturedAt < kickoffAt) && snapshot.currentFixtureStatisticsUsed !== true;
+}
+
+function latestByFixture(snapshots = []) {
+  const rows = new Map();
+  for (const snapshot of Array.isArray(snapshots) ? snapshots : []) {
+    if (!isValidPreMatchSnapshot(snapshot)) continue;
+    const fixtureId = String(snapshot.fixture.id);
+    const current = rows.get(fixtureId);
+    if (!current || timestamp(snapshot.capturedAt) > timestamp(current.capturedAt)) rows.set(fixtureId, snapshot);
+  }
+  return [...rows.values()];
+}
+
+function readiness(evaluated) {
+  if (evaluated >= SUFFICIENT_MINIMUM) return {
+    key: "sufficient", label: "Evidencia suficiente", color: "green", nextTarget: null,
+    recommendation: "Volumen adecuado para estudiar mejoras por competición, mercado y versión con validación estadística."
+  };
+  if (evaluated >= PRELIMINARY_MINIMUM) return {
+    key: "medium", label: "Evidencia media", color: "orange", nextTarget: SUFFICIENT_MINIMUM,
+    recommendation: "Útil para diagnóstico preliminar. Todavía no conviene recalibrar fórmulas definitivas."
+  };
+  return {
+    key: "low", label: "Evidencia baja", color: "red", nextTarget: PRELIMINARY_MINIMUM,
+    recommendation: "Continúa recopilando y auditando resultados antes de modificar el sistema."
+  };
+}
+
+export function summarizeEvidenceByCompetition(snapshots = []) {
+  const groups = new Map();
+  for (const snapshot of latestByFixture(snapshots)) {
+    const fixture = snapshot.fixture || {};
+    const key = fixture.leagueId ? `league:${fixture.leagueId}` : `name:${fixture.leagueName || "No disponible"}`;
+    const group = groups.get(key) || {
+      key,
+      leagueId: fixture.leagueId ?? null,
+      competition: fixture.leagueName || "Competición no disponible",
+      collected: 0,
+      evaluated: 0,
+      pendingEvaluation: 0,
+      fixtures: []
+    };
+    const evaluated = Boolean(snapshot.auditMetadata?.auditedAt && snapshot.auditSummary?.completed === true);
+    group.collected += 1;
+    group.evaluated += evaluated ? 1 : 0;
+    group.pendingEvaluation += evaluated ? 0 : 1;
+    group.fixtures.push(String(fixture.id));
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => {
+    const level = readiness(group.evaluated);
+    return {
+      ...group,
+      ...level,
+      remaining: level.nextTarget === null ? 0 : Math.max(0, level.nextTarget - group.evaluated),
+      progressPct: Math.min(100, Number((group.evaluated / SUFFICIENT_MINIMUM * 100).toFixed(1)))
+    };
+  }).sort((a, b) => b.evaluated - a.evaluated || b.collected - a.collected || a.competition.localeCompare(b.competition, "es"));
+}
+
+export const EVIDENCE_READINESS_THRESHOLDS = Object.freeze({ preliminary: PRELIMINARY_MINIMUM, sufficient: SUFFICIENT_MINIMUM });

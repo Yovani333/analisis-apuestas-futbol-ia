@@ -2565,3 +2565,36 @@ body {
   .favorite-team-card > header .status-badge { grid-column: 1 / -1; }
   .favorite-team-card__actions .button { flex: 1 1 150px; }
 }
+
+.evidence-readiness { display: grid; gap: 11px; }
+.evidence-readiness .panel-heading { margin-bottom: 0; }
+.evidence-readiness .panel-heading p:last-child { margin: 4px 0 0; color: var(--muted); font-size: .72rem; }
+.evidence-readiness-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: .68rem; }
+.evidence-readiness-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.evidence-light { display: inline-block; width: 11px; height: 11px; flex: 0 0 auto; border: 2px solid rgb(255 255 255 / 65%); border-radius: 50%; box-shadow: 0 0 0 1px rgb(15 23 42 / 18%); }
+.evidence-light--red { background: #d84752; }
+.evidence-light--orange { background: #d68a12; }
+.evidence-light--green { background: #15956d; }
+.evidence-readiness-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.evidence-readiness-card { display: grid; gap: 10px; min-width: 0; padding: 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-left-width: 4px; border-radius: 7px; }
+.evidence-readiness-card--red { border-left-color: #d84752; }
+.evidence-readiness-card--orange { border-left-color: #d68a12; }
+.evidence-readiness-card--green { border-left-color: #15956d; }
+.evidence-readiness-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.evidence-readiness-card h3 { margin: 0; font-size: .86rem; }
+.evidence-readiness-card header p, .evidence-readiness-card > p { margin: 2px 0 0; color: var(--muted); font-size: .66rem; line-height: 1.45; }
+.evidence-readiness-card header > strong { font-size: .7rem; }
+.evidence-readiness-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.evidence-readiness-counts div { display: grid; gap: 2px; padding: 7px; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; }
+.evidence-readiness-counts span, .evidence-readiness-card small { color: var(--muted); font-size: .6rem; }
+.evidence-readiness-counts strong { font-size: .86rem; }
+.evidence-readiness-progress { height: 8px; overflow: hidden; background: var(--neutral-soft); border-radius: 4px; }
+.evidence-readiness-progress i { display: block; height: 100%; background: linear-gradient(90deg, #d84752 0 29%, #d68a12 30% 69%, #15956d 70%); border-radius: inherit; }
+:root[data-theme="dark"] .evidence-readiness-card { background: #172435; }
+:root[data-theme="dark"] .evidence-readiness-counts div { background: #1e2e42; }
+
+@media (max-width: 700px) {
+  .evidence-readiness-grid { grid-template-columns: 1fr; }
+  .evidence-readiness-card > header { grid-template-columns: auto minmax(0, 1fr); }
+  .evidence-readiness-card header > strong { grid-column: 2; }
+}

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de análisis responsable de apuestas de fútbol con datos, API-Football y modelos internos." />
     <title>Análisis de Apuestas de Fútbol con Datos</title>
-    <link rel="stylesheet" href="styles.css?v=20260718-favorite-teams-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260718-evidence-readiness-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -486,6 +486,12 @@
         <div><p class="eyebrow">Validación retrospectiva</p><h2>Auditoría de Picks / Backtesting</h2><p>Reconstruye el análisis prepartido y lo compara con el resultado final usando el snapshot guardado.</p></div>
         <button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button>
       </section>
+      <section class="panel evidence-readiness" aria-labelledby="evidence-readiness-title">
+        <div class="panel-heading"><div><p class="eyebrow">Madurez por competición</p><h2 id="evidence-readiness-title">Semáforo de evidencias</h2><p>Indica cuándo existe volumen evaluado suficiente para estudiar mejoras sin recalibrar prematuramente.</p></div><span id="evidence-readiness-total" class="status-badge status-badge--unavailable">0 evidencias</span></div>
+        <div class="evidence-readiness-legend"><span><i class="evidence-light evidence-light--red"></i>Baja: 0–29 evaluadas</span><span><i class="evidence-light evidence-light--orange"></i>Media: 30–99</span><span><i class="evidence-light evidence-light--green"></i>Suficiente: 100 o más</span></div>
+        <div id="evidence-readiness-list" class="evidence-readiness-grid"><div class="research-empty">Cargando evidencias por competición…</div></div>
+        <p class="market-disclaimer">El verde permite estudiar ajustes con pruebas por mercado y versión; nunca modifica fórmulas automáticamente. Las capturas sin auditoría final permanecen pendientes y no elevan el semáforo.</p>
+      </section>
       <section class="panel audit-controls">
         <label for="audit-fixture">Partido finalizado</label>
         <select id="audit-fixture"><option value="">Cargando evidencias guardadas</option></select>
@@ -570,6 +576,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260718-favorite-teams-v1"></script>
+    <script type="module" src="app.js?v=20260718-evidence-readiness-v1"></script>
   </body>
 </html>
