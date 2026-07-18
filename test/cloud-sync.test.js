@@ -71,6 +71,34 @@ test("compacta evidencias grandes antes de sincronizar sin tocar picks ni parlay
   assert.ok(JSON.stringify(state).length < 900_000);
 });
 
+test("elimina bloques analiticos pesados y ofrece una segunda compactacion", () => {
+  const oversizedBlock = Array.from({ length: 2_000 }, (_, index) => ({
+    index,
+    explanation: "detalle ".repeat(100),
+    scoreMatrix: Array.from({ length: 100 }, () => Array(100).fill(0.01))
+  }));
+  const input = {
+    savedPicks: [{ id: "pick-1", explanation: "razon ".repeat(2_000) }],
+    evidenceSnapshots: Array.from({ length: 30 }, (_, index) => ({
+      id: `ev-heavy-${index}`,
+      capturedAt: `2026-07-${String(index + 1).padStart(2, "0")}T10:00:00Z`,
+      preMatch: { oversizedBlock },
+      marketAnalysis: oversizedBlock,
+      researchData: { updatedAt: "2026-07-17T10:00:00Z", sourceCoverage: [{ module: "Cuotas", status: "available" }], oversizedBlock },
+      modules: { poisson: { scoreMatrix: oversizedBlock, probabilities: { home: 45 } } }
+    }))
+  };
+  const normal = compactCloudStateForSync(input);
+  const aggressive = compactCloudStateForSync(input, { aggressive: true });
+  assert.equal(normal.evidenceSnapshots.length, 25);
+  assert.equal(aggressive.evidenceSnapshots.length, 10);
+  assert.equal(normal.evidenceSnapshots[0].preMatch, undefined);
+  assert.equal(normal.evidenceSnapshots[0].marketAnalysis, undefined);
+  assert.equal(normal.evidenceSnapshots[0].researchData.oversizedBlock, undefined);
+  assert.equal(normal.evidenceSnapshots[0].modules.poisson.scoreMatrix, undefined);
+  assert.ok(Buffer.byteLength(JSON.stringify(aggressive), "utf8") < 1_500_000);
+});
+
 test("detecta schema faltante de sincronizacion con mensajes de Supabase", () => {
   assert.equal(cloudSyncInternals.isMissingCloudSchema(new Error("Could not find the table 'public.user_sync_state' in the schema cache")), true);
   assert.equal(cloudSyncInternals.isMissingCloudSchema(new Error("relation public.user_sync_state does not exist")), true);

@@ -11,6 +11,13 @@ function writeJson(storage, key, value) {
 
 const MAX_SYNC_EVIDENCE = 25;
 const MAX_SYNC_EVIDENCE_TEXT = 16_000;
+const MAX_COMPACT_STRING = 4_000;
+const AGGRESSIVE_SYNC_EVIDENCE = 10;
+const AGGRESSIVE_EVIDENCE_TEXT = 4_000;
+const HEAVY_SYNC_KEYS = new Set([
+  "raw", "rawData", "dataset", "matchData", "fullDataset", "debug", "logs",
+  "apiResponse", "response", "scoreMatrix", "goalMatrix", "matrix"
+]);
 
 async function requestJson(path, { method = "GET", token = "", body } = {}) {
   const response = await fetch(path, {
@@ -22,7 +29,10 @@ async function requestJson(path, { method = "GET", token = "", body } = {}) {
   if (!response.ok) {
     const code = payload.error?.code || payload.code || "";
     const message = payload.error?.message || payload.message || "No fue posible completar la sincronizacion.";
-    throw new Error(code ? `${message} (${code})` : message);
+    const error = new Error(code ? `${message} (${code})` : message);
+    error.code = code;
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -118,29 +128,78 @@ export function mergeCloudState(local = {}, remote = {}) {
   };
 }
 
-function compactEvidenceSnapshot(row = {}) {
+function compactNestedValue(value, depth = 0, { maxArray = 80, maxString = MAX_COMPACT_STRING } = {}) {
+  if (value === null || value === undefined || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") return value.length > maxString ? `${value.slice(0, maxString)}...` : value;
+  if (depth >= 6) return undefined;
+  if (Array.isArray(value)) {
+    return value.slice(0, maxArray)
+      .map((item) => compactNestedValue(item, depth + 1, { maxArray, maxString }))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value !== "object") return undefined;
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (HEAVY_SYNC_KEYS.has(key)) continue;
+    const compacted = compactNestedValue(item, depth + 1, { maxArray, maxString });
+    if (compacted !== undefined) result[key] = compacted;
+  }
+  return result;
+}
+
+function compactResearchData(researchData) {
+  if (!researchData || typeof researchData !== "object") return null;
+  return {
+    updatedAt: researchData.updatedAt || null,
+    sourceCoverage: Array.isArray(researchData.sourceCoverage)
+      ? researchData.sourceCoverage.slice(0, 40).map((row) => ({
+        module: row?.module || row?.label || row?.moduleKey || null,
+        moduleKey: row?.moduleKey || null,
+        status: row?.status || null,
+        activeSource: row?.activeSource || row?.source || null
+      }))
+      : []
+  };
+}
+
+function compactEvidenceSnapshot(row = {}, { maxText = MAX_SYNC_EVIDENCE_TEXT, maxArray = 80 } = {}) {
   const compact = { ...row };
-  for (const key of ["raw", "rawData", "dataset", "matchData", "fullDataset", "debug", "logs"]) delete compact[key];
+  for (const key of HEAVY_SYNC_KEYS) delete compact[key];
+  delete compact.preMatch;
+  delete compact.marketAnalysis;
+  compact.researchData = compactResearchData(compact.researchData);
+  compact.modules = compactNestedValue(compact.modules, 0, { maxArray, maxString: MAX_COMPACT_STRING });
   for (const key of ["text", "content", "summary", "evidenceText"]) {
-    if (typeof compact[key] === "string" && compact[key].length > MAX_SYNC_EVIDENCE_TEXT) {
-      compact[key] = `${compact[key].slice(0, MAX_SYNC_EVIDENCE_TEXT)}\n\n[Contenido recortado para sincronizacion en linea. La copia local conserva la evidencia completa.]`;
+    if (typeof compact[key] === "string" && compact[key].length > maxText) {
+      compact[key] = `${compact[key].slice(0, maxText)}\n\n[Contenido recortado para sincronizacion en linea. La copia local conserva la evidencia completa.]`;
       compact.compactedForCloud = true;
     }
   }
-  if (Array.isArray(compact.picks)) compact.picks = compact.picks.slice(0, 80);
-  if (Array.isArray(compact.recommendedPicks)) compact.recommendedPicks = compact.recommendedPicks.slice(0, 40);
-  if (Array.isArray(compact.discardedPicks)) compact.discardedPicks = compact.discardedPicks.slice(0, 80);
+  if (Array.isArray(compact.picks)) compact.picks = compact.picks.slice(0, maxArray);
+  if (Array.isArray(compact.recommendedPicks)) compact.recommendedPicks = compact.recommendedPicks.slice(0, Math.min(40, maxArray));
+  if (Array.isArray(compact.discardedPicks)) compact.discardedPicks = compact.discardedPicks.slice(0, maxArray);
+  compact.compactedForCloud = true;
   return compact;
 }
 
-export function compactCloudStateForSync(state = {}) {
+export function compactCloudStateForSync(state = {}, { aggressive = false } = {}) {
+  const evidenceLimit = aggressive ? AGGRESSIVE_SYNC_EVIDENCE : MAX_SYNC_EVIDENCE;
+  const evidenceTextLimit = aggressive ? AGGRESSIVE_EVIDENCE_TEXT : MAX_SYNC_EVIDENCE_TEXT;
+  const maxArray = aggressive ? 30 : 80;
   const evidenceSnapshots = Array.isArray(state.evidenceSnapshots)
     ? [...state.evidenceSnapshots]
       .sort((a, b) => rowTimestamp(b) - rowTimestamp(a))
-      .slice(0, MAX_SYNC_EVIDENCE)
-      .map(compactEvidenceSnapshot)
+      .slice(0, evidenceLimit)
+      .map((row) => compactEvidenceSnapshot(row, { maxText: evidenceTextLimit, maxArray }))
     : [];
-  return { ...state, evidenceSnapshots };
+  return {
+    ...state,
+    parlayDraft: compactNestedValue(state.parlayDraft || [], 0, { maxArray: 12, maxString: MAX_COMPACT_STRING }),
+    savedPicks: compactNestedValue(state.savedPicks || [], 0, { maxArray: 500, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
+    savedParlays: compactNestedValue(state.savedParlays || [], 0, { maxArray: 200, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
+    alerts: compactNestedValue(state.alerts || [], 0, { maxArray: 500, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
+    evidenceSnapshots
+  };
 }
 
 export class CloudSyncClient {
@@ -195,7 +254,16 @@ export class CloudSyncClient {
   async saveState(state) {
     const token = await this.accessToken();
     if (!token) return null;
-    return (await requestJson("/api/cloud/state", { method: "PUT", token, body: compactCloudStateForSync(state) })).state;
+    try {
+      return (await requestJson("/api/cloud/state", { method: "PUT", token, body: compactCloudStateForSync(state) })).state;
+    } catch (error) {
+      if (error?.status !== 413 && error?.code !== "CLOUD_REQUEST_TOO_LARGE" && error?.code !== "CLOUD_STATE_TOO_LARGE") throw error;
+      return (await requestJson("/api/cloud/state", {
+        method: "PUT",
+        token,
+        body: compactCloudStateForSync(state, { aggressive: true })
+      })).state;
+    }
   }
 
   async watchEvidence(fixtures) {

@@ -10,7 +10,7 @@ import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-to
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260713-dashboard-fixes-v2";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260713-dashboard-fixes-v2";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260717-cloud-sync-compact-v2";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-expected-corners-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
