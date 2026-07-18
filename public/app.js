@@ -2849,7 +2849,7 @@ async function evaluateCompetitionEvidence(competitionKey) {
     showNotice("No hay evidencias finalizadas pendientes en esta competición.");
     return;
   }
-  const progress = { running: true, processed: 0, total: pending.ready.length, completed: 0, waiting: pending.waiting.length, errors: 0, message: "Consultando resultados finales…" };
+  const progress = { running: true, processed: 0, total: pending.ready.length, completed: 0, waiting: pending.waiting.length, errors: 0, issues: [], message: "Consultando resultados finales…" };
   state.evidenceEvaluationByCompetition.set(competitionKey, progress);
   renderEvidenceReadiness();
   for (const evidence of pending.ready) {
@@ -2859,8 +2859,10 @@ async function evaluateCompetitionEvidence(competitionKey) {
       if (completed) progress.completed += 1;
       else progress.errors += 1;
     } catch (error) {
+      const fixtureLabel = `${evidence.fixture?.home || "Local"} vs ${evidence.fixture?.away || "Visitante"}`;
       if (error.code === "FIXTURE_NOT_FINISHED" || error.status === 409) progress.waiting += 1;
       else progress.errors += 1;
+      progress.issues.push({ fixtureLabel, message: error.message || "No se pudo completar la evaluación." });
     }
     progress.processed += 1;
     progress.message = `${progress.completed} completada(s) · ${progress.waiting} pendiente(s) · ${progress.errors} error(es)`;
@@ -2869,7 +2871,8 @@ async function evaluateCompetitionEvidence(competitionKey) {
   progress.running = false;
   if (progress.completed > 0) queueCloudSync();
   renderAuditFixtureOptions();
-  elements.auditResults.innerHTML = `<div class="detail-note detail-note--info"><strong>Evaluación por competición finalizada</strong><span>${escapeHtml(progress.message)}. Los encuentros futuros o todavía no finalizados conservan su estado pendiente.</span></div>`;
+  const issues = progress.issues.length ? `<div class="audit-pending-details"><h3>Evaluaciones que siguen pendientes</h3><ul>${progress.issues.map((issue) => `<li><strong>${escapeHtml(issue.fixtureLabel)}</strong><span>${escapeHtml(issue.message)}</span></li>`).join("")}</ul></div>` : "";
+  elements.auditResults.innerHTML = `<div class="detail-note detail-note--info"><strong>Evaluación por competición finalizada</strong><span>${escapeHtml(progress.message)}. Los encuentros futuros o todavía no finalizados conservan su estado pendiente.</span></div>${issues}`;
   showNotice(progress.completed ? `${progress.completed} evidencia(s) evaluadas correctamente.` : "No había resultados finalizados disponibles para completar.");
 }
 
@@ -2887,18 +2890,23 @@ async function loadEvidenceLibrary() {
 
 function renderAuditFixtureOptions() {
   const available = new Map();
-  for (const snapshot of allEvidenceSnapshots()) {
+  const snapshots = allEvidenceSnapshots();
+  const evidenceFixtureIds = new Set(snapshots.map((snapshot) => String(snapshot?.fixture?.id || "")).filter(Boolean));
+  for (const id of evidenceFixtureIds) {
+    const snapshot = latestEvidenceForFixture(snapshots, id);
     const fixture = snapshot?.fixture;
-    if (!fixture?.id || available.has(String(fixture.id))) continue;
-    available.set(String(fixture.id), { ...fixture, hasEvidence: true });
+    if (!fixture?.id) continue;
+    const evaluated = Boolean(snapshot.auditMetadata?.auditedAt && snapshot.auditSummary?.completed === true);
+    available.set(String(fixture.id), { ...fixture, hasEvidence: true, evaluated });
   }
   for (const fixture of state.fixtures.filter((item) => item.status === "finished")) {
     const id = String(fixture.id);
-    available.set(id, { ...available.get(id), ...fixture, hasEvidence: Boolean(latestEvidenceForFixture(allEvidenceSnapshots(), id)) });
+    const evidence = latestEvidenceForFixture(snapshots, id);
+    available.set(id, { ...available.get(id), ...fixture, hasEvidence: Boolean(evidence), evaluated: Boolean(evidence?.auditMetadata?.auditedAt && evidence?.auditSummary?.completed === true) });
   }
   const fixtures = [...available.values()].sort((a, b) => String(b.utcDateTime || b.date || "").localeCompare(String(a.utcDateTime || a.date || "")));
   elements.auditFixture.innerHTML = fixtures.length
-    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}">${escapeHtml(fixture.leagueName || "Liga no disponible")} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · ${fixture.hasEvidence ? "Evidencia prepartido" : "Sin snapshot"}</option>`).join("")}`
+    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}" class="${fixture.evaluated ? "audit-option--evaluated" : ""}">${fixture.evaluated ? "✓ Evaluada · " : ""}${escapeHtml(fixture.leagueName || "Liga no disponible")} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · ${fixture.hasEvidence ? "Evidencia prepartido" : "Sin snapshot"}</option>`).join("")}`
     : '<option value="">No hay evidencias prepartido guardadas</option>';
   elements.runAudit.disabled = true;
   elements.viewAuditEvidence.disabled = true;

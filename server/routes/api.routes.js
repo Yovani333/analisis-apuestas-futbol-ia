@@ -16,7 +16,7 @@ import { calculateCornersModel } from "../services/corners-model.service.js";
 import { buildOutcomeScenarios } from "../services/outcome-scenarios.service.js";
 import { buildSpecificMarkets } from "../services/specific-markets.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
-import { runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
+import { resolvePendingAuditError, runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
 import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
 import { getPlayerGoalCandidates } from "../services/player-goal-candidates.service.js";
@@ -271,7 +271,10 @@ apiRouter.post("/fixtures/:fixtureId/audit/snapshot", requireLiveMode, asyncRout
   const evidence = req.body?.evidence;
   if (String(evidence?.fixture?.id || "") !== String(fixtureId)) throw new AppError("La evidencia no corresponde al fixture seleccionado.", 400, "EVIDENCE_FIXTURE_MISMATCH");
   const result = await getFixtureResult(fixtureId);
-  if (!result.finished) throw new AppError("El partido todavía no ha finalizado.", 409, "FIXTURE_NOT_FINISHED");
+  if (!result.finished) {
+    const pendingError = resolvePendingAuditError(result);
+    throw new AppError(pendingError.message, 409, pendingError.code);
+  }
   res.json(runSavedEvidenceBacktest(evidence, result));
 }));
 

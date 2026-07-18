@@ -5,6 +5,16 @@ import { calculateCornersModel } from "../corners-model.service.js";
 import { evaluatePickOutcome } from "./pick-outcome-evaluator.service.js";
 import { auditPickRules } from "./market-rules-audit.service.js";
 
+export function resolvePendingAuditError(result = {}) {
+  if (result.finished) return null;
+  return {
+    postponed: { message: "El partido fue postergado; la evidencia seguirá pendiente hasta que API-Football publique un resultado final.", code: "FIXTURE_POSTPONED" },
+    canceled: { message: "El partido fue cancelado y no puede evaluarse con un marcador final.", code: "FIXTURE_CANCELED" },
+    suspended: { message: "El partido está suspendido; la evidencia seguirá pendiente hasta que exista resultado final.", code: "FIXTURE_SUSPENDED" },
+    live: { message: "El partido sigue en vivo; la evidencia se evaluará cuando finalice.", code: "FIXTURE_LIVE" }
+  }[result.appStatus] || { message: "El partido todavía no ha finalizado.", code: "FIXTURE_NOT_FINISHED" };
+}
+
 function validProbability(value) {
   if (value === null || value === undefined || value === "") return false;
   const numeric = Number(value);

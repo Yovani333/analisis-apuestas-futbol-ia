@@ -43,6 +43,8 @@ test("Auditoria aprovecha el ancho y permite continuar el scroll de pagina", () 
   assert.match(styles, /@media \(min-width: 1280px\)[\s\S]*\.audit-view \.evidence-readiness-grid \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
   assert.match(app, /data-evaluate-evidence=/);
   assert.match(app, /pendingEvidenceForCompetition\(allEvidenceSnapshots\(\), competitionKey\)/);
+  assert.match(app, /audit-option--evaluated/);
+  assert.match(styles, /#audit-fixture option\.audit-option--evaluated/);
 });
 
 test("la Guia conserva el orden Cobertura, Ataque, Poisson, Mercado y Decision", () => {

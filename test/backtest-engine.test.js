@@ -1,12 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateAuditMetrics, createPreMatchSnapshot, runFixtureBacktest, runSavedEvidenceBacktest } from "../server/services/audit/backtest-engine.service.js";
+import { calculateAuditMetrics, createPreMatchSnapshot, resolvePendingAuditError, runFixtureBacktest, runSavedEvidenceBacktest } from "../server/services/audit/backtest-engine.service.js";
 import { evaluatePickOutcome } from "../server/services/audit/pick-outcome-evaluator.service.js";
 import { auditPickRules } from "../server/services/audit/market-rules-audit.service.js";
 import { auditTodayResults } from "../server/services/audit/audit-today-results.service.js";
 
 const finished = (home, away) => ({ finished: true, appStatus: "finished", goals: { home, away } });
 const pick = (selectionKey, extra = {}) => ({ selectionKey, highlightColor: "green", ...extra });
+
+test("explica por qué una evidencia todavía no puede evaluarse", () => {
+  assert.equal(resolvePendingAuditError({ appStatus: "postponed" }).code, "FIXTURE_POSTPONED");
+  assert.equal(resolvePendingAuditError({ appStatus: "canceled" }).code, "FIXTURE_CANCELED");
+  assert.equal(resolvePendingAuditError({ appStatus: "suspended" }).code, "FIXTURE_SUSPENDED");
+  assert.equal(resolvePendingAuditError({ appStatus: "live" }).code, "FIXTURE_LIVE");
+  assert.equal(resolvePendingAuditError({ finished: true }), null);
+});
 
 test("Under 2.5 acierta y falla con marcador final", () => {
   assert.equal(evaluatePickOutcome(pick("under_2_5"), finished(1, 0)), "HIT");
