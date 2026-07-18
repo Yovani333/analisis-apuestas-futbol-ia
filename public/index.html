@@ -463,14 +463,22 @@
         </div>
         <div class="saved-view__actions"><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></div>
       </section>
-      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins">Resultados por origen</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
+      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-won">Resultados por origen Ganados</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-lost">Resultados por origen Perdidos</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origin-recommendations">Mejores picks</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
       <section id="saved-individual-section" class="saved-bets-section">
         <div class="saved-section-toolbar"><div><h3>Picks individuales</h3><p>Solo selecciones guardadas individualmente, con su resultado ganado, perdido, anulado o pendiente.</p></div><button id="update-individual-results" class="button button--primary" type="button">Actualizar datos</button></div>
         <div id="saved-picks-list" class="saved-parlays-list"></div>
       </section>
       <section id="origin-results-section" class="saved-bets-section" hidden>
-        <div class="saved-section-toolbar"><div><h3>Resultados por origen</h3><p>Conteo conjunto de picks individuales y selecciones incluidas en parlays ya concluidos.</p></div><button id="update-origin-results" class="button button--primary" type="button">Actualizar datos</button></div>
-        <section id="origin-performance" class="origin-performance" aria-label="Resultados de picks por origen"></section>
+        <div class="saved-section-toolbar"><div><h3>Resultados por origen Ganados</h3><p>Picks acertados, tanto individuales como selecciones incluidas en parlays concluidos.</p></div><button id="update-origin-results" class="button button--primary" type="button">Actualizar datos</button></div>
+        <section id="origin-performance" class="origin-performance" aria-label="Resultados ganados por origen"></section>
+      </section>
+      <section id="origin-lost-results-section" class="saved-bets-section" hidden>
+        <div class="saved-section-toolbar"><div><h3>Resultados por origen Perdidos</h3><p>Picks fallados, tanto individuales como selecciones incluidas en parlays concluidos.</p></div><button id="update-origin-lost-results" class="button button--primary" type="button">Actualizar datos</button></div>
+        <section id="origin-lost-performance" class="origin-performance" aria-label="Resultados perdidos por origen"></section>
+      </section>
+      <section id="origin-recommendations-section" class="saved-bets-section" hidden>
+        <div class="saved-section-toolbar"><div><h3>Mejores picks por resultados</h3><p>Comparación retrospectiva de ganados y perdidos por selección y origen. No garantiza resultados futuros.</p></div><button id="update-origin-recommendations" class="button button--primary" type="button">Actualizar datos</button></div>
+        <section id="origin-recommendations" class="origin-recommendations" aria-label="Mejores picks y picks no recomendados"></section>
       </section>
       <section id="saved-parlays-section" class="saved-bets-section" hidden>
         <div class="saved-section-toolbar"><div><h3>Parlays</h3><p>Actualiza cuotas, marcadores y el resultado de todas las selecciones del parlay.</p></div><button id="update-parlay-results" class="button button--primary" type="button">Actualizar datos</button></div>
@@ -575,6 +583,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260718-markets-catalog-v1"></script>
+    <script type="module" src="app.js?v=20260718-origin-results-v1"></script>
   </body>
 </html>

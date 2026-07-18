@@ -87,13 +87,18 @@ test("modo oscuro cubre picks individuales y sus metricas", () => {
   assert.match(styles, /data-theme="dark"[^}]*\.saved-market-metrics/);
 });
 
-test("Mis apuestas separa picks, resultados por origen, parlays y papelera", () => {
+test("Mis apuestas separa picks, resultados ganados, perdidos, mejores picks, parlays y papelera", () => {
   assert.match(html, /data-saved-tab="individual"[^>]*>Picks individuales/);
-  assert.match(html, /data-saved-tab="origins"[^>]*>Resultados por origen/);
+  assert.match(html, /data-saved-tab="origins-won"[^>]*>Resultados por origen Ganados/);
+  assert.match(html, /data-saved-tab="origins-lost"[^>]*>Resultados por origen Perdidos/);
+  assert.match(html, /data-saved-tab="origin-recommendations"[^>]*>Mejores picks/);
   assert.match(html, /id="saved-individual-section"[\s\S]*id="update-individual-results"/);
   assert.match(html, /id="origin-results-section"[\s\S]*id="update-origin-results"/);
+  assert.match(html, /id="origin-lost-results-section"[\s\S]*id="update-origin-lost-results"/);
+  assert.match(html, /id="origin-recommendations-section"[\s\S]*id="update-origin-recommendations"/);
   assert.match(html, /id="saved-parlays-section"[\s\S]*id="update-parlay-results"/);
   assert.match(app, /calculateOriginPerformance\(state\.savedPicks, state\.savedParlays\)/);
+  assert.match(app, /calculateOriginRecommendations\(rows\)/);
 });
 
 test("En vivo permite scroll vertical interno y continuar en la pagina", () => {

@@ -250,15 +250,15 @@ export function calculateOriginPerformance(picks = [], parlays = []) {
   for (const { pick, kind } of rows) {
     if (!['won', 'lost'].includes(pick?.result)) continue;
     const origin = pick.sourceModule || "odds";
-    const current = groups.get(origin) || { origin, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0, addedBuckets: {}, wonPicks: [], wonCategories: [] };
+    const current = groups.get(origin) || { origin, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0, addedBuckets: {}, wonPicks: [], lostPicks: [], wonCategories: [], lostCategories: [], categoryPerformance: [] };
     current.evaluated += 1;
     current[pick.result] += 1;
     if (kind === "parlay") current.parlayLegs += 1;
     else current.individual += 1;
     const lead = leadLabel(pick);
     current.addedBuckets[lead] = (current.addedBuckets[lead] || 0) + 1;
-    if (pick.result === "won") current.wonPicks.push({
-      id: pick.id || `${origin}:${current.wonPicks.length}`,
+    const resultPick = {
+      id: pick.id || `${origin}:${current.evaluated}`,
       selection: pick.selection || "Pick",
       market: pick.market || "Mercado no disponible",
       match: [pick.home, pick.away].filter(Boolean).join(" vs "),
@@ -266,17 +266,42 @@ export function calculateOriginPerformance(picks = [], parlays = []) {
       addedLead: lead,
       category: classify(pick),
       odds: pick.originalOdds ?? pick.decimalOdds ?? null
-    });
+    };
+    if (pick.result === "won") current.wonPicks.push(resultPick);
+    else current.lostPicks.push(resultPick);
     current.winRate = Number((current.won / current.evaluated * 100).toFixed(1));
     groups.set(origin, current);
   }
   for (const current of groups.values()) {
-    const categories = new Map();
-    for (const pick of current.wonPicks) categories.set(pick.category, (categories.get(pick.category) || 0) + 1);
-    current.wonCategories = [...categories.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+    const wonCategories = new Map();
+    const lostCategories = new Map();
+    for (const pick of current.wonPicks) wonCategories.set(pick.category, (wonCategories.get(pick.category) || 0) + 1);
+    for (const pick of current.lostPicks) lostCategories.set(pick.category, (lostCategories.get(pick.category) || 0) + 1);
+    current.wonCategories = [...wonCategories.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+    current.lostCategories = [...lostCategories.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+    current.categoryPerformance = [...new Set([...wonCategories.keys(), ...lostCategories.keys()])].map((category) => {
+      const won = wonCategories.get(category) || 0;
+      const lost = lostCategories.get(category) || 0;
+      const evaluated = won + lost;
+      return { category, won, lost, evaluated, winRate: Number((won / evaluated * 100).toFixed(1)) };
+    }).sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.category.localeCompare(b.category));
     current.addedSummary = Object.entries(current.addedBuckets).map(([label, count]) => `${label} (${count})`).join(" · ");
   }
   return [...groups.values()].sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.origin.localeCompare(b.origin));
+}
+
+export function calculateOriginRecommendations(performanceRows = []) {
+  const entries = performanceRows.flatMap((row) => (row.categoryPerformance || []).map((category) => ({
+    ...category,
+    origin: row.origin
+  })));
+  const recommended = entries.filter((entry) => entry.evaluated >= 3 && entry.winRate >= 60)
+    .sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.category.localeCompare(b.category));
+  const notRecommended = entries.filter((entry) => entry.evaluated >= 3 && entry.winRate < 50)
+    .sort((a, b) => a.winRate - b.winRate || b.evaluated - a.evaluated || a.category.localeCompare(b.category));
+  const observing = entries.filter((entry) => !recommended.includes(entry) && !notRecommended.includes(entry))
+    .sort((a, b) => b.evaluated - a.evaluated || b.winRate - a.winRate || a.category.localeCompare(b.category));
+  return { recommended, notRecommended, observing };
 }
 
 export function moveParlayToTrash(parlay, now = new Date()) {

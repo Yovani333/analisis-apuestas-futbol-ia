@@ -2,9 +2,9 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
+  calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settlePickResult
-} from "./parlay-store.js?v=20260715-bets-results-v1";
+} from "./parlay-store.js?v=20260718-origin-results-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260714-evidence-audit-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -53,7 +53,7 @@ const state = {
   savedTab: "individual",
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
-  expandedOrigin: null,
+  expandedOrigins: { won: null, lost: null },
   alerts: readLocalJson(ALERTS_KEY, []),
   preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [] }),
   currentView: "dashboard",
@@ -160,11 +160,17 @@ const elements = {
   trashParlaysList: document.querySelector("#trash-parlays-list"),
   historyMetrics: document.querySelector("#history-metrics"),
   originPerformance: document.querySelector("#origin-performance"),
+  originLostPerformance: document.querySelector("#origin-lost-performance"),
+  originRecommendations: document.querySelector("#origin-recommendations"),
   updateParlayResults: document.querySelector("#update-parlay-results"),
   updateIndividualResults: document.querySelector("#update-individual-results"),
   updateOriginResults: document.querySelector("#update-origin-results"),
+  updateOriginLostResults: document.querySelector("#update-origin-lost-results"),
+  updateOriginRecommendations: document.querySelector("#update-origin-recommendations"),
   savedIndividualSection: document.querySelector("#saved-individual-section"),
   originResultsSection: document.querySelector("#origin-results-section"),
+  originLostResultsSection: document.querySelector("#origin-lost-results-section"),
+  originRecommendationsSection: document.querySelector("#origin-recommendations-section"),
   savedParlaysSection: document.querySelector("#saved-parlays-section"),
   trashResultsSection: document.querySelector("#trash-results-section")
 };
@@ -2247,16 +2253,37 @@ function renderSavedPicks() {
 }
 
 function renderOriginPerformance() {
-  if (!elements.originPerformance) return;
+  if (!elements.originPerformance || !elements.originLostPerformance || !elements.originRecommendations) return;
   const rows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
-  elements.updateOriginResults.disabled = state.savedPicks.length === 0 && state.savedParlays.every((parlay) => parlay.trashed);
+  const noStoredPicks = state.savedPicks.length === 0 && state.savedParlays.every((parlay) => parlay.trashed);
+  [elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations].forEach((button) => { button.disabled = noStoredPicks; });
   if (!rows.length) {
-    elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen</h3><p>El conteo aparecerá cuando existan picks individuales o selecciones de parlays concluidas como ganadas o perdidas.</p></div>';
+    elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen Ganados</h3><p>El conteo aparecerá cuando existan picks concluidos como ganados.</p></div>';
+    elements.originLostPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen Perdidos</h3><p>El conteo aparecerá cuando existan picks concluidos como perdidos.</p></div>';
+    elements.originRecommendations.innerHTML = '<div class="saved-empty"><h3>Sin muestra evaluada</h3><p>Se necesitan picks ganados o perdidos para comparar resultados por selección y origen.</p></div>';
     return;
   }
-  const expanded = rows.find((row) => row.origin === state.expandedOrigin);
-  const detail = expanded ? `<section class="origin-pick-detail"><header><div><span>Picks positivos</span><h4>${escapeHtml(pickOriginLabel(expanded.origin))}</h4></div><button class="button button--secondary button--compact" type="button" data-close-origin-picks>Cerrar</button></header><div class="origin-category-list">${expanded.wonCategories.map((item) => `<span><strong>${escapeHtml(item.category)}</strong>${item.count} ${item.count === 1 ? "pick" : "picks"}</span>`).join("") || "Sin picks ganados"}</div>${expanded.wonPicks.length ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Clasificación</th><th>Pick</th><th>Partido</th><th>Liga</th><th>Cuota</th><th>Agregado</th></tr></thead><tbody>${expanded.wonPicks.map((pick) => `<tr><td>${escapeHtml(pick.category)}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league)}</td><td>${displayValue(pick.odds)}</td><td>${escapeHtml(pick.addedLead)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted-text">Todavía no hay picks positivos en este origen.</p>'}</section>` : "";
-  elements.originPerformance.innerHTML = `<header><div><span>Comparación automática</span><h3>Resultados por origen</h3></div><small>Incluye picks individuales y selecciones de parlays activos. Pendientes y anulados no cuentan.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Origen</th><th>Agregados</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th><th>Detalle</th></tr></thead><tbody>${rows.map((row) => `<tr><td data-label="Origen"><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong></td><td data-label="Agregados">${escapeHtml(row.addedSummary || "Sin dato")}</td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive">${row.won}</td><td data-label="Perdidos" class="value-negative">${row.lost}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${displayValue(row.winRate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}">Ver picks</button></td></tr>`).join("")}</tbody></table></div>${detail}`;
+
+  const renderResult = (result) => {
+    const isWon = result === "won";
+    const countKey = isWon ? "won" : "lost";
+    const picksKey = isWon ? "wonPicks" : "lostPicks";
+    const categoriesKey = isWon ? "wonCategories" : "lostCategories";
+    const filteredRows = rows.filter((row) => row[countKey] > 0).sort((a, b) => b[countKey] - a[countKey] || b.evaluated - a.evaluated);
+    const expanded = filteredRows.find((row) => row.origin === state.expandedOrigins[result]);
+    const title = isWon ? "Resultados por origen Ganados" : "Resultados por origen Perdidos";
+    const rateLabel = isWon ? "Acierto" : "Tasa de pérdida";
+    const detail = expanded ? `<section class="origin-pick-detail origin-pick-detail--${result}"><header><div><span>${isWon ? "Picks acertados" : "Picks fallados"}</span><h4>${escapeHtml(pickOriginLabel(expanded.origin))}</h4></div><button class="button button--secondary button--compact" type="button" data-close-origin-picks="${result}">Cerrar</button></header><div class="origin-category-list">${expanded[categoriesKey].map((item) => `<span><strong>${escapeHtml(item.category)}</strong>${item.count} ${item.count === 1 ? "pick" : "picks"}</span>`).join("")}</div><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Clasificación</th><th>Pick</th><th>Partido</th><th>Liga</th><th>Cuota</th><th>Agregado</th></tr></thead><tbody>${expanded[picksKey].map((pick) => `<tr><td>${escapeHtml(pick.category)}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league)}</td><td>${displayValue(pick.odds)}</td><td>${escapeHtml(pick.addedLead)}</td></tr>`).join("")}</tbody></table></div></section>` : "";
+    if (!filteredRows.length) return `<div class="saved-empty"><h3>${title}</h3><p>Todavía no hay picks ${isWon ? "ganados" : "perdidos"} para mostrar.</p></div>`;
+    return `<header><div><span>Seguimiento automático</span><h3>${title}</h3></div><small>Incluye picks individuales y selecciones de parlays activos. Pendientes y anulados no cuentan.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Origen</th><th>Agregados</th><th>Individuales</th><th>En parlays</th><th>${isWon ? "Ganados" : "Perdidos"}</th><th>Evaluados</th><th>${rateLabel}</th><th>Detalle</th></tr></thead><tbody>${filteredRows.map((row) => { const rate = isWon ? row.winRate : Number((row.lost / row.evaluated * 100).toFixed(1)); return `<tr><td data-label="Origen"><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong></td><td data-label="Agregados">${escapeHtml(row.addedSummary || "Sin dato")}</td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="${isWon ? "Ganados" : "Perdidos"}" class="${isWon ? "value-positive" : "value-negative"}">${row[countKey]}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="${rateLabel}"><strong>${displayValue(rate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}" data-origin-result="${result}">Ver picks ${isWon ? "ganados" : "perdidos"}</button></td></tr>`; }).join("")}</tbody></table></div>${detail}`;
+  };
+
+  elements.originPerformance.innerHTML = renderResult("won");
+  elements.originLostPerformance.innerHTML = renderResult("lost");
+
+  const recommendations = calculateOriginRecommendations(rows);
+  const recommendationCards = (items, type) => items.map((item) => `<article class="origin-recommendation origin-recommendation--${type}"><span>${type === "recommended" ? "Mejor desempeño" : type === "avoid" ? "No recomendado" : "Muestra en observación"}</span><h4>${escapeHtml(item.category)}</h4><p><strong>Origen:</strong> ${escapeHtml(pickOriginLabel(item.origin))}</p><div><b>${item.won} ganados</b><b>${item.lost} perdidos</b><b>${displayValue(item.winRate)}% acierto</b></div><small>${type === "recommended" ? "Historial favorable con al menos 3 picks evaluados." : type === "avoid" ? "Balance desfavorable con al menos 3 picks evaluados." : "Aún no existe volumen o diferencia suficiente para recomendar o descartar."}</small></article>`).join("");
+  elements.originRecommendations.innerHTML = `<div class="origin-recommendations__notice"><strong>Lectura responsable</strong><span>Esta clasificación resume resultados pasados; no modifica fórmulas ni garantiza el siguiente pick.</span></div><div class="origin-recommendations__columns"><section><header><h3>Mejores picks</h3><span>${recommendations.recommended.length}</span></header>${recommendationCards(recommendations.recommended, "recommended") || '<p class="muted-text">Todavía no hay picks con al menos 3 evaluados y 60% de acierto.</p>'}</section><section><header><h3>No recomendados</h3><span>${recommendations.notRecommended.length}</span></header>${recommendationCards(recommendations.notRecommended, "avoid") || '<p class="muted-text">No hay picks con balance claramente desfavorable.</p>'}</section></div>${recommendations.observing.length ? `<section class="origin-recommendations__observing"><header><h3>En observación</h3><span>${recommendations.observing.length}</span></header><div>${recommendationCards(recommendations.observing, "observing")}</div></section>` : ""}`;
 }
 
 function renderSavedParlays() {
@@ -4077,14 +4104,17 @@ elements.parlayMinimize.addEventListener("click", () => {
 });
 elements.parlayFab.addEventListener("click", () => renderParlayDraft(true, false));
 elements.saveParlay.addEventListener("click", saveCurrentParlay);
-[elements.updateIndividualResults, elements.updateOriginResults, elements.updateParlayResults]
+[elements.updateIndividualResults, elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateParlayResults]
   .forEach((button) => button.addEventListener("click", updateSavedParlayResults));
-elements.originPerformance.addEventListener("click", (event) => {
+const handleOriginDetailClick = (event) => {
   const open = event.target.closest("[data-view-origin-picks]");
-  if (open) state.expandedOrigin = open.dataset.viewOriginPicks;
-  if (event.target.closest("[data-close-origin-picks]")) state.expandedOrigin = null;
-  if (open || event.target.closest("[data-close-origin-picks]")) renderOriginPerformance();
-});
+  const close = event.target.closest("[data-close-origin-picks]");
+  if (open) state.expandedOrigins[open.dataset.originResult || "won"] = open.dataset.viewOriginPicks;
+  if (close) state.expandedOrigins[close.dataset.closeOriginPicks || "won"] = null;
+  if (open || close) renderOriginPerformance();
+};
+elements.originPerformance.addEventListener("click", handleOriginDetailClick);
+elements.originLostPerformance.addEventListener("click", handleOriginDetailClick);
 elements.savedParlaysList.addEventListener("change", (event) => {
   const select = event.target.closest("[data-leg-result]");
   const card = event.target.closest("[data-parlay-id]");
@@ -4155,7 +4185,9 @@ document.addEventListener("click", (event) => {
     state.savedTab = savedTab.dataset.savedTab;
     document.querySelectorAll("[data-saved-tab]").forEach((button) => button.classList.toggle("saved-tab--active", button === savedTab));
     elements.savedIndividualSection.hidden = state.savedTab !== "individual";
-    elements.originResultsSection.hidden = state.savedTab !== "origins";
+    elements.originResultsSection.hidden = state.savedTab !== "origins-won";
+    elements.originLostResultsSection.hidden = state.savedTab !== "origins-lost";
+    elements.originRecommendationsSection.hidden = state.savedTab !== "origin-recommendations";
     elements.savedParlaysSection.hidden = state.savedTab !== "parlays";
     elements.trashResultsSection.hidden = state.savedTab !== "trash";
   }

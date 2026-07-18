@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, hasDuplicatePick, moveParlayToTrash, normalizePickLeg, pickIdentity, resolveSelectionCode, restoreParlayFromTrash, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayResult, createSavedParlay, createSavedPick, hasDuplicatePick, moveParlayToTrash, normalizePickLeg, pickIdentity, resolveSelectionCode, restoreParlayFromTrash, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -42,6 +42,28 @@ test("resultados por origen agrupa anticipacion y clasifica picks ganados", () =
   assert.match(rows[0].addedSummary, /1 h \(1\)/);
   assert.deepEqual(rows[0].wonCategories, [{ category: "Más de 2.5", count: 2 }]);
   assert.equal(rows[0].wonPicks.length, 2);
+});
+
+test("resultados por origen conserva el detalle y categorias de picks perdidos", () => {
+  const rows = calculateOriginPerformance([{
+    id: "lost-1", sourceModule: "poisson", result: "lost", selection: "Menos de 2.5 goles", market: "Total",
+    home: "A", away: "B", league: "Liga de prueba", originalOdds: 1.8
+  }]);
+  assert.equal(rows[0].lostPicks.length, 1);
+  assert.equal(rows[0].lostPicks[0].selection, "Menos de 2.5 goles");
+  assert.deepEqual(rows[0].lostCategories, [{ category: "Menos de 2.5", count: 1 }]);
+});
+
+test("mejores picks exige muestra minima y separa historiales desfavorables", () => {
+  const rows = calculateOriginPerformance([
+    ...Array.from({ length: 3 }, (_, index) => ({ id: `good-${index}`, sourceModule: "data_picks", result: "won", selection: "Local 1X", market: "Doble oportunidad" })),
+    ...Array.from({ length: 3 }, (_, index) => ({ id: `bad-${index}`, sourceModule: "poisson", result: "lost", selection: "Más de 2.5 goles", market: "Total" })),
+    { id: "small-1", sourceModule: "corners", result: "won", selection: "Más de 8.5 corners", market: "Corners" }
+  ]);
+  const result = calculateOriginRecommendations(rows);
+  assert.equal(result.recommended[0].origin, "data_picks");
+  assert.equal(result.notRecommended[0].origin, "poisson");
+  assert.equal(result.observing[0].origin, "corners");
 });
 
 test("marca perdido si cualquier selección pierde", () => {
