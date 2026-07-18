@@ -76,6 +76,7 @@ export function summarizeEvidenceByCompetition(snapshots = []) {
     const level = readiness(group.evaluated);
     return {
       ...group,
+      competitionKey: group.key,
       ...level,
       remaining: level.nextTarget === null ? 0 : Math.max(0, level.nextTarget - group.evaluated),
       progressPct: Math.min(100, Number((group.evaluated / SUFFICIENT_MINIMUM * 100).toFixed(1)))

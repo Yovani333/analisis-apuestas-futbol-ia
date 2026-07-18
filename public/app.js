@@ -13,7 +13,7 @@ import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260718-favorite-teams-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-expected-corners-v1";
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
-import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260718-evidence-batch-v1";
+import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260718-evidence-batch-v2";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -2796,7 +2796,7 @@ function renderEvidenceReadiness() {
     return;
   }
   elements.evidenceReadinessList.innerHTML = groups.map((group) => {
-    const progress = state.evidenceEvaluationByCompetition.get(group.key);
+    const progress = state.evidenceEvaluationByCompetition.get(group.competitionKey);
     const running = Boolean(progress?.running);
     const buttonLabel = running
       ? `Evaluando ${progress.processed}/${progress.total}…`
@@ -2810,7 +2810,7 @@ function renderEvidenceReadiness() {
     <div class="evidence-readiness-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(group.progressPct)}" aria-label="Progreso hacia cien evidencias evaluadas"><i style="width:${group.progressPct}%"></i></div>
     <p>${escapeHtml(group.recommendation)}</p>
     <small>${group.nextTarget === null ? "Ya alcanzó el umbral orientativo de 100 evidencias evaluadas." : `Faltan ${escapeHtml(group.remaining)} auditorías para el siguiente nivel.`}</small>
-    <div class="evidence-readiness-actions"><button class="button button--primary button--compact" type="button" data-evaluate-evidence="${escapeHtml(group.key)}" ${running || group.readyToEvaluate === 0 ? "disabled" : ""}>${escapeHtml(buttonLabel)}</button><span role="status">${escapeHtml(progressMessage)}</span></div>
+    <div class="evidence-readiness-actions"><button class="button button--primary button--compact" type="button" data-evaluate-evidence="${escapeHtml(group.competitionKey)}" ${running || group.readyToEvaluate === 0 ? "disabled" : ""}>${escapeHtml(buttonLabel)}</button><span role="status">${escapeHtml(progressMessage)}</span></div>
   </article>`;
   }).join("");
 }
@@ -2844,7 +2844,11 @@ function markEvidenceAudited(evidence, audit, { render = true, sync = true } = {
 
 async function evaluateCompetitionEvidence(competitionKey) {
   const pending = pendingEvidenceForCompetition(allEvidenceSnapshots(), competitionKey);
-  if (!pending.ready.length || state.evidenceEvaluationByCompetition.get(competitionKey)?.running) return;
+  if (state.evidenceEvaluationByCompetition.get(competitionKey)?.running) return;
+  if (!pending.ready.length) {
+    showNotice("No hay evidencias finalizadas pendientes en esta competición.");
+    return;
+  }
   const progress = { running: true, processed: 0, total: pending.ready.length, completed: 0, waiting: pending.waiting.length, errors: 0, message: "Consultando resultados finales…" };
   state.evidenceEvaluationByCompetition.set(competitionKey, progress);
   renderEvidenceReadiness();

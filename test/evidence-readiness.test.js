@@ -21,6 +21,8 @@ test("agrupa evidencia unica por competición y separa pendientes", () => {
     snapshot(3, { leagueId: 169, leagueName: "Superliga China" })
   ]);
   const worldCup = rows.find((row) => row.leagueId === 1);
+  assert.equal(worldCup.competitionKey, "league:1");
+  assert.equal(worldCup.key, "low");
   assert.equal(worldCup.collected, 2);
   assert.equal(worldCup.evaluated, 0);
   assert.equal(worldCup.pendingEvaluation, 2);
