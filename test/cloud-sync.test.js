@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mergeCloudState } from "../public/cloud-sync.js";
+import { compactCloudStateForSync, mergeCloudState } from "../public/cloud-sync.js";
 import { cloudSyncInternals } from "../server/services/cloud-sync.service.js";
 
 function token(payload) {
@@ -47,6 +47,28 @@ test("normaliza y limita el estado sincronizable", () => {
   assert.deepEqual(state.saved_picks, []);
   assert.equal(state.preferences.theme, "dark");
   assert.deepEqual(state.analysis_usage, {});
+});
+
+test("compacta evidencias grandes antes de sincronizar sin tocar picks ni parlays", () => {
+  const heavyText = "dato ".repeat(10_000);
+  const state = compactCloudStateForSync({
+    savedPicks: [{ id: "pick-1" }],
+    savedParlays: [{ id: "parlay-1" }],
+    evidenceSnapshots: Array.from({ length: 30 }, (_, index) => ({
+      id: `ev-${index}`,
+      capturedAt: `2026-07-${String(index + 1).padStart(2, "0")}T10:00:00Z`,
+      text: heavyText,
+      raw: { very: "large" },
+      picks: Array.from({ length: 100 }, (__, id) => ({ id }))
+    }))
+  });
+  assert.equal(state.savedPicks.length, 1);
+  assert.equal(state.savedParlays.length, 1);
+  assert.equal(state.evidenceSnapshots.length, 25);
+  assert.equal(state.evidenceSnapshots[0].raw, undefined);
+  assert.equal(state.evidenceSnapshots[0].picks.length, 80);
+  assert.equal(state.evidenceSnapshots[0].compactedForCloud, true);
+  assert.ok(JSON.stringify(state).length < 900_000);
 });
 
 test("detecta schema faltante de sincronizacion con mensajes de Supabase", () => {

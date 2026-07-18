@@ -9,6 +9,9 @@ function writeJson(storage, key, value) {
   try { storage?.setItem(key, JSON.stringify(value)); } catch { /* El modo local sigue disponible. */ }
 }
 
+const MAX_SYNC_EVIDENCE = 25;
+const MAX_SYNC_EVIDENCE_TEXT = 16_000;
+
 async function requestJson(path, { method = "GET", token = "", body } = {}) {
   const response = await fetch(path, {
     method,
@@ -50,7 +53,10 @@ function rowTimestamp(row = {}) {
 function mergeRow(localRow, remoteRow) {
   if (!localRow) return remoteRow;
   if (!remoteRow) return localRow;
-  const localIsNewer = rowTimestamp(localRow) > rowTimestamp(remoteRow);
+  const localTime = rowTimestamp(localRow);
+  const remoteTime = rowTimestamp(remoteRow);
+  const keepLocalFullEvidence = localTime === remoteTime && remoteRow.compactedForCloud && !localRow.compactedForCloud;
+  const localIsNewer = localTime > remoteTime || keepLocalFullEvidence;
   const older = localIsNewer ? remoteRow : localRow;
   const newer = localIsNewer ? localRow : remoteRow;
   const merged = { ...older, ...newer };
@@ -112,6 +118,31 @@ export function mergeCloudState(local = {}, remote = {}) {
   };
 }
 
+function compactEvidenceSnapshot(row = {}) {
+  const compact = { ...row };
+  for (const key of ["raw", "rawData", "dataset", "matchData", "fullDataset", "debug", "logs"]) delete compact[key];
+  for (const key of ["text", "content", "summary", "evidenceText"]) {
+    if (typeof compact[key] === "string" && compact[key].length > MAX_SYNC_EVIDENCE_TEXT) {
+      compact[key] = `${compact[key].slice(0, MAX_SYNC_EVIDENCE_TEXT)}\n\n[Contenido recortado para sincronizacion en linea. La copia local conserva la evidencia completa.]`;
+      compact.compactedForCloud = true;
+    }
+  }
+  if (Array.isArray(compact.picks)) compact.picks = compact.picks.slice(0, 80);
+  if (Array.isArray(compact.recommendedPicks)) compact.recommendedPicks = compact.recommendedPicks.slice(0, 40);
+  if (Array.isArray(compact.discardedPicks)) compact.discardedPicks = compact.discardedPicks.slice(0, 80);
+  return compact;
+}
+
+export function compactCloudStateForSync(state = {}) {
+  const evidenceSnapshots = Array.isArray(state.evidenceSnapshots)
+    ? [...state.evidenceSnapshots]
+      .sort((a, b) => rowTimestamp(b) - rowTimestamp(a))
+      .slice(0, MAX_SYNC_EVIDENCE)
+      .map(compactEvidenceSnapshot)
+    : [];
+  return { ...state, evidenceSnapshots };
+}
+
 export class CloudSyncClient {
   constructor(storage = globalThis.localStorage) {
     this.storage = storage;
@@ -164,7 +195,7 @@ export class CloudSyncClient {
   async saveState(state) {
     const token = await this.accessToken();
     if (!token) return null;
-    return (await requestJson("/api/cloud/state", { method: "PUT", token, body: state })).state;
+    return (await requestJson("/api/cloud/state", { method: "PUT", token, body: compactCloudStateForSync(state) })).state;
   }
 
   async watchEvidence(fixtures) {
