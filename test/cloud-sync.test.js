@@ -54,6 +54,11 @@ test("detecta schema faltante de sincronizacion con mensajes de Supabase", () =>
   assert.equal(cloudSyncInternals.isMissingCloudSchema(new Error("relation public.user_sync_state does not exist")), true);
 });
 
+test("detecta tablas opcionales de evidencia faltantes sin romper sincronizacion", () => {
+  assert.equal(cloudSyncInternals.isMissingEvidenceSchema(new Error("Could not find the table 'public.evidence_watchlist' in the schema cache")), true);
+  assert.equal(cloudSyncInternals.isMissingEvidenceSchema(new Error("relation public.automatic_evidence_snapshots does not exist")), true);
+});
+
 test("detecta RPC faltante o falla de timestamp para usar respaldo seguro", () => {
   assert.equal(cloudSyncInternals.isMissingRpc(new Error("Could not find the function public.merge_user_sync_state_v2"), "merge_user_sync_state_v2"), true);
   assert.equal(cloudSyncInternals.isRpcExecutionFailure(new Error('invalid input syntax for type timestamp with time zone: ""')), true);

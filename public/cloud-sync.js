@@ -16,7 +16,11 @@ async function requestJson(path, { method = "GET", token = "", body } = {}) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error?.message || payload.message || "No fue posible completar la sincronizacion.");
+  if (!response.ok) {
+    const code = payload.error?.code || payload.code || "";
+    const message = payload.error?.message || payload.message || "No fue posible completar la sincronizacion.";
+    throw new Error(code ? `${message} (${code})` : message);
+  }
   return payload;
 }
 

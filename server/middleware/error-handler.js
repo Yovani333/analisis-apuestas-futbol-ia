@@ -6,7 +6,9 @@ export function notFoundHandler(req, res) {
 
 export function errorHandler(error, req, res, next) {
   if (res.headersSent) return next(error);
-  const appError = error instanceof AppError ? error : new AppError("Error interno del servidor.");
+  const appError = error instanceof AppError
+    ? error
+    : new AppError(error?.message || "Error interno del servidor.", error?.status || 500, error?.code || "INTERNAL_ERROR", error?.details);
   if (!(error instanceof AppError)) console.error(error);
   res.status(appError.status).json({
     error: {

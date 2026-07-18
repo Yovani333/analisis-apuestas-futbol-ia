@@ -47,6 +47,10 @@ function isMissingCloudSchema(error) {
   return /user_sync_state|schema cache|could not find|does not exist|42P01|PGRST205/i.test(providerMessage(error));
 }
 
+function isMissingEvidenceSchema(error) {
+  return /evidence_watchlist|automatic_evidence_snapshots|schema cache|could not find|does not exist|42P01|PGRST205/i.test(providerMessage(error));
+}
+
 function isMissingRpc(error, functionName) {
   const message = providerMessage(error);
   return new RegExp(`${functionName}|schema cache|could not find the function|PGRST202`, "i").test(message);
@@ -326,7 +330,25 @@ export async function registerEvidenceWatchlist(authorization, input = {}) {
     .map((fixture) => normalizeWatchedFixture(fixture, userId, now))
     .filter(Boolean);
   const future = encodeURIComponent(now.toISOString());
-  const activeRows = await supabaseRequest(`/rest/v1/evidence_watchlist?select=fixture_id&status=eq.scheduled&fixture_date=gt.${future}&limit=${MAX_WATCHLIST_FIXTURES}`, { token });
+  let activeRows;
+  try {
+    activeRows = await supabaseRequest(`/rest/v1/evidence_watchlist?select=fixture_id&status=eq.scheduled&fixture_date=gt.${future}&limit=${MAX_WATCHLIST_FIXTURES}`, { token });
+  } catch (error) {
+    if (isMissingEvidenceSchema(error)) {
+      return {
+        configured: evidenceAutomationConfigured(),
+        leadMinutes: 60,
+        watched: 0,
+        scheduled: 0,
+        captured: 0,
+        failed: 0,
+        registered: 0,
+        ignoredByLimit: 0,
+        disabledReason: "Ejecuta la migracion 002_automatic_evidence.sql para activar evidencias automaticas."
+      };
+    }
+    throw error;
+  }
   const activeIds = new Set((Array.isArray(activeRows) ? activeRows : []).map((row) => String(row.fixture_id)));
   let availableSlots = Math.max(0, MAX_WATCHLIST_FIXTURES - activeIds.size);
   const fixtures = requestedFixtures.filter((fixture) => {
@@ -336,12 +358,27 @@ export async function registerEvidenceWatchlist(authorization, input = {}) {
     return true;
   });
   if (fixtures.length) {
-    await supabaseRequest("/rest/v1/evidence_watchlist?on_conflict=user_id,fixture_id", {
-      method: "POST",
-      token,
-      body: fixtures,
-      prefer: "resolution=ignore-duplicates,return=minimal"
-    });
+    try {
+      await supabaseRequest("/rest/v1/evidence_watchlist?on_conflict=user_id,fixture_id", {
+        method: "POST",
+        token,
+        body: fixtures,
+        prefer: "resolution=ignore-duplicates,return=minimal"
+      });
+    } catch (error) {
+      if (!isMissingEvidenceSchema(error)) throw error;
+      return {
+        configured: evidenceAutomationConfigured(),
+        leadMinutes: 60,
+        watched: activeIds.size,
+        scheduled: activeIds.size,
+        captured: 0,
+        failed: 0,
+        registered: 0,
+        ignoredByLimit: 0,
+        disabledReason: "Ejecuta la migracion 002_automatic_evidence.sql para activar evidencias automaticas."
+      };
+    }
   }
   return getEvidenceAutomationStatus(authorization, {
     registered: fixtures.length,
@@ -351,7 +388,24 @@ export async function registerEvidenceWatchlist(authorization, input = {}) {
 
 export async function getEvidenceAutomationStatus(authorization, extra = {}) {
   const token = bearerToken(authorization);
-  const rows = await supabaseRequest("/rest/v1/evidence_watchlist?select=fixture_id,fixture_date,status,captured_at,last_error&order=fixture_date.asc&limit=100", { token });
+  let rows;
+  try {
+    rows = await supabaseRequest("/rest/v1/evidence_watchlist?select=fixture_id,fixture_date,status,captured_at,last_error&order=fixture_date.asc&limit=100", { token });
+  } catch (error) {
+    if (isMissingEvidenceSchema(error)) {
+      return {
+        configured: evidenceAutomationConfigured(),
+        leadMinutes: 60,
+        watched: 0,
+        scheduled: 0,
+        captured: 0,
+        failed: 0,
+        disabledReason: "Ejecuta la migracion 002_automatic_evidence.sql para activar evidencias automaticas.",
+        ...extra
+      };
+    }
+    throw error;
+  }
   const watched = Array.isArray(rows) ? rows : [];
   const counts = watched.reduce((result, row) => ({ ...result, [row.status]: (result[row.status] || 0) + 1 }), {});
   return {
@@ -398,4 +452,4 @@ export async function updateEvidenceWatchlist(row, changes) {
   });
 }
 
-export const cloudSyncInternals = { bearerToken, isMissingCloudSchema, isMissingRpc, isRpcExecutionFailure, mergeEvidenceSnapshots, mergeNormalizedState, normalizedState, normalizeWatchedFixture, providerMessage, userIdFromToken, validateCredentials };
+export const cloudSyncInternals = { bearerToken, isMissingCloudSchema, isMissingEvidenceSchema, isMissingRpc, isRpcExecutionFailure, mergeEvidenceSnapshots, mergeNormalizedState, normalizedState, normalizeWatchedFixture, providerMessage, userIdFromToken, validateCredentials };
