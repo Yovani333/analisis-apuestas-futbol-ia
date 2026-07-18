@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compactCloudStateForSync, mergeCloudState } from "../public/cloud-sync.js";
+import { compactCloudStateForSync, mergeCloudState, prepareEvidenceSyncBatches } from "../public/cloud-sync.js";
 import { cloudSyncInternals } from "../server/services/cloud-sync.service.js";
 
 function token(payload) {
@@ -79,6 +79,18 @@ test("compacta evidencias grandes antes de sincronizar sin tocar picks ni parlay
   assert.ok(JSON.stringify(state).length < 900_000);
 });
 
+test("sincronizacion individual prepara todas las evidencias sin limite de 25", () => {
+  const rows = Array.from({ length: 81 }, (_, index) => ({
+    id: `evidence-${index}`,
+    capturedAt: new Date(Date.UTC(2026, 6, 1, 0, index)).toISOString(),
+    raw: { omitted: true }
+  }));
+  const batches = prepareEvidenceSyncBatches(rows, 10);
+  assert.equal(batches.length, 9);
+  assert.equal(batches.flat().length, 81);
+  assert.equal(batches.flat().every((row) => row.compactedForCloud && row.raw === undefined), true);
+});
+
 test("elimina bloques analiticos pesados y ofrece una segunda compactacion", () => {
   const oversizedBlock = Array.from({ length: 2_000 }, (_, index) => ({
     index,
@@ -139,6 +151,14 @@ test("combina evidencias manuales y automaticas sin duplicar snapshots", () => {
   );
   assert.deepEqual(rows.map((row) => row.id), ["auto", "same", "manual"]);
   assert.equal(rows.find((row) => row.id === "same").source, "automatic");
+});
+
+test("la biblioteca en linea conserva mas de cincuenta evidencias unicas", () => {
+  const automatic = Array.from({ length: 81 }, (_, index) => ({
+    snapshot: { id: `ev-${index}`, capturedAt: new Date(Date.UTC(2026, 6, 1, 0, index)).toISOString() }
+  }));
+  const rows = cloudSyncInternals.mergeEvidenceSnapshots([], automatic);
+  assert.equal(rows.length, 81);
 });
 
 test("la revision mas reciente del cupon permite borrar picks antiguos", () => {

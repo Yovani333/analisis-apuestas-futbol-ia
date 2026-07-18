@@ -166,7 +166,32 @@ function mergeEvidenceSnapshots(manualRows, automaticRows) {
   const rows = new Map();
   for (const row of Array.isArray(manualRows) ? manualRows : []) if (row?.id) rows.set(String(row.id), row);
   for (const row of Array.isArray(automaticRows) ? automaticRows : []) if (row?.snapshot?.id) rows.set(String(row.snapshot.id), row.snapshot);
-  return [...rows.values()].sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0)).slice(0, 50);
+  return [...rows.values()].sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0)).slice(0, 500);
+}
+
+export async function saveCloudEvidenceSnapshots(authorization, input = {}) {
+  const token = bearerToken(authorization);
+  const userId = userIdFromToken(token);
+  const snapshots = (Array.isArray(input.snapshots) ? input.snapshots : []).slice(0, 20)
+    .filter((snapshot) => snapshot?.id && typeof snapshot === "object");
+  if (!snapshots.length) return { received: 0 };
+  const payload = snapshots.map((snapshot) => ({
+    user_id: userId,
+    fixture_id: String(snapshot.id).slice(0, 240),
+    captured_at: Number.isNaN(Date.parse(snapshot.capturedAt || snapshot.updatedAt || ""))
+      ? new Date().toISOString()
+      : new Date(snapshot.capturedAt || snapshot.updatedAt).toISOString(),
+    snapshot
+  }));
+  if (Buffer.byteLength(JSON.stringify(payload), "utf8") > 700_000) {
+    throw new AppError("El lote de evidencias es demasiado grande para sincronizar.", 413, "CLOUD_EVIDENCE_BATCH_TOO_LARGE");
+  }
+  await supabaseAdminRequest("/rest/v1/automatic_evidence_snapshots?on_conflict=user_id,fixture_id", {
+    method: "POST",
+    body: payload,
+    prefer: "resolution=ignore-duplicates,return=minimal"
+  });
+  return { received: payload.length };
 }
 
 function normalizeWatchedFixture(fixture, userId, now = new Date()) {
@@ -243,7 +268,7 @@ export async function getCloudState(authorization) {
   const state = Array.isArray(rows) ? rows[0] || null : null;
   let automaticRows = [];
   try {
-    const payload = await supabaseRequest("/rest/v1/automatic_evidence_snapshots?select=snapshot,captured_at&order=captured_at.desc&limit=50", { token });
+    const payload = await supabaseRequest("/rest/v1/automatic_evidence_snapshots?select=snapshot,captured_at&order=captured_at.desc&limit=500", { token });
     automaticRows = Array.isArray(payload) ? payload : [];
   } catch (error) {
     if (!/automatic_evidence_snapshots|schema cache|could not find|does not exist|PGRST205/i.test(providerMessage(error))) throw error;

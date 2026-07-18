@@ -10,7 +10,7 @@ import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-to
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260713-dashboard-fixes-v2";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260718-favorite-teams-v1";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260718-evidence-sync-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-expected-corners-v1";
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
 import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260718-evidence-batch-v2";
@@ -393,6 +393,7 @@ async function connectCloudAccount() {
     applyCloudState(nextState);
     const saved = await cloudSyncClient.saveState(nextState);
     state.cloud.lastSyncedAt = saved?.updated_at || nextState.updatedAt || new Date().toISOString();
+    if (cloudSyncClient.evidenceSyncError) state.cloud.notice = `La cuenta se sincronizó, pero el archivo completo de evidencias quedó pendiente: ${cloudSyncClient.evidenceSyncError}`;
     state.cloud.dirty = false;
     if (userId) cloudSyncClient.markInitialized(userId);
     state.cloud.ready = true;
@@ -419,7 +420,10 @@ async function syncCloudState({ announce = false, refreshFirst = false } = {}) {
     const saved = await cloudSyncClient.saveState(merged);
     state.cloud.lastSyncedAt = saved?.updated_at || new Date().toISOString();
     state.cloud.dirty = false;
-    if (announce) showNotice("Datos combinados y sincronizados sin eliminar picks ni parlays.");
+    if (cloudSyncClient.evidenceSyncError) {
+      state.cloud.notice = `La copia local se conserva; el archivo completo de evidencias quedó pendiente: ${cloudSyncClient.evidenceSyncError}`;
+      if (announce) showNotice(state.cloud.notice);
+    } else if (announce) showNotice(`Datos combinados y sincronizados sin eliminar picks, parlays ni evidencias (${merged.evidenceSnapshots.length}).`);
   } catch (error) {
     state.cloud.error = `${error.message} La copia local se conserva.`;
     if (announce) showNotice(state.cloud.error);

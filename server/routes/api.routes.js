@@ -31,7 +31,7 @@ import {
 } from "../services/simulation-audit-store.service.js";
 import {
   cloudConfiguration, getCloudState, getEvidenceAutomationStatus, refreshCloudSession, registerEvidenceWatchlist,
-  saveCloudState, signInCloudUser, signOutCloudUser, signUpCloudUser
+  saveCloudEvidenceSnapshots, saveCloudState, signInCloudUser, signOutCloudUser, signUpCloudUser
 } from "../services/cloud-sync.service.js";
 import { createServerEvidenceSnapshot, runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
 import { loadEvidenceLibrary } from "../services/audit/evidence-library.service.js";
@@ -82,6 +82,7 @@ apiRouter.post("/cloud/auth/refresh", cloudAuthLimiter, asyncRoute(async (req, r
 apiRouter.post("/cloud/auth/sign-out", asyncRoute(async (req, res) => res.json(await signOutCloudUser(req.headers.authorization))));
 apiRouter.get("/cloud/state", asyncRoute(async (req, res) => res.json({ state: await getCloudState(req.headers.authorization) })));
 apiRouter.put("/cloud/state", asyncRoute(async (req, res) => res.json({ state: await saveCloudState(req.headers.authorization, req.body || {}) })));
+apiRouter.post("/cloud/evidence/sync", asyncRoute(async (req, res) => res.json(await saveCloudEvidenceSnapshots(req.headers.authorization, req.body || {}))));
 apiRouter.get("/cloud/evidence/status", asyncRoute(async (req, res) => res.json(await getEvidenceAutomationStatus(req.headers.authorization))));
 apiRouter.post("/cloud/evidence/watch", asyncRoute(async (req, res) => res.json(await registerEvidenceWatchlist(req.headers.authorization, req.body || {}))));
 

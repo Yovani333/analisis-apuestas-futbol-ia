@@ -189,6 +189,20 @@ function compactEvidenceSnapshot(row = {}, { maxText = MAX_SYNC_EVIDENCE_TEXT, m
   return compact;
 }
 
+export function prepareEvidenceSyncBatches(rows = [], batchSize = 10) {
+  const size = Math.max(1, Math.min(20, Number(batchSize) || 10));
+  const unique = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!row?.id) continue;
+    const current = unique.get(String(row.id));
+    if (!current || rowTimestamp(row) >= rowTimestamp(current)) unique.set(String(row.id), row);
+  }
+  const compacted = [...unique.values()]
+    .sort((a, b) => rowTimestamp(b) - rowTimestamp(a))
+    .map((row) => compactEvidenceSnapshot(row, { maxText: AGGRESSIVE_EVIDENCE_TEXT, maxArray: 40 }));
+  return Array.from({ length: Math.ceil(compacted.length / size) }, (_, index) => compacted.slice(index * size, (index + 1) * size));
+}
+
 export function compactCloudStateForSync(state = {}, { aggressive = false } = {}) {
   const evidenceLimit = aggressive ? AGGRESSIVE_SYNC_EVIDENCE : MAX_SYNC_EVIDENCE;
   const evidenceTextLimit = aggressive ? AGGRESSIVE_EVIDENCE_TEXT : MAX_SYNC_EVIDENCE_TEXT;
@@ -262,6 +276,13 @@ export class CloudSyncClient {
     const token = await this.accessToken();
     if (!token) return null;
     try {
+      await this.saveEvidenceSnapshots(state.evidenceSnapshots, token);
+      this.evidenceSyncError = "";
+    } catch (error) {
+      // El estado compacto sigue sincronizándose y la copia local nunca se elimina.
+      this.evidenceSyncError = error.message || "No fue posible sincronizar el archivo completo de evidencias.";
+    }
+    try {
       return (await requestJson("/api/cloud/state", { method: "PUT", token, body: compactCloudStateForSync(state) })).state;
     } catch (error) {
       if (error?.status !== 413 && error?.code !== "CLOUD_REQUEST_TOO_LARGE" && error?.code !== "CLOUD_STATE_TOO_LARGE") throw error;
@@ -271,6 +292,21 @@ export class CloudSyncClient {
         body: compactCloudStateForSync(state, { aggressive: true })
       })).state;
     }
+  }
+
+  async saveEvidenceSnapshots(rows, existingToken = "") {
+    const token = existingToken || await this.accessToken();
+    if (!token) return { received: 0 };
+    const batches = prepareEvidenceSyncBatches(rows);
+    const fingerprint = batches.flat().map((row) => `${row.id}:${row.capturedAt || row.updatedAt || ""}`).join("|");
+    if (fingerprint && fingerprint === this.evidenceFingerprint) return { received: batches.flat().length, unchanged: true };
+    let received = 0;
+    for (const snapshots of batches) {
+      const result = await requestJson("/api/cloud/evidence/sync", { method: "POST", token, body: { snapshots } });
+      received += Number(result.received || 0);
+    }
+    this.evidenceFingerprint = fingerprint;
+    return { received };
   }
 
   async watchEvidence(fixtures) {
