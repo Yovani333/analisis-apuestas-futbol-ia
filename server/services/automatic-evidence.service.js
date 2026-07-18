@@ -95,7 +95,7 @@ async function processWatchRow(row, now, dependencies) {
     return { fixtureId: String(row.fixture_id), status: "skipped" };
   }
   try {
-    const dataset = await dependencies.getDataset(row.fixture_id, { forceRefresh: true });
+    const dataset = await dependencies.getDataset(row.fixture_id, { forceRefresh: false, includeHistorical: true });
     if (dataset?.fixture?.status !== "scheduled") throw new TypeError("El fixture ya no esta programado.");
     const snapshot = createAutomaticEvidenceSnapshot(dataset, now);
     await dependencies.saveEvidence(row, snapshot, now);
@@ -126,7 +126,10 @@ export async function runAutomaticEvidenceCycle(options = {}) {
     updateWatch: options.updateWatch || updateEvidenceWatchlist
   };
   activeCycle = (async () => {
-    const rows = await dependencies.listDue(now, options.limit || 10);
+    // Cada expediente puede requerir varios endpoints. Un lote pequeño evita que
+    // la captura automática deje sin capacidad a las consultas interactivas.
+    const cycleLimit = Math.max(1, Math.min(2, Number(options.limit) || 2));
+    const rows = await dependencies.listDue(now, cycleLimit);
     const datasetByFixture = new Map();
     const getSharedDataset = (fixtureId, datasetOptions = {}) => {
       const key = String(fixtureId);

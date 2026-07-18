@@ -118,19 +118,24 @@ test("reintenta fallos temporales y falla de forma controlada al tercer intento"
 test("comparte una sola consulta API cuando varias cuentas vigilan el mismo fixture", async () => {
   let datasetCalls = 0;
   let requestedOptions = null;
+  let requestedLimit = null;
   let saved = 0;
   const result = await runAutomaticEvidenceCycle({
     now: NOW,
-    listDue: async () => [
+    listDue: async (now, limit) => {
+      requestedLimit = limit;
+      return [
       { user_id: "u1", fixture_id: "12345", fixture_date: "2026-07-12T19:00:00.000Z", attempts: 0 },
       { user_id: "u2", fixture_id: "12345", fixture_date: "2026-07-12T19:00:00.000Z", attempts: 0 }
-    ],
+      ];
+    },
     getDataset: async (fixtureId, options) => { datasetCalls += 1; requestedOptions = options; return dataset(); },
     saveEvidence: async () => { saved += 1; },
     updateWatch: async () => {}
   });
   assert.equal(datasetCalls, 1);
-  assert.deepEqual(requestedOptions, { forceRefresh: true });
+  assert.deepEqual(requestedOptions, { forceRefresh: false, includeHistorical: true });
+  assert.equal(requestedLimit, 2);
   assert.equal(saved, 2);
   assert.equal(result.captured, 2);
 });
