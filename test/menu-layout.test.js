@@ -115,3 +115,9 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
   assert.match(mobile, /\.data-dialog__content \{[\s\S]*overflow-y: auto;[\s\S]*overscroll-behavior: contain/);
   assert.match(mobile, /\.parlay-slip \{[\s\S]*right: 8px;[\s\S]*left: 8px/);
 });
+
+test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
+  assert.match(html, /styles\.css\?v=20260718-mobile-tabs-v2/);
+  assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
+  assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
+});
