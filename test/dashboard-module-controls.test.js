@@ -28,8 +28,9 @@ test("seleccionar un encuentro difiere los modulos historicos pesados hasta most
   assert.match(app, /!state\.playerGoalByFixture\.has\(fixture\.id\)[\s\S]+?loadPlayerGoalCandidates\(fixture, false, true\)/);
 });
 
-test("mostrar mercados especificos no se interpreta como actualizacion forzada", () => {
-  assert.match(app, /showSpecificMarkets\.addEventListener\("click", \(\) => loadSpecificMarkets\(false\)\)/);
+test("Catálogo de mercados se actualiza solo mediante su botón manual", () => {
+  assert.match(app, /showSpecificMarkets\.addEventListener\("click", \(\) => loadSpecificMarkets\(true\)\)/);
+  assert.match(app, /showSpecificMarkets\.textContent = "Actualizar mercados"/);
   assert.doesNotMatch(app, /showSpecificMarkets\.addEventListener\("click", loadSpecificMarkets\)/);
 });
 

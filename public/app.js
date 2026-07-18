@@ -1178,7 +1178,7 @@ function renderFixtureData() {
   else {
     elements.specificMarketsStatus.className = "status-badge status-badge--unavailable";
     elements.specificMarketsStatus.textContent = "No disponible";
-    elements.specificMarketsContent.innerHTML = '<div class="research-empty">Pulsa “Mostrar” para evaluar mercados específicos sin inventar datos.</div>';
+    elements.specificMarketsContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar mercados” para evaluar los mercados disponibles sin inventar datos.</div>';
   }
   elements.specificMarketsContent.hidden = false;
   elements.refreshCoverage.disabled = state.isRefreshingResearch;
@@ -2421,6 +2421,11 @@ function switchView(view) {
   if (view === "favorite-teams") renderFavoriteTeams();
   if (view === "audit") { renderAuditFixtureOptions(); void loadEvidenceLibrary(); }
   if (view === "simulation") refreshSimulationPickers();
+  if (view === "markets") {
+    const fixture = selectedFixture();
+    elements.showSpecificMarkets.disabled = !fixture || state.isLoadingSpecificMarkets;
+    if (fixture && state.specificMarketsByFixture.has(fixture.id)) renderSpecificMarkets(state.specificMarketsByFixture.get(fixture.id));
+  }
   if (view === "pick-collection") {
     elements.collectPickInfo.disabled = !selectedFixture() || state.isCollectingPickInfo;
     renderPickCollection(state.pickCollectionByFixture.get(selectedFixture()?.id));
@@ -3393,6 +3398,7 @@ async function loadSpecificMarkets(forceRefresh = false) {
   } finally {
     state.isLoadingSpecificMarkets = false;
     elements.showSpecificMarkets.disabled = !selectedFixture();
+    elements.showSpecificMarkets.textContent = "Actualizar mercados";
     elements.specificMarketsContent.hidden = false;
   }
 }
@@ -4023,7 +4029,7 @@ elements.teamGoalsContent.addEventListener("click", (event) => {
 });
 elements.showCorners.addEventListener("click", () => toggleReadyModule(elements.showCorners, elements.cornersContent));
 elements.cornersContent.addEventListener("click", (event) => { const add = event.target.closest("[data-add-corners]"); const save = event.target.closest("[data-save-corners]"); const addExpected = event.target.closest("[data-add-expected-corners]"); const saveExpected = event.target.closest("[data-save-expected-corners]"); if (add) addCornerPick(add.dataset.addCorners); if (save) saveCornerPick(save.dataset.saveCorners); if (addExpected) addExpectedCornersPick(); if (saveExpected) saveExpectedCornersPick(); });
-elements.showSpecificMarkets.addEventListener("click", () => loadSpecificMarkets(false));
+elements.showSpecificMarkets.addEventListener("click", () => loadSpecificMarkets(true));
 elements.specificMarketsContent.addEventListener("click", (event) => {
   const add = event.target.closest("[data-add-specific]");
   const save = event.target.closest("[data-save-specific]");

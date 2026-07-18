@@ -59,7 +59,8 @@ test("Corners permanece en Dashboard y el Catalogo conserva picks por intencion 
   const dashboard = html.slice(html.indexOf('data-view-panel="dashboard"'), html.indexOf('data-view-panel="transparency"'));
   assert.match(dashboard, /id="corners-panel"/);
   assert.doesNotMatch(app, /market-corners-slot/);
-  assert.match(html, /id="show-specific-markets"[^>]+hidden/);
+  assert.match(html, /id="show-specific-markets"[^>]*>Actualizar mercados/);
+  assert.doesNotMatch(html, /id="show-specific-markets"[^>]+hidden/);
   assert.match(html, /id="specific-markets-content" aria-live="polite">/);
 });
 

@@ -382,7 +382,12 @@ apiRouter.post("/fixtures/:fixtureId/markets/specific", requireLiveMode, asyncRo
   const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
   dataset.poissonModel ||= calculatePoissonModel(dataset);
   dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
-  dataset.playerGoalCandidates = await getPlayerGoalCandidates(dataset, playerGoalDependencies, { forceRefresh });
+  dataset.cornersModel ||= calculateCornersModel(dataset);
+  try {
+    dataset.playerGoalCandidates = await getPlayerGoalCandidates(dataset, playerGoalDependencies, { forceRefresh });
+  } catch (error) {
+    dataset.playerGoalCandidates = { status: "not_available", candidates: [], message: error.message || "API-Football no entregó estadísticas individuales." };
+  }
   res.json(buildSpecificMarkets(dataset));
 }));
 

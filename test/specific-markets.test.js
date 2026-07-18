@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildSpecificMarkets, dedupeMarketCandidates } from "../server/services/specific-markets.service.js";
+import { readFileSync } from "node:fs";
+
+const routes = readFileSync(new URL("../server/routes/api.routes.js", import.meta.url), "utf8");
 
 function dataset(overrides = {}) {
   const btts = { marketKey: "btts", selectionKey: "btts_yes", market: "Ambos anotan", selection: "Sí", decimalOdds: 1.9, impliedProbabilityPct: 52.6, modelProbabilityPct: 61, expectedValuePct: 15.9, confidenceScore: 72, highlightColor: "green", decision: "VALOR", sourceModule: "data_picks" };
@@ -60,4 +63,10 @@ test("un pick no se repite entre categorias del catalogo", () => {
   const result = buildSpecificMarkets(dataset());
   const identities = result.groups.flatMap((item) => item.picks.map((pick) => `${pick.marketKey}:${pick.selectionKey}`));
   assert.equal(new Set(identities).size, identities.length);
+});
+
+test("la ruta conserva el catálogo si falla la cobertura individual", () => {
+  const route = routes.match(/apiRouter\.post\("\/fixtures\/:fixtureId\/markets\/specific"[\s\S]+?res\.json\(buildSpecificMarkets\(dataset\)\);/)[0];
+  assert.match(route, /dataset\.cornersModel \|\|= calculateCornersModel\(dataset\)/);
+  assert.match(route, /try \{[\s\S]*getPlayerGoalCandidates[\s\S]*catch \(error\)[\s\S]*status: "not_available"/);
 });
