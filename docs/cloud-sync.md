@@ -6,10 +6,11 @@ La aplicacion mantiene una copia local y sincroniza por cuenta los picks, parlay
 
 1. Abre el proyecto en Supabase.
 2. En **SQL Editor**, ejecuta completo `supabase/migrations/001_user_sync_state.sql`.
-3. Para evidencias automáticas, ejecuta también `supabase/migrations/002_automatic_evidence.sql`.
-4. Para sincronización acumulativa entre dispositivos, ejecuta `supabase/migrations/003_lossless_cloud_sync.sql`.
-5. En **Authentication > URL Configuration**, configura como Site URL la URL publica de Render y agrega esa misma URL a Redirect URLs.
-6. En Render deben existir:
+3. Para evidencias automaticas, ejecuta tambien `supabase/migrations/002_automatic_evidence.sql`.
+4. Para sincronizacion acumulativa entre dispositivos, ejecuta `supabase/migrations/003_lossless_cloud_sync.sql`.
+5. Para evitar errores al sincronizar cupones con fechas vacias o antiguas, ejecuta `supabase/migrations/004_parlay_draft_revision.sql` y luego `supabase/migrations/005_safe_cloud_sync_timestamps.sql`.
+6. En **Authentication > URL Configuration**, configura como Site URL la URL publica de Render y agrega esa misma URL a Redirect URLs.
+7. En Render deben existir:
 
 ```text
 SUPABASE_URL=https://proyecto.supabase.co
@@ -19,7 +20,7 @@ EVIDENCE_AUTOMATION_SECRET=una-cadena-aleatoria-larga
 EVIDENCE_AUTOMATION_INTERVAL_MS=300000
 ```
 
-7. Despliega de nuevo el servicio.
+8. Despliega de nuevo el servicio.
 
 `SUPABASE_SECRET_KEY` se usa exclusivamente dentro del backend de Render para procesar encuentros de todas las cuentas. Nunca debe agregarse a HTML, JavaScript publico ni GitHub. La clave publicable solo permite operaciones autorizadas por las politicas RLS.
 
@@ -27,9 +28,11 @@ EVIDENCE_AUTOMATION_INTERVAL_MS=300000
 
 En **Mi cuenta > Sincronizacion en linea**, crea una cuenta o inicia sesion. Si Supabase exige confirmacion de correo, abre el enlace recibido y despues inicia sesion.
 
-Cada conexión y cada uso de **Sincronizar ahora** combina primero los datos locales y remotos por identificador. La función SQL de la migración 003 hace la unión de forma atómica para que dos dispositivos no reemplacen sus picks o parlays entre sí. Cerrar sesión elimina la copia personal de ese navegador, pero no borra la información de Supabase.
+Cada conexion y cada uso de **Sincronizar ahora** combina primero los datos locales y remotos por identificador. La funcion SQL de la migracion 003 hace la union de forma atomica para que dos dispositivos no reemplacen sus picks o parlays entre si. Cerrar sesion elimina la copia personal de ese navegador, pero no borra la informacion de Supabase.
 
 La migracion `004_parlay_draft_revision.sql` agrega una revision para el cupon en preparacion. Quitar un pick o vaciar el cupon reemplaza su version anterior y evita que selecciones antiguas reaparezcan desde otro dispositivo.
+
+La migracion `005_safe_cloud_sync_timestamps.sql` endurece esa revision: si un navegador envia una fecha vacia, invalida o faltante, Supabase ya no debe romper la sincronizacion. Tambien vuelve a cargar el schema cache de PostgREST con `notify pgrst, 'reload schema';`.
 
 ## Evidencia automatica una hora antes
 

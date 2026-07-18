@@ -39,6 +39,23 @@ function validateCredentials({ email, password }) {
   return { email: normalizedEmail, password: String(password) };
 }
 
+function providerMessage(error) {
+  return String(error?.message || error?.details || error?.hint || error?.payload?.message || error?.payload?.error || "");
+}
+
+function isMissingCloudSchema(error) {
+  return /user_sync_state|schema cache|could not find|does not exist|42P01|PGRST205/i.test(providerMessage(error));
+}
+
+function isMissingRpc(error, functionName) {
+  const message = providerMessage(error);
+  return new RegExp(`${functionName}|schema cache|could not find the function|PGRST202`, "i").test(message);
+}
+
+function isRpcExecutionFailure(error) {
+  return /invalid input syntax for type timestamp|merge_user_sync_state|22P02|PGRST/i.test(providerMessage(error));
+}
+
 function normalizedState(value = {}) {
   const arrays = {
     parlay_draft: [value.parlayDraft, 12],
@@ -109,7 +126,7 @@ async function supabaseRequest(path, { method = "GET", token = "", body, prefer 
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload?.msg || payload?.message || payload?.error_description || payload?.error || "Supabase rechazo la solicitud.";
-    throw new AppError(message, response.status, "CLOUD_PROVIDER_ERROR");
+    throw new AppError(message, response.status, "CLOUD_PROVIDER_ERROR", payload || undefined);
   }
   return payload;
 }
@@ -210,14 +227,22 @@ export async function signOutCloudUser(authorization) {
 
 export async function getCloudState(authorization) {
   const token = bearerToken(authorization);
-  const rows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage,updated_at&limit=1", { token });
+  let rows;
+  try {
+    rows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage,updated_at&limit=1", { token });
+  } catch (error) {
+    if (isMissingCloudSchema(error)) {
+      throw new AppError("La tabla de sincronizacion no esta disponible en Supabase. Ejecuta las migraciones cloud y recarga el schema cache.", 503, "CLOUD_SCHEMA_MISSING");
+    }
+    throw error;
+  }
   const state = Array.isArray(rows) ? rows[0] || null : null;
   let automaticRows = [];
   try {
     const payload = await supabaseRequest("/rest/v1/automatic_evidence_snapshots?select=snapshot,captured_at&order=captured_at.desc&limit=50", { token });
     automaticRows = Array.isArray(payload) ? payload : [];
   } catch (error) {
-    if (!/automatic_evidence_snapshots|schema cache/i.test(error.message)) throw error;
+    if (!/automatic_evidence_snapshots|schema cache|could not find|does not exist|PGRST205/i.test(providerMessage(error))) throw error;
   }
   if (!state && !automaticRows.length) return null;
   return {
@@ -246,15 +271,49 @@ export async function saveCloudState(authorization, input) {
     });
     return Array.isArray(rows) ? rows[0] || state : rows;
   } catch (error) {
-    if (!/merge_user_sync_state_v2|schema cache|could not find the function/i.test(error.message)) throw error;
+    if (!isMissingRpc(error, "merge_user_sync_state_v2") && !isRpcExecutionFailure(error)) throw error;
   }
-  const existingRows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage&limit=1", { token });
+  try {
+    const rows = await supabaseRequest("/rest/v1/rpc/merge_user_sync_state", {
+      method: "POST",
+      token,
+      body: {
+        p_preferences: state.preferences,
+        p_parlay_draft: state.parlay_draft,
+        p_saved_picks: state.saved_picks,
+        p_saved_parlays: state.saved_parlays,
+        p_evidence_snapshots: state.evidence_snapshots,
+        p_alerts: state.alerts,
+        p_analysis_usage: state.analysis_usage
+      }
+    });
+    return Array.isArray(rows) ? rows[0] || state : rows;
+  } catch (error) {
+    if (!isMissingRpc(error, "merge_user_sync_state") && !isRpcExecutionFailure(error)) throw error;
+  }
+  let existingRows;
+  try {
+    existingRows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage&limit=1", { token });
+  } catch (error) {
+    if (isMissingCloudSchema(error)) {
+      throw new AppError("La tabla de sincronizacion no esta disponible en Supabase. Ejecuta las migraciones cloud y recarga el schema cache.", 503, "CLOUD_SCHEMA_MISSING");
+    }
+    throw error;
+  }
   const existing = Array.isArray(existingRows) ? existingRows[0] || {} : {};
   const merged = mergeNormalizedState(existing, state);
   const payload = { user_id: userId, ...merged, updated_at: new Date().toISOString() };
-  const rows = await supabaseRequest("/rest/v1/user_sync_state?on_conflict=user_id", {
-    method: "POST", token, body: payload, prefer: "resolution=merge-duplicates,return=representation"
-  });
+  let rows;
+  try {
+    rows = await supabaseRequest("/rest/v1/user_sync_state?on_conflict=user_id", {
+      method: "POST", token, body: payload, prefer: "resolution=merge-duplicates,return=representation"
+    });
+  } catch (error) {
+    if (isMissingCloudSchema(error)) {
+      throw new AppError("La tabla de sincronizacion no esta disponible en Supabase. Ejecuta las migraciones cloud y recarga el schema cache.", 503, "CLOUD_SCHEMA_MISSING");
+    }
+    throw error;
+  }
   return Array.isArray(rows) ? rows[0] || payload : payload;
 }
 
@@ -339,4 +398,4 @@ export async function updateEvidenceWatchlist(row, changes) {
   });
 }
 
-export const cloudSyncInternals = { bearerToken, mergeEvidenceSnapshots, mergeNormalizedState, normalizedState, normalizeWatchedFixture, userIdFromToken, validateCredentials };
+export const cloudSyncInternals = { bearerToken, isMissingCloudSchema, isMissingRpc, isRpcExecutionFailure, mergeEvidenceSnapshots, mergeNormalizedState, normalizedState, normalizeWatchedFixture, providerMessage, userIdFromToken, validateCredentials };
