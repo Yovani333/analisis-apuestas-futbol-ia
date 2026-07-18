@@ -161,3 +161,12 @@ test("sin marcas temporales se usa el tema guardado en la cuenta", () => {
   const merged = mergeCloudState({ preferences: { theme: "dark" } }, { preferences: { theme: "light" } });
   assert.equal(merged.preferences.theme, "light");
 });
+
+test("sincroniza altas y bajas de equipos favoritos por la revision mas reciente", () => {
+  const merged = mergeCloudState(
+    { preferences: { favoriteTeams: [{ id: "10", name: "Local", active: true, updatedAt: "2026-07-18T10:00:00Z" }] } },
+    { preferences: { favoriteTeams: [{ id: "10", name: "Local", active: false, updatedAt: "2026-07-18T11:00:00Z" }, { id: "20", name: "Visitante", active: true, updatedAt: "2026-07-18T10:30:00Z" }] } }
+  );
+  assert.equal(merged.preferences.favoriteTeams.find((team) => team.id === "10").active, false);
+  assert.equal(merged.preferences.favoriteTeams.find((team) => team.id === "20").active, true);
+});

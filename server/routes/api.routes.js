@@ -21,7 +21,7 @@ import { getTeamPerformanceForFixture } from "../services/team-performance.servi
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
 import { getPlayerGoalCandidates } from "../services/player-goal-candidates.service.js";
 import { buildPickAnalysisCollection } from "../services/pick-analysis-collection.service.js";
-import { compareTeamsWithHistoricalStats } from "../services/simulation-comparator.service.js";
+import { compareTeamsWithHistoricalStats, getTeamHistoricalStats } from "../services/simulation-comparator.service.js";
 import { runAdvancedSimulation } from "../services/advanced-simulation.service.js";
 import {
   createSimulationAuditRecord,
@@ -399,4 +399,18 @@ apiRouter.post("/fixtures/:fixtureId/analysis", requireLiveMode, analysisLimiter
     analysis: generateRuleBasedAnalysis(dataset),
     providerDisabled: "external-ai"
   });
+}));
+
+apiRouter.get("/teams/:teamId/overview", requireLiveMode, asyncRoute(async (req, res) => {
+  const teamId = parseFixtureId(req.params.teamId);
+  const windowSize = Number(req.query.window || 5);
+  const result = await getTeamHistoricalStats({
+    team: { id: teamId, name: String(req.query.name || "Equipo") },
+    cutoffDate: String(req.query.cutoffDate || new Date().toISOString()),
+    windowSize
+  }, {
+    getPreviousFixtures: getPreviousFixturesForTeam,
+    getFixtureStatistics
+  });
+  res.json(result);
 }));

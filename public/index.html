@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de análisis responsable de apuestas de fútbol con datos, API-Football y modelos internos." />
     <title>Análisis de Apuestas de Fútbol con Datos</title>
-    <link rel="stylesheet" href="styles.css?v=20260715-expected-corners-v1" />
+    <link rel="stylesheet" href="styles.css?v=20260718-favorite-teams-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -41,6 +41,7 @@
         <section class="main-nav__group" aria-labelledby="nav-tracking-title">
           <h2 id="nav-tracking-title">Seguimiento</h2>
           <button class="main-nav__item" type="button" data-view="saved"><span class="nav-icon" aria-hidden="true">✓</span><span>Mis apuestas</span><span id="saved-parlay-count" class="nav-count">0</span></button>
+          <button class="main-nav__item" type="button" data-view="favorite-teams"><span class="nav-icon" aria-hidden="true">★</span><span>Equipos favoritos</span><span id="favorite-team-count" class="nav-count">0</span></button>
           <button class="main-nav__item" type="button" data-view="audit"><span class="nav-icon" aria-hidden="true">▤</span><span>Auditoría</span></button>
         </section>
 
@@ -445,6 +446,15 @@
       </section>
     </main>
 
+    <main id="favorite-teams-view" class="utility-view favorite-teams-view" data-view-panel="favorite-teams" hidden>
+      <section class="utility-heading">
+        <div><p class="eyebrow">Seguimiento de clubes y selecciones</p><h2>Equipos favoritos</h2><p>Consulta sus promedios recientes más importantes con datos históricos de API-Football.</p></div>
+        <div class="panel-actions"><button id="refresh-favorite-teams" class="button button--primary" type="button">Actualizar estadísticas</button><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></div>
+      </section>
+      <div class="favorite-teams-note"><strong>Lectura de la gráfica</strong><span>Las barras comparan cada promedio contra una escala visual de referencia. No representan probabilidades ni recomendaciones de apuesta.</span></div>
+      <section id="favorite-teams-list" class="favorite-teams-grid" aria-live="polite"><div class="saved-empty"><h3>Sin equipos favoritos</h3><p>Marca la estrella junto a un equipo desde los encuentros del Dashboard.</p></div></section>
+    </main>
+
     <main id="parlays-guardados" class="saved-view" data-view-panel="saved" hidden>
       <section class="saved-view__heading">
         <div>
@@ -560,6 +570,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260715-expected-corners-v1"></script>
+    <script type="module" src="app.js?v=20260718-favorite-teams-v1"></script>
   </body>
 </html>

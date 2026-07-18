@@ -1147,6 +1147,24 @@ body {
   gap: 10px;
 }
 .match-card__team > div { display: grid; min-width: 0; gap: 4px; }
+.match-card__team-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.team-favorite-toggle {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #7b8798;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+}
+.team-favorite-toggle:hover, .team-favorite-toggle:focus-visible { color: #a46505; background: #fff7d6; border-color: #e8c562; outline: none; }
+.team-favorite-toggle--active { color: #d99a0b; text-shadow: 0 0 12px rgb(245 184 44 / 35%); }
 .match-card__team:first-child { flex-direction: row-reverse; text-align: right; }
 .match-card__team strong { overflow-wrap: anywhere; }
 .match-card__team--favorite strong { color: #087a55; }
@@ -1900,6 +1918,7 @@ body {
 :root[data-theme="dark"] .match-card__versus strong { color: #a7b9ce; }
 :root[data-theme="dark"] .team-crest { background: rgb(238 246 255 / 92%); border-color: rgb(255 255 255 / 16%); }
 :root[data-theme="dark"] .favorite-badge { color: #77e7bc; background: rgb(16 185 129 / 14%); border-color: rgb(52 211 153 / 24%); }
+:root[data-theme="dark"] .team-favorite-toggle:hover, :root[data-theme="dark"] .team-favorite-toggle:focus-visible { color: #ffd66b; background: rgb(245 184 44 / 12%); border-color: rgb(245 184 44 / 35%); }
 :root[data-theme="dark"] .data-quality { color: #9fb0c6; background: rgb(51 65 85 / 60%); }
 
 .status-badge { border-radius: 999px; }
@@ -2517,4 +2536,32 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .app-header { transition: none; }
+}
+
+.favorite-teams-view { display: grid; align-content: start; gap: 12px; }
+.favorite-teams-view[hidden] { display: none; }
+.favorite-teams-note { display: flex; gap: 10px; padding: 10px 12px; color: var(--muted); font-size: .72rem; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 7px; }
+.favorite-teams-note strong { flex: 0 0 auto; color: var(--text); }
+.favorite-teams-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.favorite-team-card { display: grid; gap: 12px; min-width: 0; padding: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); }
+.favorite-team-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.favorite-team-card h3 { margin: 0; font-size: 1rem; }
+.favorite-team-card header p { margin: 3px 0 0; color: var(--muted); font-size: .68rem; }
+.favorite-team-chart { display: grid; gap: 9px; }
+.favorite-team-metric { display: grid; gap: 4px; }
+.favorite-team-metric > div:first-child { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: .68rem; }
+.favorite-team-metric strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.favorite-team-metric__track { height: 8px; overflow: hidden; background: var(--neutral-soft); border-radius: 4px; }
+.favorite-team-metric__track i { display: block; height: 100%; background: linear-gradient(90deg, #168b78, #3287da); border-radius: inherit; }
+.favorite-team-card footer { display: flex; flex-wrap: wrap; gap: 5px 12px; padding-top: 9px; color: var(--muted); font-size: .64rem; border-top: 1px solid var(--border); }
+.favorite-team-card__actions { display: flex; flex-wrap: wrap; gap: 7px; }
+:root[data-theme="dark"] .favorite-team-card { background: #172435; }
+:root[data-theme="dark"] .favorite-team-metric__track { background: #2b3b4f; }
+
+@media (max-width: 760px) {
+  .favorite-teams-grid { grid-template-columns: 1fr; }
+  .favorite-teams-note { flex-direction: column; }
+  .favorite-team-card > header { grid-template-columns: auto minmax(0, 1fr); }
+  .favorite-team-card > header .status-badge { grid-column: 1 / -1; }
+  .favorite-team-card__actions .button { flex: 1 1 150px; }
 }

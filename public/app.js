@@ -10,8 +10,9 @@ import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-to
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260713-dashboard-fixes-v2";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260717-cloud-sync-compact-v2";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260718-favorite-teams-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-expected-corners-v1";
+import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -40,6 +41,8 @@ const state = {
   teamPerformanceByFixture: new Map(),
   playerGoalByFixture: new Map(),
   pickCollectionByFixture: new Map(Object.entries(readLocalJson(PICK_COLLECTION_CACHE_KEY, {}))),
+  favoriteTeamStatsById: new Map(),
+  favoriteTeamLoadingIds: new Set(),
   parlayDraft: loadParlayDraft(),
   savedParlays: loadSavedParlays(),
   savedPicks: loadSavedPicks(),
@@ -50,7 +53,7 @@ const state = {
   expandedMatchGroups: new Set(),
   expandedOrigin: null,
   alerts: readLocalJson(ALERTS_KEY, []),
-  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true }),
+  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [] }),
   currentView: "dashboard",
   hasSearched: false,
   isSearching: false,
@@ -207,6 +210,11 @@ Object.assign(elements, {
   closeAuditEvidence: document.querySelector("#close-audit-evidence")
 });
 Object.assign(elements, {
+  favoriteTeamCount: document.querySelector("#favorite-team-count"),
+  favoriteTeamsList: document.querySelector("#favorite-teams-list"),
+  refreshFavoriteTeams: document.querySelector("#refresh-favorite-teams")
+});
+Object.assign(elements, {
   analysisGuideContent: document.querySelector("#analysis-guide-content"), guideOddsContent: document.querySelector("#guide-odds-content"),
   guideCoverageSummary: document.querySelector("#guide-coverage-summary")
 });
@@ -353,6 +361,7 @@ function applyCloudState(remoteState) {
     renderSavedParlays();
     renderAlerts();
     renderAuditFixtureOptions();
+    renderFavoriteTeams();
   } finally {
     state.cloudApplying = false;
   }
@@ -822,6 +831,107 @@ function fixtureQualityView(fixture) {
   };
 }
 
+const FAVORITE_TEAM_METRICS = Object.freeze([
+  { key: "shots", label: "Remates", max: 20 },
+  { key: "shotsOnGoal", label: "Al arco", max: 10 },
+  { key: "possession", label: "Posesión", max: 100, suffix: "%" },
+  { key: "passAccuracy", label: "Precisión de pase", max: 100, suffix: "%" },
+  { key: "corners", label: "Corners", max: 10 },
+  { key: "fouls", label: "Faltas", max: 20 }
+]);
+
+function favoriteTeams() {
+  return activeFavoriteTeams(state.preferences.favoriteTeams);
+}
+
+function favoriteTeamFromFixture(fixture, side) {
+  return {
+    id: side === "home" ? fixture.homeTeamId : fixture.awayTeamId,
+    name: side === "home" ? fixture.home : fixture.away,
+    logo: side === "home" ? fixture.homeLogo : fixture.awayLogo,
+    leagueName: fixture.leagueName || "Competición no disponible",
+    country: fixture.country || "",
+    addedAt: new Date().toISOString()
+  };
+}
+
+function persistFavoriteTeams() {
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
+  renderMatches();
+  renderFavoriteTeams();
+}
+
+async function toggleTeamFavorite(team) {
+  if (!team?.id) return showNotice("API-Football no proporcionó el ID de este equipo.");
+  const wasFavorite = isFavoriteTeam(state.preferences.favoriteTeams, team.id);
+  state.preferences.favoriteTeams = toggleFavoriteTeam(state.preferences.favoriteTeams, team);
+  persistFavoriteTeams();
+  showNotice(wasFavorite ? `${team.name} se quitó de equipos favoritos.` : `${team.name} se agregó a equipos favoritos.`);
+  if (!wasFavorite) await loadFavoriteTeamStats(team);
+}
+
+function favoriteMetricBar(metric, value) {
+  const numeric = Number(value);
+  const available = Number.isFinite(numeric);
+  const width = available ? Math.max(0, Math.min(100, numeric / metric.max * 100)) : 0;
+  return `<div class="favorite-team-metric">
+    <div><span>${escapeHtml(metric.label)}</span><strong>${available ? `${escapeHtml(numeric.toFixed(2))}${metric.suffix || ""}` : "No disponible"}</strong></div>
+    <div class="favorite-team-metric__track" role="img" aria-label="${escapeHtml(metric.label)}: ${available ? numeric : "no disponible"}"><i style="width:${width}%"></i></div>
+  </div>`;
+}
+
+function renderFavoriteTeams() {
+  if (!elements.favoriteTeamsList) return;
+  const teams = favoriteTeams();
+  elements.favoriteTeamCount.textContent = teams.length;
+  elements.refreshFavoriteTeams.disabled = !teams.length || state.favoriteTeamLoadingIds.size > 0;
+  if (!teams.length) {
+    elements.favoriteTeamsList.innerHTML = '<div class="saved-empty"><h3>Sin equipos favoritos</h3><p>Marca la estrella junto a un equipo desde los encuentros del Dashboard.</p></div>';
+    return;
+  }
+  elements.favoriteTeamsList.innerHTML = teams.map((team) => {
+    const stats = state.favoriteTeamStatsById.get(String(team.id));
+    const loading = state.favoriteTeamLoadingIds.has(String(team.id));
+    const metrics = stats?.team?.metrics || {};
+    const sample = stats?.team?.matchesWithStatistics || 0;
+    const status = loading ? "Consultando" : stats?.status === "available" ? "Disponible" : stats?.status === "partial" ? "Parcial" : "Pendiente";
+    const statusClassName = loading ? "processing" : stats?.status === "available" ? "available" : stats?.status === "partial" ? "partial" : "unavailable";
+    return `<article class="favorite-team-card" data-favorite-team-id="${escapeHtml(team.id)}">
+      <header>${teamCrest(team.name, team.logo, "large")}<div><h3>${escapeHtml(team.name)}</h3><p>${escapeHtml(team.leagueName || "Competición no disponible")}${team.country ? ` · ${escapeHtml(team.country)}` : ""}</p></div><span class="status-badge status-badge--${statusClassName}">${status}</span></header>
+      ${stats ? `<div class="favorite-team-chart">${FAVORITE_TEAM_METRICS.map((metric) => favoriteMetricBar(metric, metrics[metric.key])).join("")}</div>
+        <footer><span>Muestra: ${escapeHtml(sample)} de ${escapeHtml(stats.windowSize || 5)} partidos con estadísticas</span><span>${escapeHtml(stats.source || "API-Football")}</span><small>Actualizado: ${escapeHtml(formatUpdatedAt(stats.generatedAt))}</small></footer>`
+        : `<div class="research-empty">${loading ? "Consultando los últimos partidos oficiales…" : "Pulsa Cargar estadísticas para generar la gráfica."}</div>`}
+      <div class="favorite-team-card__actions"><button class="button button--primary button--compact" type="button" data-refresh-favorite-team="${escapeHtml(team.id)}" ${loading ? "disabled" : ""}>${stats ? "Actualizar" : "Cargar estadísticas"}</button><button class="button button--secondary button--compact" type="button" data-remove-favorite-team="${escapeHtml(team.id)}">Quitar favorito</button></div>
+    </article>`;
+  }).join("");
+}
+
+async function loadFavoriteTeamStats(team, announce = false) {
+  const id = String(team?.id || "");
+  if (!id || state.favoriteTeamLoadingIds.has(id)) return;
+  state.favoriteTeamLoadingIds.add(id);
+  renderFavoriteTeams();
+  try {
+    const result = await footballDataService.getFavoriteTeamStats(team, 5);
+    state.favoriteTeamStatsById.set(id, result);
+    if (announce) showNotice(`Estadísticas de ${team.name} actualizadas.`);
+  } catch (error) {
+    state.favoriteTeamStatsById.set(id, { status: "not_available", message: error.message, team: { metrics: {}, matchesWithStatistics: 0 }, generatedAt: new Date().toISOString() });
+    if (announce) showNotice(error.message || `No fue posible actualizar ${team.name}.`);
+  } finally {
+    state.favoriteTeamLoadingIds.delete(id);
+    renderFavoriteTeams();
+  }
+}
+
+async function refreshAllFavoriteTeams() {
+  const teams = favoriteTeams();
+  if (!teams.length || state.favoriteTeamLoadingIds.size) return;
+  elements.refreshFavoriteTeams.disabled = true;
+  for (const team of teams) await loadFavoriteTeamStats(team);
+  showNotice(`Se actualizaron ${teams.length} equipo(s) favorito(s) usando la caché disponible de API-Football.`);
+}
+
 function evidenceFixtureSnapshot(fixtureOrId) {
   const fixtureId = typeof fixtureOrId === "object" ? fixtureOrId?.id : fixtureOrId;
   return fixtureId ? latestEvidenceForFixture(allEvidenceSnapshots(), fixtureId) : null;
@@ -905,7 +1015,10 @@ function renderMatches() {
           ? ` Local gana: ${probabilities.home}%. Empate: ${probabilities.draw}%. Visitante gana: ${probabilities.away}%.`
           : "";
         const favoriteTitle = fixture.favorite ? `${fixture.favorite.note}${probabilitySummary}` : "";
-        const teamName = (name, logo, favorite) => `<div class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${teamCrest(name, logo)}<div><strong>${escapeHtml(name)}</strong>${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2${fixture.favorite.percent !== null ? ` · ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</div></div>`;
+        const teamName = (name, logo, teamId, side, favorite) => {
+          const savedFavorite = isFavoriteTeam(state.preferences.favoriteTeams, teamId);
+          return `<div class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${teamCrest(name, logo)}<div><span class="match-card__team-name"><strong>${escapeHtml(name)}</strong><button class="team-favorite-toggle${savedFavorite ? " team-favorite-toggle--active" : ""}" type="button" data-favorite-side="${side}" aria-pressed="${savedFavorite}" aria-label="${savedFavorite ? "Quitar" : "Agregar"} ${escapeHtml(name)} ${savedFavorite ? "de" : "a"} equipos favoritos" title="${savedFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}">★</button></span>${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2${fixture.favorite.percent !== null ? ` · ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</div></div>`;
+        };
         const quality = fixtureQualityView(fixture);
         return `
           <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" tabindex="0" ${selected ? 'aria-current="true"' : ""}>
@@ -914,9 +1027,9 @@ function renderMatches() {
               ${statusBadge(fixture.statusLabel)}
             </div>
             <div class="match-card__teams">
-              ${teamName(fixture.home, fixture.homeLogo, homeFavorite)}
+              ${teamName(fixture.home, fixture.homeLogo, fixture.homeTeamId, "home", homeFavorite)}
               <span class="match-card__versus">${showScore ? `<strong class="match-score">${escapeHtml(fixture.score.home)} – ${escapeHtml(fixture.score.away)}${penaltyShootoutText(fixture) ? `<small class="penalty-score">${escapeHtml(penaltyShootoutText(fixture))}</small>` : ""}</strong>` : "<strong>VS</strong>"}</span>
-              ${teamName(fixture.away, fixture.awayLogo, awayFavorite)}
+              ${teamName(fixture.away, fixture.awayLogo, fixture.awayTeamId, "away", awayFavorite)}
             </div>
             <div class="match-card__meta">
               <time datetime="${escapeHtml(fixture.utcDateTime || `${fixture.date}T${fixture.time}`)}">${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.time)} PT</time>
@@ -2299,6 +2412,7 @@ function switchView(view) {
     if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   if (view === "saved") { renderSavedPicks(); renderSavedParlays(); }
+  if (view === "favorite-teams") renderFavoriteTeams();
   if (view === "audit") { renderAuditFixtureOptions(); void loadEvidenceLibrary(); }
   if (view === "simulation") refreshSimulationPickers();
   if (view === "pick-collection") {
@@ -3951,6 +4065,13 @@ elements.matchesList.addEventListener("click", async (event) => {
     elements.matchesList.querySelector(`[data-toggle-league="${CSS.escape(leagueSlug)}"]`)?.focus();
     return;
   }
+  const favoriteButton = event.target.closest("[data-favorite-side]");
+  if (favoriteButton) {
+    const card = favoriteButton.closest("[data-fixture-id]");
+    const fixture = state.fixtures.find((item) => String(item.id) === String(card?.dataset.fixtureId));
+    if (fixture) await toggleTeamFavorite(favoriteTeamFromFixture(fixture, favoriteButton.dataset.favoriteSide));
+    return;
+  }
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest("[data-fixture-id]");
   if (!card) return;
@@ -3964,6 +4085,16 @@ elements.matchesList.addEventListener("click", async (event) => {
     return;
   }
 });
+elements.favoriteTeamsList.addEventListener("click", (event) => {
+  const refresh = event.target.closest("[data-refresh-favorite-team]");
+  const remove = event.target.closest("[data-remove-favorite-team]");
+  const id = refresh?.dataset.refreshFavoriteTeam || remove?.dataset.removeFavoriteTeam;
+  const team = favoriteTeams().find((item) => String(item.id) === String(id));
+  if (!team) return;
+  if (refresh) void loadFavoriteTeamStats(team, true);
+  if (remove) void toggleTeamFavorite(team);
+});
+elements.refreshFavoriteTeams.addEventListener("click", refreshAllFavoriteTeams);
 elements.matchesList.addEventListener("keydown", async (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   const card = event.target.closest("[data-fixture-id]");

@@ -8,13 +8,14 @@ const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "u
 
 test("el menu lateral agrupa las vistas en un orden profesional", () => {
   assert.match(html, /id="app-sidebar"[\s\S]*id="nav-main-title">Principal<[\s\S]*id="nav-intelligence-title">Inteligencia<[\s\S]*id="nav-tracking-title">Seguimiento<[\s\S]*id="nav-account-title">Cuenta</);
-  const views = ["dashboard", "simulation", "live", "transparency", "guide", "markets", "pick-collection", "saved", "audit", "account"];
+  const views = ["dashboard", "simulation", "live", "transparency", "guide", "markets", "pick-collection", "saved", "favorite-teams", "audit", "account"];
   const positions = views.map((view) => html.indexOf(`data-view="${view}"`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((a, b) => a - b), positions);
   assert.match(html, /data-view-panel="simulation"[\s\S]*Comparador de equipos con datos reales/);
   assert.match(html, /data-view-panel="markets"/);
   assert.match(html, /data-view-panel="pick-collection"[\s\S]*id="collect-pick-info"[\s\S]*Actualizar picks/);
+  assert.match(html, /data-view-panel="favorite-teams"[\s\S]*id="favorite-teams-list"/);
   assert.match(html, /data-view="pick-collection"[\s\S]*Picks recomendados/);
   assert.doesNotMatch(app, /<h3>Datos recopilados<\/h3>/);
   assert.doesNotMatch(html, /data-view="alerts"|data-view-panel="alerts"|>Avisos</);

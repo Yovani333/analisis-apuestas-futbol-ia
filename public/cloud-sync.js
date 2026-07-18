@@ -1,3 +1,5 @@
+import { mergeFavoriteTeams } from "./favorite-teams.js";
+
 export const CLOUD_SESSION_KEY = "football-ai.cloud-session.v1";
 export const CLOUD_INITIALIZED_USERS_KEY = "football-ai.cloud-initialized-users.v1";
 
@@ -91,6 +93,7 @@ function timestamp(value) {
 
 function mergePreferences(local = {}, remote = {}) {
   const merged = { ...local, ...remote };
+  merged.favoriteTeams = mergeFavoriteTeams(local.favoriteTeams, remote.favoriteTeams);
   const localThemeUpdatedAt = timestamp(local.themeUpdatedAt);
   const remoteThemeUpdatedAt = timestamp(remote.themeUpdatedAt);
   if (local.theme && (localThemeUpdatedAt > remoteThemeUpdatedAt || (localThemeUpdatedAt > 0 && localThemeUpdatedAt === remoteThemeUpdatedAt))) {

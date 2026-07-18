@@ -245,6 +245,16 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/player-goal-candidates${query}`);
   },
 
+  async getFavoriteTeamStats(team, windowSize = 5) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", message: "Las estadisticas de equipos favoritos requieren API-Football." };
+    return requestJson(`/api/teams/${encodeURIComponent(team.id)}/overview?${new URLSearchParams({
+      name: team.name,
+      window: String(windowSize),
+      cutoffDate: new Date().toISOString()
+    })}`);
+  },
+
   async compareSimulationTeams(params) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", metrics: [], message: "La simulación requiere datos reales de API-Football." };

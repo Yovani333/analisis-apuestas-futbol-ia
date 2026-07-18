@@ -81,6 +81,32 @@ async function teamAverages(team, cutoffDate, windowSize, dependencies) {
   };
 }
 
+export async function getTeamHistoricalStats({ team, cutoffDate = "", windowSize = 5 }, dependencies) {
+  const normalizedWindow = [5, 10].includes(Number(windowSize)) ? Number(windowSize) : 5;
+  if (!team?.id) {
+    return { status: "not_available", message: "El equipo no tiene ID de API-Football.", windowSize: normalizedWindow };
+  }
+  const summary = await teamAverages(team, cutoffDate, normalizedWindow, dependencies);
+  const missingLabels = new Set(summary.missing || []);
+  const displayMetrics = Object.fromEntries(METRIC_DEFINITIONS.map((metric) => [
+    metric.key,
+    missingLabels.has(metric.label) ? null : summary.metrics?.[metric.key] ?? null
+  ]));
+  const displaySummary = { ...summary, metrics: displayMetrics };
+  const availableMetrics = Object.values(displayMetrics).filter((value) => value !== null).length;
+  return {
+    status: availableMetrics >= 6 ? "available" : availableMetrics > 0 ? "partial" : "not_available",
+    source: "API-Football + cache interna",
+    modelVersion: "favorite-team-overview-v1",
+    windowSize: normalizedWindow,
+    team: displaySummary,
+    generatedAt: new Date().toISOString(),
+    message: summary.matchesWithStatistics
+      ? "Promedios calculados con partidos oficiales finalizados."
+      : "API-Football no devolvio estadisticas historicas suficientes para este equipo."
+  };
+}
+
 function metricRows(teamA, teamB) {
   return METRIC_DEFINITIONS.map((metric) => {
     const a = teamA.metrics[metric.key];
