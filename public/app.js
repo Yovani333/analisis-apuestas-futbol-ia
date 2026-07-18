@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260712-expanded-competitions-v1";
-import { footballDataService } from "./services.js?v=20260714-evidence-audit-v1";
+import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   calculateHistoryMetrics, calculateOriginPerformance, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
@@ -13,7 +13,7 @@ import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260718-favorite-teams-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-expected-corners-v1";
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
-import { summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260718-evidence-readiness-v1";
+import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260718-evidence-batch-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -49,6 +49,7 @@ const state = {
   savedPicks: loadSavedPicks(),
   evidenceSnapshots: loadEvidenceSnapshots(),
   evidenceLibrary: [],
+  evidenceEvaluationByCompetition: new Map(),
   savedTab: "individual",
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
@@ -2772,7 +2773,15 @@ function showAnalysisEmpty() {
 function allEvidenceSnapshots() {
   const rows = new Map();
   for (const snapshot of [...state.evidenceLibrary, ...state.evidenceSnapshots]) if (snapshot?.id) rows.set(String(snapshot.id), snapshot);
-  return [...rows.values()];
+  return [...rows.values()].map((snapshot) => {
+    const audit = state.preferences.evidenceAudits?.[snapshot.id];
+    if (!audit) return snapshot;
+    return {
+      ...snapshot,
+      auditMetadata: { ...(snapshot.auditMetadata || {}), auditedAt: audit.auditedAt },
+      auditSummary: audit.auditSummary
+    };
+  });
 }
 
 function renderEvidenceReadiness() {
@@ -2786,35 +2795,78 @@ function renderEvidenceReadiness() {
     elements.evidenceReadinessList.innerHTML = '<div class="research-empty"><strong>Sin evidencias prepartido</strong><p>Las evidencias aparecerán aquí al guardarlas manual o automáticamente.</p></div>';
     return;
   }
-  elements.evidenceReadinessList.innerHTML = groups.map((group) => `<article class="evidence-readiness-card evidence-readiness-card--${escapeHtml(group.color)}">
+  elements.evidenceReadinessList.innerHTML = groups.map((group) => {
+    const progress = state.evidenceEvaluationByCompetition.get(group.key);
+    const running = Boolean(progress?.running);
+    const buttonLabel = running
+      ? `Evaluando ${progress.processed}/${progress.total}…`
+      : group.readyToEvaluate > 0 ? `Evaluar pendientes (${group.readyToEvaluate})` : "Sin resultados por evaluar";
+    const progressMessage = progress?.message || (group.pendingEvaluation > group.readyToEvaluate
+      ? `${group.pendingEvaluation - group.readyToEvaluate} evidencia(s) esperan que finalice el partido.`
+      : "Evalúa los resultados disponibles sin modificar las fórmulas.");
+    return `<article class="evidence-readiness-card evidence-readiness-card--${escapeHtml(group.color)}">
     <header><span class="evidence-light evidence-light--${escapeHtml(group.color)}" aria-hidden="true"></span><div><h3>${escapeHtml(group.competition)}</h3><p>${group.leagueId ? `Liga API-Football ${escapeHtml(group.leagueId)}` : "Competición identificada por nombre"}</p></div><strong>${escapeHtml(group.label)}</strong></header>
     <div class="evidence-readiness-counts"><div><span>Recolectadas</span><strong>${escapeHtml(group.collected)}</strong></div><div><span>Evaluadas</span><strong>${escapeHtml(group.evaluated)}</strong></div><div><span>Pendientes</span><strong>${escapeHtml(group.pendingEvaluation)}</strong></div></div>
     <div class="evidence-readiness-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(group.progressPct)}" aria-label="Progreso hacia cien evidencias evaluadas"><i style="width:${group.progressPct}%"></i></div>
     <p>${escapeHtml(group.recommendation)}</p>
     <small>${group.nextTarget === null ? "Ya alcanzó el umbral orientativo de 100 evidencias evaluadas." : `Faltan ${escapeHtml(group.remaining)} auditorías para el siguiente nivel.`}</small>
-  </article>`).join("");
+    <div class="evidence-readiness-actions"><button class="button button--primary button--compact" type="button" data-evaluate-evidence="${escapeHtml(group.key)}" ${running || group.readyToEvaluate === 0 ? "disabled" : ""}>${escapeHtml(buttonLabel)}</button><span role="status">${escapeHtml(progressMessage)}</span></div>
+  </article>`;
+  }).join("");
 }
 
-function markEvidenceAudited(evidence, audit) {
+function markEvidenceAudited(evidence, audit, { render = true, sync = true } = {}) {
   if (!evidence?.id || !audit) return;
   const records = Array.isArray(audit.records) ? audit.records : [];
   const evaluablePicks = records.filter((row) => ["HIT", "MISS", "VOID"].includes(row?.outcome)).length;
   const finalScore = records.find((row) => row?.finalScore && row.finalScore !== "Pendiente")?.finalScore || null;
-  const updated = {
-    ...evidence,
-    auditMetadata: { ...(evidence.auditMetadata || {}), auditedAt: new Date().toISOString() },
-    auditSummary: {
-      evaluablePicks,
-      completed: Boolean(finalScore),
-      hits: Number(audit.metrics?.hits || 0),
-      misses: Number(audit.metrics?.misses || 0),
-      voids: Number(audit.metrics?.voids || 0),
-      finalScore
+  const auditedAt = new Date().toISOString();
+  state.preferences.evidenceAudits = {
+    ...(state.preferences.evidenceAudits || {}),
+    [evidence.id]: {
+      auditedAt,
+      auditSummary: {
+        evaluablePicks,
+        completed: Boolean(finalScore),
+        hits: Number(audit.metrics?.hits || 0),
+        misses: Number(audit.metrics?.misses || 0),
+        voids: Number(audit.metrics?.voids || 0),
+        finalScore
+      }
     }
   };
-  state.evidenceSnapshots = saveEvidenceSnapshot(updated);
-  queueCloudSync();
+  try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify(state.preferences)); }
+  catch { /* La auditoría sigue visible aunque el navegador bloquee el almacenamiento. */ }
+  if (sync) queueCloudSync();
+  if (render) renderEvidenceReadiness();
+  return Boolean(finalScore);
+}
+
+async function evaluateCompetitionEvidence(competitionKey) {
+  const pending = pendingEvidenceForCompetition(allEvidenceSnapshots(), competitionKey);
+  if (!pending.ready.length || state.evidenceEvaluationByCompetition.get(competitionKey)?.running) return;
+  const progress = { running: true, processed: 0, total: pending.ready.length, completed: 0, waiting: pending.waiting.length, errors: 0, message: "Consultando resultados finales…" };
+  state.evidenceEvaluationByCompetition.set(competitionKey, progress);
   renderEvidenceReadiness();
+  for (const evidence of pending.ready) {
+    try {
+      const audit = await footballDataService.auditFixture(evidence.fixture.id, evidence);
+      const completed = markEvidenceAudited(evidence, audit, { render: false, sync: false });
+      if (completed) progress.completed += 1;
+      else progress.errors += 1;
+    } catch (error) {
+      if (error.code === "FIXTURE_NOT_FINISHED" || error.status === 409) progress.waiting += 1;
+      else progress.errors += 1;
+    }
+    progress.processed += 1;
+    progress.message = `${progress.completed} completada(s) · ${progress.waiting} pendiente(s) · ${progress.errors} error(es)`;
+    renderEvidenceReadiness();
+  }
+  progress.running = false;
+  if (progress.completed > 0) queueCloudSync();
+  renderAuditFixtureOptions();
+  elements.auditResults.innerHTML = `<div class="detail-note detail-note--info"><strong>Evaluación por competición finalizada</strong><span>${escapeHtml(progress.message)}. Los encuentros futuros o todavía no finalizados conservan su estado pendiente.</span></div>`;
+  showNotice(progress.completed ? `${progress.completed} evidencia(s) evaluadas correctamente.` : "No había resultados finalizados disponibles para completar.");
 }
 
 function selectedAuditEvidence() {
@@ -4199,6 +4251,10 @@ elements.auditFixture.addEventListener("change", () => {
   elements.auditEvidencePreview.hidden = true;
 });
 elements.runAudit.addEventListener("click", runSelectedAudit);
+elements.evidenceReadinessList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-evaluate-evidence]");
+  if (button) void evaluateCompetitionEvidence(button.dataset.evaluateEvidence);
+});
 elements.viewAuditEvidence.addEventListener("click", showAuditEvidencePreview);
 elements.closeAuditEvidence.addEventListener("click", () => { elements.auditEvidencePreview.hidden = true; });
 elements.accountForm.addEventListener("submit", (event) => {

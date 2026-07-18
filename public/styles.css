@@ -2591,6 +2591,8 @@ body {
 .evidence-readiness-counts strong { font-size: .86rem; }
 .evidence-readiness-progress { height: 8px; overflow: hidden; background: var(--neutral-soft); border-radius: 4px; }
 .evidence-readiness-progress i { display: block; height: 100%; background: linear-gradient(90deg, #d84752 0 29%, #d68a12 30% 69%, #15956d 70%); border-radius: inherit; }
+.evidence-readiness-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding-top: 9px; border-top: 1px solid var(--border); }
+.evidence-readiness-actions span { color: var(--muted); font-size: .62rem; line-height: 1.4; }
 :root[data-theme="dark"] .evidence-readiness-card { background: #172435; }
 :root[data-theme="dark"] .evidence-readiness-counts div { background: #1e2e42; }
 
@@ -2602,4 +2604,6 @@ body {
   .evidence-readiness-grid { grid-template-columns: 1fr; }
   .evidence-readiness-card > header { grid-template-columns: auto minmax(0, 1fr); }
   .evidence-readiness-card header > strong { grid-column: 2; }
+  .evidence-readiness-actions { grid-template-columns: 1fr; }
+  .evidence-readiness-actions .button { width: 100%; }
 }

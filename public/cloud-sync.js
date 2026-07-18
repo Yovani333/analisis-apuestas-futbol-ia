@@ -57,7 +57,7 @@ function normalizeSession(payload) {
 
 function rowTimestamp(row = {}) {
   return Math.max(0, ...[
-    row.updatedAt, row.lastCheckedAt, row.deletedAt, row.resolvedAt,
+    row.updatedAt, row.lastCheckedAt, row.deletedAt, row.resolvedAt, row.auditedAt,
     row.savedAt, row.createdAt, row.addedAt, row.capturedAt
   ].map((value) => Date.parse(value || "") || 0));
 }
@@ -94,6 +94,10 @@ function timestamp(value) {
 function mergePreferences(local = {}, remote = {}) {
   const merged = { ...local, ...remote };
   merged.favoriteTeams = mergeFavoriteTeams(local.favoriteTeams, remote.favoriteTeams);
+  merged.evidenceAudits = mergeById(
+    Object.entries(local.evidenceAudits || {}).map(([id, value]) => ({ id, ...value })),
+    Object.entries(remote.evidenceAudits || {}).map(([id, value]) => ({ id, ...value }))
+  ).reduce((records, { id, ...value }) => ({ ...records, [id]: value }), {});
   const localThemeUpdatedAt = timestamp(local.themeUpdatedAt);
   const remoteThemeUpdatedAt = timestamp(remote.themeUpdatedAt);
   if (local.theme && (localThemeUpdatedAt > remoteThemeUpdatedAt || (localThemeUpdatedAt > 0 && localThemeUpdatedAt === remoteThemeUpdatedAt))) {

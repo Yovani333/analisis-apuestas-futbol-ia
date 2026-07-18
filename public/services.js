@@ -300,7 +300,12 @@ export const footballDataService = {
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...options.headers } });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error?.message || "No fue posible completar la solicitud.");
+  if (!response.ok) {
+    const error = new Error(payload.error?.message || "No fue posible completar la solicitud.");
+    error.code = payload.error?.code || "REQUEST_FAILED";
+    error.status = response.status;
+    throw error;
+  }
   return payload;
 }
 

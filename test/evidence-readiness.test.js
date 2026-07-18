@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EVIDENCE_READINESS_THRESHOLDS, summarizeEvidenceByCompetition } from "../public/evidence-readiness.js";
+import { EVIDENCE_READINESS_THRESHOLDS, pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "../public/evidence-readiness.js";
 
 function snapshot(index, { leagueId = 1, leagueName = "Copa Mundial FIFA", audited = true, capturedAt } = {}) {
   return {
@@ -41,4 +41,18 @@ test("excluye capturas posteriores al inicio y datos del fixture actual", () => 
   const future = snapshot(1, { capturedAt: "2026-09-01T10:00:00Z" });
   const leaked = { ...snapshot(2), currentFixtureStatisticsUsed: true };
   assert.deepEqual(summarizeEvidenceByCompetition([future, leaked]), []);
+});
+
+test("selecciona solo pendientes finalizadas de la competicion solicitada", () => {
+  const rows = [
+    snapshot(1, { audited: false, capturedAt: "2026-07-01T10:00:00Z" }),
+    snapshot(2, { audited: false, capturedAt: "2026-07-01T11:00:00Z" }),
+    snapshot(3, { leagueId: 169, leagueName: "Superliga China", audited: false })
+  ];
+  rows[0].fixture.utcDateTime = "2026-07-02T18:00:00Z";
+  rows[1].fixture.utcDateTime = "2026-09-02T18:00:00Z";
+  rows[2].fixture.utcDateTime = "2026-07-02T18:00:00Z";
+  const pending = pendingEvidenceForCompetition(rows, "league:1", new Date("2026-07-18T12:00:00Z"));
+  assert.deepEqual(pending.ready.map((row) => row.fixture.id), ["1"]);
+  assert.deepEqual(pending.waiting.map((row) => row.fixture.id), ["2"]);
 });

@@ -35,6 +35,14 @@ test("combina cambios del mismo parlay y conserva selecciones de ambos dispositi
   assert.deepEqual(merged.savedParlays[0].legs.map((leg) => leg.id), ["leg-1", "leg-2"]);
 });
 
+test("sincroniza auditorias de evidencias sin perder resultados de otro dispositivo", () => {
+  const merged = mergeCloudState(
+    { preferences: { evidenceAudits: { "ev-local": { auditedAt: "2026-07-18T10:00:00Z", auditSummary: { completed: true } } } } },
+    { preferences: { evidenceAudits: { "ev-remote": { auditedAt: "2026-07-18T11:00:00Z", auditSummary: { completed: true } } } } }
+  );
+  assert.deepEqual(Object.keys(merged.preferences.evidenceAudits).sort(), ["ev-local", "ev-remote"]);
+});
+
 test("extrae el usuario del JWT y rechaza sesiones invalidas", () => {
   const userId = "123e4567-e89b-12d3-a456-426614174000";
   assert.equal(cloudSyncInternals.userIdFromToken(token({ sub: userId })), userId);

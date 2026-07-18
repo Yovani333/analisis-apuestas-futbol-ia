@@ -12,6 +12,15 @@ function isValidPreMatchSnapshot(snapshot) {
   return capturedAt > 0 && (!kickoffAt || capturedAt < kickoffAt) && snapshot.currentFixtureStatisticsUsed !== true;
 }
 
+function competitionKey(snapshot) {
+  const fixture = snapshot?.fixture || {};
+  return fixture.leagueId ? `league:${fixture.leagueId}` : `name:${fixture.leagueName || "No disponible"}`;
+}
+
+function isEvaluated(snapshot) {
+  return Boolean(snapshot?.auditMetadata?.auditedAt && snapshot?.auditSummary?.completed === true);
+}
+
 function latestByFixture(snapshots = []) {
   const rows = new Map();
   for (const snapshot of Array.isArray(snapshots) ? snapshots : []) {
@@ -42,7 +51,7 @@ export function summarizeEvidenceByCompetition(snapshots = []) {
   const groups = new Map();
   for (const snapshot of latestByFixture(snapshots)) {
     const fixture = snapshot.fixture || {};
-    const key = fixture.leagueId ? `league:${fixture.leagueId}` : `name:${fixture.leagueName || "No disponible"}`;
+    const key = competitionKey(snapshot);
     const group = groups.get(key) || {
       key,
       leagueId: fixture.leagueId ?? null,
@@ -50,12 +59,16 @@ export function summarizeEvidenceByCompetition(snapshots = []) {
       collected: 0,
       evaluated: 0,
       pendingEvaluation: 0,
+      readyToEvaluate: 0,
       fixtures: []
     };
-    const evaluated = Boolean(snapshot.auditMetadata?.auditedAt && snapshot.auditSummary?.completed === true);
+    const evaluated = isEvaluated(snapshot);
+    const kickoffAt = timestamp(fixture.utcDateTime || fixture.date);
+    const readyToEvaluate = !evaluated && (!kickoffAt || kickoffAt <= Date.now());
     group.collected += 1;
     group.evaluated += evaluated ? 1 : 0;
     group.pendingEvaluation += evaluated ? 0 : 1;
+    group.readyToEvaluate += readyToEvaluate ? 1 : 0;
     group.fixtures.push(String(fixture.id));
     groups.set(key, group);
   }
@@ -68,6 +81,21 @@ export function summarizeEvidenceByCompetition(snapshots = []) {
       progressPct: Math.min(100, Number((group.evaluated / SUFFICIENT_MINIMUM * 100).toFixed(1)))
     };
   }).sort((a, b) => b.evaluated - a.evaluated || b.collected - a.collected || a.competition.localeCompare(b.competition, "es"));
+}
+
+export function pendingEvidenceForCompetition(snapshots = [], key, now = new Date()) {
+  const cutoff = now instanceof Date ? now.getTime() : timestamp(now);
+  const pending = latestByFixture(snapshots).filter((snapshot) => competitionKey(snapshot) === key && !isEvaluated(snapshot));
+  return {
+    ready: pending.filter((snapshot) => {
+      const kickoffAt = timestamp(snapshot.fixture?.utcDateTime || snapshot.fixture?.date);
+      return !kickoffAt || kickoffAt <= cutoff;
+    }),
+    waiting: pending.filter((snapshot) => {
+      const kickoffAt = timestamp(snapshot.fixture?.utcDateTime || snapshot.fixture?.date);
+      return kickoffAt > cutoff;
+    })
+  };
 }
 
 export const EVIDENCE_READINESS_THRESHOLDS = Object.freeze({ preliminary: PRELIMINARY_MINIMUM, sufficient: SUFFICIENT_MINIMUM });
