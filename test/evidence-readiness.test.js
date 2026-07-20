@@ -64,3 +64,17 @@ test("selecciona solo pendientes finalizadas de la competicion solicitada", () =
   assert.deepEqual(pending.ready.map((row) => row.fixture.id), ["1"]);
   assert.deepEqual(pending.waiting.map((row) => row.fixture.id), ["2"]);
 });
+
+test("aplaza temporalmente una evidencia cuyo resultado oficial aun no esta disponible", () => {
+  const row = snapshot(1, { audited: false, capturedAt: "2026-07-01T10:00:00Z" });
+  row.fixture.utcDateTime = "2026-07-18T08:00:00Z";
+  row.auditMetadata.nextEvaluationAt = "2026-07-18T13:00:00Z";
+
+  const beforeRetry = pendingEvidenceForCompetition([row], "league:1", new Date("2026-07-18T12:00:00Z"));
+  assert.deepEqual(beforeRetry.ready, []);
+  assert.deepEqual(beforeRetry.waiting.map((item) => item.fixture.id), ["1"]);
+  assert.equal(summarizeEvidenceByCompetition([row], new Date("2026-07-18T12:00:00Z"))[0].readyToEvaluate, 0);
+
+  const afterRetry = pendingEvidenceForCompetition([row], "league:1", new Date("2026-07-18T13:01:00Z"));
+  assert.deepEqual(afterRetry.ready.map((item) => item.fixture.id), ["1"]);
+});

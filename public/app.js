@@ -2818,8 +2818,14 @@ function allEvidenceSnapshots() {
     if (!audit) return snapshot;
     return {
       ...snapshot,
-      auditMetadata: { ...(snapshot.auditMetadata || {}), auditedAt: audit.auditedAt },
-      auditSummary: audit.auditSummary
+      auditMetadata: {
+        ...(snapshot.auditMetadata || {}),
+        ...(audit.auditedAt ? { auditedAt: audit.auditedAt } : {}),
+        ...(audit.lastCheckedAt ? { lastCheckedAt: audit.lastCheckedAt } : {}),
+        ...(audit.nextEvaluationAt ? { nextEvaluationAt: audit.nextEvaluationAt } : {}),
+        ...(audit.pendingCode ? { pendingCode: audit.pendingCode } : {})
+      },
+      auditSummary: audit.auditSummary || snapshot.auditSummary
     };
   });
 }
@@ -2916,6 +2922,26 @@ function markEvidenceAudited(evidence, audit, { render = true, sync = true } = {
   return Boolean(finalScore);
 }
 
+function deferEvidenceEvaluation(evidence, error) {
+  if (!evidence?.id) return null;
+  const checkedAt = new Date();
+  const live = error?.code === "FIXTURE_LIVE";
+  const retryDelayMs = live ? 15 * 60 * 1000 : 60 * 60 * 1000;
+  const nextEvaluationAt = new Date(checkedAt.getTime() + retryDelayMs).toISOString();
+  state.preferences.evidenceAudits = {
+    ...(state.preferences.evidenceAudits || {}),
+    [evidence.id]: {
+      ...(state.preferences.evidenceAudits?.[evidence.id] || {}),
+      lastCheckedAt: checkedAt.toISOString(),
+      nextEvaluationAt,
+      pendingCode: error?.code || "FIXTURE_NOT_FINISHED"
+    }
+  };
+  try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify(state.preferences)); }
+  catch { /* El aplazamiento sigue activo durante la sesión. */ }
+  return nextEvaluationAt;
+}
+
 async function evaluateCompetitionEvidence(competitionKey) {
   const pending = pendingEvidenceForCompetition(allEvidenceSnapshots(), competitionKey);
   if (state.evidenceEvaluationByCompetition.get(competitionKey)?.running) return;
@@ -2923,7 +2949,7 @@ async function evaluateCompetitionEvidence(competitionKey) {
     showNotice("No hay evidencias finalizadas pendientes en esta competición.");
     return;
   }
-  const progress = { running: true, processed: 0, total: pending.ready.length, completed: 0, waiting: pending.waiting.length, errors: 0, issues: [], message: "Consultando resultados finales…" };
+  const progress = { running: true, processed: 0, total: pending.ready.length, completed: 0, waiting: pending.waiting.length, errors: 0, issues: [], deferred: [], message: "Consultando resultados finales…" };
   state.evidenceEvaluationByCompetition.set(competitionKey, progress);
   renderEvidenceReadiness();
   for (const evidence of pending.ready) {
@@ -2937,19 +2963,26 @@ async function evaluateCompetitionEvidence(competitionKey) {
       if (error.code === "FIXTURE_POSTPONED") {
         purgeInvalidEvidenceSnapshots({ sync: false, render: false, evidenceIds: [evidence.id] });
         error.message = "Evidencia eliminada: el partido fue pospuesto.";
-      } else if (error.code === "FIXTURE_NOT_FINISHED" || error.status === 409) progress.waiting += 1;
-      else progress.errors += 1;
-      progress.issues.push({ fixtureLabel, message: error.message || "No se pudo completar la evaluación." });
+        progress.issues.push({ fixtureLabel, message: error.message });
+      } else if (["FIXTURE_NOT_FINISHED", "FIXTURE_LIVE"].includes(error.code)) {
+        progress.waiting += 1;
+        const nextEvaluationAt = deferEvidenceEvaluation(evidence, error);
+        progress.deferred.push({ fixtureLabel, nextEvaluationAt });
+      } else {
+        progress.errors += 1;
+        progress.issues.push({ fixtureLabel, message: error.message || "No se pudo completar la evaluación." });
+      }
     }
     progress.processed += 1;
     progress.message = `${progress.completed} completada(s) · ${progress.waiting} pendiente(s) · ${progress.errors} error(es)`;
     renderEvidenceReadiness();
   }
   progress.running = false;
-  if (progress.completed > 0 || progress.issues.some((issue) => issue.message.includes("Evidencia eliminada"))) queueCloudSync();
+  if (progress.completed > 0 || progress.deferred.length > 0 || progress.issues.some((issue) => issue.message.includes("Evidencia eliminada"))) queueCloudSync();
   renderAuditFixtureOptions();
   const issues = progress.issues.length ? `<div class="audit-pending-details"><h3>Evaluaciones que siguen pendientes</h3><ul>${progress.issues.map((issue) => `<li><strong>${escapeHtml(issue.fixtureLabel)}</strong><span>${escapeHtml(issue.message)}</span></li>`).join("")}</ul></div>` : "";
-  elements.auditResults.innerHTML = `<div class="detail-note detail-note--info"><strong>Evaluación por competición finalizada</strong><span>${escapeHtml(progress.message)}. Los encuentros futuros o todavía no finalizados conservan su estado pendiente.</span></div>${issues}`;
+  const deferred = progress.deferred.length ? `<div class="detail-note detail-note--info"><strong>Resultados oficiales todavía pendientes</strong><span>${escapeHtml(progress.deferred.map((row) => row.fixtureLabel).join(", "))}. La evidencia se conserva y el sistema aplaza un nuevo intento para evitar consultas repetidas.</span></div>` : "";
+  elements.auditResults.innerHTML = `<div class="detail-note detail-note--info"><strong>Evaluación por competición finalizada</strong><span>${escapeHtml(progress.message)}. Los encuentros futuros o todavía no finalizados conservan su estado pendiente.</span></div>${deferred}${issues}`;
   showNotice(progress.completed ? `${progress.completed} evidencia(s) evaluadas correctamente.` : "No había resultados finalizados disponibles para completar.");
 }
 

@@ -16,6 +16,12 @@ function isEvaluated(snapshot) {
   return Boolean(snapshot?.auditMetadata?.auditedAt && snapshot?.auditSummary?.completed === true);
 }
 
+function isReadyForEvaluation(snapshot, cutoff) {
+  const kickoffAt = timestamp(snapshot?.fixture?.utcDateTime || snapshot?.fixture?.date);
+  const nextEvaluationAt = timestamp(snapshot?.auditMetadata?.nextEvaluationAt);
+  return (!kickoffAt || kickoffAt <= cutoff) && (!nextEvaluationAt || nextEvaluationAt <= cutoff);
+}
+
 function latestByFixture(snapshots = []) {
   const rows = new Map();
   for (const snapshot of Array.isArray(snapshots) ? snapshots : []) {
@@ -42,7 +48,8 @@ function readiness(evaluated) {
   };
 }
 
-export function summarizeEvidenceByCompetition(snapshots = []) {
+export function summarizeEvidenceByCompetition(snapshots = [], now = new Date()) {
+  const cutoff = now instanceof Date ? now.getTime() : timestamp(now);
   const groups = new Map();
   for (const snapshot of latestByFixture(snapshots)) {
     const fixture = snapshot.fixture || {};
@@ -58,8 +65,7 @@ export function summarizeEvidenceByCompetition(snapshots = []) {
       fixtures: []
     };
     const evaluated = isEvaluated(snapshot);
-    const kickoffAt = timestamp(fixture.utcDateTime || fixture.date);
-    const readyToEvaluate = !evaluated && (!kickoffAt || kickoffAt <= Date.now());
+    const readyToEvaluate = !evaluated && isReadyForEvaluation(snapshot, cutoff);
     group.collected += 1;
     group.evaluated += evaluated ? 1 : 0;
     group.pendingEvaluation += evaluated ? 0 : 1;
@@ -83,14 +89,8 @@ export function pendingEvidenceForCompetition(snapshots = [], key, now = new Dat
   const cutoff = now instanceof Date ? now.getTime() : timestamp(now);
   const pending = latestByFixture(snapshots).filter((snapshot) => competitionKey(snapshot) === key && !isEvaluated(snapshot));
   return {
-    ready: pending.filter((snapshot) => {
-      const kickoffAt = timestamp(snapshot.fixture?.utcDateTime || snapshot.fixture?.date);
-      return !kickoffAt || kickoffAt <= cutoff;
-    }),
-    waiting: pending.filter((snapshot) => {
-      const kickoffAt = timestamp(snapshot.fixture?.utcDateTime || snapshot.fixture?.date);
-      return kickoffAt > cutoff;
-    })
+    ready: pending.filter((snapshot) => isReadyForEvaluation(snapshot, cutoff)),
+    waiting: pending.filter((snapshot) => !isReadyForEvaluation(snapshot, cutoff))
   };
 }
 
