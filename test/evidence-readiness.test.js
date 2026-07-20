@@ -45,6 +45,12 @@ test("excluye capturas posteriores al inicio y datos del fixture actual", () => 
   assert.deepEqual(summarizeEvidenceByCompetition([future, leaked]), []);
 });
 
+test("excluye evidencias de fixtures pospuestos", () => {
+  const postponed = snapshot(4);
+  postponed.fixture.status = "postponed";
+  assert.deepEqual(summarizeEvidenceByCompetition([postponed]), []);
+});
+
 test("selecciona solo pendientes finalizadas de la competicion solicitada", () => {
   const rows = [
     snapshot(1, { audited: false, capturedAt: "2026-07-01T10:00:00Z" }),

@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import { AppError } from "../errors.js";
+import { filterValidEvidenceSnapshots } from "../../public/evidence-validity.js";
 
 const MAX_SYNC_BYTES = 1_500_000;
 const MAX_WATCHLIST_FIXTURES = 100;
@@ -72,7 +73,10 @@ function normalizedState(value = {}) {
     preferences: value.preferences && typeof value.preferences === "object" && !Array.isArray(value.preferences) ? value.preferences : {},
     analysis_usage: value.analysisUsage && typeof value.analysisUsage === "object" && !Array.isArray(value.analysisUsage) ? value.analysisUsage : {}
   };
-  for (const [key, [rows, limit]] of Object.entries(arrays)) state[key] = Array.isArray(rows) ? rows.slice(0, limit) : [];
+  for (const [key, [rows, limit]] of Object.entries(arrays)) {
+    const values = key === "evidence_snapshots" ? filterValidEvidenceSnapshots(rows) : rows;
+    state[key] = Array.isArray(values) ? values.slice(0, limit) : [];
+  }
   if (Buffer.byteLength(JSON.stringify(state), "utf8") > MAX_SYNC_BYTES) {
     throw new AppError("Los datos locales exceden el limite de sincronizacion. Descarga evidencias antiguas antes de continuar.", 413, "CLOUD_STATE_TOO_LARGE");
   }
@@ -166,13 +170,14 @@ function mergeEvidenceSnapshots(manualRows, automaticRows) {
   const rows = new Map();
   for (const row of Array.isArray(manualRows) ? manualRows : []) if (row?.id) rows.set(String(row.id), row);
   for (const row of Array.isArray(automaticRows) ? automaticRows : []) if (row?.snapshot?.id) rows.set(String(row.snapshot.id), row.snapshot);
-  return [...rows.values()].sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0)).slice(0, 500);
+  return filterValidEvidenceSnapshots([...rows.values()])
+    .sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0)).slice(0, 500);
 }
 
 export async function saveCloudEvidenceSnapshots(authorization, input = {}) {
   const token = bearerToken(authorization);
   const userId = userIdFromToken(token);
-  const snapshots = (Array.isArray(input.snapshots) ? input.snapshots : []).slice(0, 20)
+  const snapshots = filterValidEvidenceSnapshots(Array.isArray(input.snapshots) ? input.snapshots : []).slice(0, 20)
     .filter((snapshot) => snapshot?.id && typeof snapshot === "object");
   if (!snapshots.length) return { received: 0 };
   const payload = snapshots.map((snapshot) => ({

@@ -96,6 +96,21 @@ test("omite una captura si el encuentro ya inicio", async () => {
   assert.equal(updated.changes.status, "skipped");
 });
 
+test("descarta sin reintentar una evidencia cuando el fixture fue pospuesto", async () => {
+  let saved = 0;
+  let updated = null;
+  const row = { user_id: "u1", fixture_id: "12345", fixture_date: "2026-07-12T19:00:00.000Z", attempts: 0 };
+  const result = await automaticEvidenceInternals.processWatchRow(row, NOW, {
+    getDataset: async () => ({ ...dataset(), fixture: { ...dataset().fixture, status: "postponed" } }),
+    saveEvidence: async () => { saved += 1; },
+    updateWatch: async (watch, changes) => { updated = { watch, changes }; }
+  });
+  assert.equal(result.status, "skipped");
+  assert.equal(result.reason, "invalid_fixture_status");
+  assert.equal(saved, 0);
+  assert.equal(updated.changes.status, "skipped");
+});
+
 test("reintenta fallos temporales y falla de forma controlada al tercer intento", async () => {
   const row = { user_id: "u1", fixture_id: "88", fixture_date: "2026-07-12T19:00:00.000Z", attempts: 0 };
   let updated = null;

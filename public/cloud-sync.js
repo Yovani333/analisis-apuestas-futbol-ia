@@ -1,4 +1,5 @@
 import { mergeFavoriteTeams } from "./favorite-teams.js";
+import { filterValidEvidenceSnapshots, isValidEvidenceSnapshot } from "./evidence-validity.js";
 
 export const CLOUD_SESSION_KEY = "football-ai.cloud-session.v1";
 export const CLOUD_INITIALIZED_USERS_KEY = "football-ai.cloud-initialized-users.v1";
@@ -94,10 +95,14 @@ function timestamp(value) {
 function mergePreferences(local = {}, remote = {}) {
   const merged = { ...local, ...remote };
   merged.favoriteTeams = mergeFavoriteTeams(local.favoriteTeams, remote.favoriteTeams);
+  merged.removedEvidenceIds = [...new Set([
+    ...(Array.isArray(local.removedEvidenceIds) ? local.removedEvidenceIds : []),
+    ...(Array.isArray(remote.removedEvidenceIds) ? remote.removedEvidenceIds : [])
+  ].map(String))].slice(-500);
   merged.evidenceAudits = mergeById(
     Object.entries(local.evidenceAudits || {}).map(([id, value]) => ({ id, ...value })),
     Object.entries(remote.evidenceAudits || {}).map(([id, value]) => ({ id, ...value }))
-  ).reduce((records, { id, ...value }) => ({ ...records, [id]: value }), {});
+  ).reduce((records, { id, ...value }) => merged.removedEvidenceIds.includes(String(id)) ? records : ({ ...records, [id]: value }), {});
   const localThemeUpdatedAt = timestamp(local.themeUpdatedAt);
   const remoteThemeUpdatedAt = timestamp(remote.themeUpdatedAt);
   if (local.theme && (localThemeUpdatedAt > remoteThemeUpdatedAt || (localThemeUpdatedAt > 0 && localThemeUpdatedAt === remoteThemeUpdatedAt))) {
@@ -123,12 +128,19 @@ function mergeParlayDraft(local = {}, remote = {}) {
 }
 
 export function mergeCloudState(local = {}, remote = {}) {
+  const preferences = mergePreferences(local.preferences, remote.preferences);
+  const removedIds = new Set(preferences.removedEvidenceIds || []);
+  const mergedEvidence = mergeById(local.evidenceSnapshots, remote.evidence_snapshots ?? remote.evidenceSnapshots);
+  const invalidIds = mergedEvidence.filter((row) => row?.id && !isValidEvidenceSnapshot(row)).map((row) => String(row.id));
+  preferences.removedEvidenceIds = [...new Set([...removedIds, ...invalidIds])].slice(-500);
+  const evidenceSnapshots = filterValidEvidenceSnapshots(mergedEvidence)
+    .filter((row) => !preferences.removedEvidenceIds.includes(String(row.id)));
   return {
-    preferences: mergePreferences(local.preferences, remote.preferences),
+    preferences,
     parlayDraft: mergeParlayDraft(local, remote).slice(0, 12),
     savedPicks: mergeById(local.savedPicks, remote.saved_picks ?? remote.savedPicks),
     savedParlays: mergeById(local.savedParlays, remote.saved_parlays ?? remote.savedParlays),
-    evidenceSnapshots: mergeById(local.evidenceSnapshots, remote.evidence_snapshots ?? remote.evidenceSnapshots),
+    evidenceSnapshots,
     alerts: mergeById(local.alerts, remote.alerts),
     analysisUsage: { ...(local.analysisUsage || {}), ...(remote.analysis_usage ?? remote.analysisUsage ?? {}) },
     updatedAt: remote.updated_at || remote.updatedAt || null
@@ -192,7 +204,7 @@ function compactEvidenceSnapshot(row = {}, { maxText = MAX_SYNC_EVIDENCE_TEXT, m
 export function prepareEvidenceSyncBatches(rows = [], batchSize = 10) {
   const size = Math.max(1, Math.min(20, Number(batchSize) || 10));
   const unique = new Map();
-  for (const row of Array.isArray(rows) ? rows : []) {
+  for (const row of filterValidEvidenceSnapshots(rows)) {
     if (!row?.id) continue;
     const current = unique.get(String(row.id));
     if (!current || rowTimestamp(row) >= rowTimestamp(current)) unique.set(String(row.id), row);
@@ -208,7 +220,7 @@ export function compactCloudStateForSync(state = {}, { aggressive = false } = {}
   const evidenceTextLimit = aggressive ? AGGRESSIVE_EVIDENCE_TEXT : MAX_SYNC_EVIDENCE_TEXT;
   const maxArray = aggressive ? 30 : 80;
   const evidenceSnapshots = Array.isArray(state.evidenceSnapshots)
-    ? [...state.evidenceSnapshots]
+    ? filterValidEvidenceSnapshots(state.evidenceSnapshots)
       .sort((a, b) => rowTimestamp(b) - rowTimestamp(a))
       .slice(0, evidenceLimit)
       .map((row) => compactEvidenceSnapshot(row, { maxText: evidenceTextLimit, maxArray }))

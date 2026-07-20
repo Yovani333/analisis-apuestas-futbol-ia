@@ -1,15 +1,10 @@
+import { isValidEvidenceSnapshot } from "./evidence-validity.js";
+
 const PRELIMINARY_MINIMUM = 30;
 const SUFFICIENT_MINIMUM = 100;
 
 function timestamp(value) {
   return Date.parse(value || "") || 0;
-}
-
-function isValidPreMatchSnapshot(snapshot) {
-  if (!snapshot?.fixture?.id || !snapshot?.capturedAt) return false;
-  const capturedAt = timestamp(snapshot.capturedAt);
-  const kickoffAt = timestamp(snapshot.fixture.utcDateTime);
-  return capturedAt > 0 && (!kickoffAt || capturedAt < kickoffAt) && snapshot.currentFixtureStatisticsUsed !== true;
 }
 
 function competitionKey(snapshot) {
@@ -24,7 +19,7 @@ function isEvaluated(snapshot) {
 function latestByFixture(snapshots = []) {
   const rows = new Map();
   for (const snapshot of Array.isArray(snapshots) ? snapshots : []) {
-    if (!isValidPreMatchSnapshot(snapshot)) continue;
+    if (!isValidEvidenceSnapshot(snapshot)) continue;
     const fixtureId = String(snapshot.fixture.id);
     const current = rows.get(fixtureId);
     if (!current || (isEvaluated(snapshot) && !isEvaluated(current)) || (isEvaluated(snapshot) === isEvaluated(current) && timestamp(snapshot.capturedAt) > timestamp(current.capturedAt))) rows.set(fixtureId, snapshot);

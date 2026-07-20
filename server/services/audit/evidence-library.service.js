@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { ALLOWED_LEAGUES } from "../../config/leagues.js";
+import { filterValidEvidenceSnapshots } from "../../../public/evidence-validity.js";
 
 const LIBRARY_PATH = new URL("../../../docs/evidence-library.json", import.meta.url);
 
@@ -72,12 +73,14 @@ function reportSnapshot(report) {
 
 export function loadEvidenceLibrary() {
   const payload = JSON.parse(readFileSync(LIBRARY_PATH, "utf8"));
+  const snapshots = filterValidEvidenceSnapshots((payload.reports || []).map(reportSnapshot));
   return {
     label: payload.label,
     generatedAt: payload.generatedAt,
     competitions: payload.competitions || [],
     duplicatesIgnored: payload.duplicatesIgnored || 0,
-    count: payload.reports?.length || 0,
-    snapshots: (payload.reports || []).map(reportSnapshot)
+    count: snapshots.length,
+    invalidRemoved: Number(payload.invalidRemoved || 0) + Math.max(0, (payload.reports?.length || 0) - snapshots.length),
+    snapshots
   };
 }

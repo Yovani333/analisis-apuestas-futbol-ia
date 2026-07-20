@@ -4,8 +4,10 @@ import { loadEvidenceLibrary } from "../server/services/audit/evidence-library.s
 
 test("carga evidencias de Mundial y Superliga China sin duplicar fixtures", () => {
   const library = loadEvidenceLibrary();
-  assert.equal(library.snapshots.length, 18);
-  assert.equal(new Set(library.snapshots.map((snapshot) => snapshot.fixture.id)).size, 18);
+  assert.equal(library.snapshots.length, 17);
+  assert.equal(new Set(library.snapshots.map((snapshot) => snapshot.fixture.id)).size, 17);
+  assert.equal(library.snapshots.some((snapshot) => snapshot.fixture.id === "1570714"), false);
+  assert.equal(library.invalidRemoved, 1);
   assert.deepEqual(new Set(library.snapshots.map((snapshot) => snapshot.fixture.leagueName)), new Set(["Copa Mundial FIFA", "Superliga China"]));
   assert.ok(library.snapshots.some((snapshot) => snapshot.fixture.leagueSlug === "chinese-super-league"));
   for (const snapshot of library.snapshots) {

@@ -43,6 +43,34 @@ test("sincroniza auditorias de evidencias sin perder resultados de otro disposit
   assert.deepEqual(Object.keys(merged.preferences.evidenceAudits).sort(), ["ev-local", "ev-remote"]);
 });
 
+test("una evidencia eliminada no reaparece desde otro dispositivo", () => {
+  const validRemote = {
+    version: 2,
+    id: "ev-removed",
+    capturedAt: "2026-07-18T10:00:00Z",
+    fixture: { id: "81", home: "A", away: "B", status: "scheduled", utcDateTime: "2026-07-18T12:00:00Z" }
+  };
+  const merged = mergeCloudState(
+    { preferences: { removedEvidenceIds: ["ev-removed"] }, evidenceSnapshots: [] },
+    { preferences: { evidenceAudits: { "ev-removed": { auditedAt: "2026-07-19T10:00:00Z" } } }, evidence_snapshots: [validRemote] }
+  );
+  assert.deepEqual(merged.evidenceSnapshots, []);
+  assert.deepEqual(merged.preferences.removedEvidenceIds, ["ev-removed"]);
+  assert.equal(merged.preferences.evidenceAudits["ev-removed"], undefined);
+});
+
+test("sincronizacion descarta evidencia estructurada capturada despues del inicio", () => {
+  const invalid = {
+    version: 2,
+    id: "ev-invalid",
+    capturedAt: "2026-07-18T12:01:00Z",
+    fixture: { id: "82", home: "A", away: "B", status: "scheduled", utcDateTime: "2026-07-18T12:00:00Z" }
+  };
+  const merged = mergeCloudState({ evidenceSnapshots: [invalid] }, {});
+  assert.deepEqual(merged.evidenceSnapshots, []);
+  assert.deepEqual(merged.preferences.removedEvidenceIds, ["ev-invalid"]);
+});
+
 test("extrae el usuario del JWT y rechaza sesiones invalidas", () => {
   const userId = "123e4567-e89b-12d3-a456-426614174000";
   assert.equal(cloudSyncInternals.userIdFromToken(token({ sub: userId })), userId);

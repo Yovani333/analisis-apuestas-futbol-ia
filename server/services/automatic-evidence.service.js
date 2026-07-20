@@ -10,6 +10,7 @@ import {
 } from "./cloud-sync.service.js";
 import { calculatePoissonModel } from "./poisson-model.service.js";
 import { calculateTeamGoalProbability } from "./team-goal-probability.service.js";
+import { isInvalidEvidenceFixtureStatus, isValidEvidenceSnapshot } from "../../public/evidence-validity.js";
 
 const fallback = (warning) => ({ status: "not_available", warning, picks: [], suggestedMarkets: [] });
 let activeCycle = null;
@@ -23,7 +24,7 @@ export function createServerEvidenceSnapshot(dataset, now = new Date(), { captur
   try { poisson = dataset.poissonModel || calculatePoissonModel(dataset); } catch { poisson = fallback("Poisson no disponible al capturar."); }
   try { teamGoals = dataset.teamGoalProbability || calculateTeamGoalProbability(dataset); } catch { teamGoals = fallback("Gol por equipo no disponible al capturar."); }
   try { corners = dataset.cornersModel || calculateCornersModel(dataset); } catch { corners = fallback("Corners no disponibles al capturar."); }
-  return structuredClone({
+  const snapshot = structuredClone({
     version: 2,
     id: `${fixture.id}:${now.getTime()}`,
     capturedAt: now.toISOString(),
@@ -70,6 +71,8 @@ export function createServerEvidenceSnapshot(dataset, now = new Date(), { captur
     currentFixtureStatisticsUsed: false,
     openAiUsed: false
   });
+  if (!isValidEvidenceSnapshot(snapshot)) throw new TypeError("La evidencia automatica no es auditable o el fixture ya no es valido.");
+  return snapshot;
 }
 
 export function createAutomaticEvidenceSnapshot(dataset, now = new Date()) {
@@ -96,6 +99,15 @@ async function processWatchRow(row, now, dependencies) {
   }
   try {
     const dataset = await dependencies.getDataset(row.fixture_id, { forceRefresh: false, includeHistorical: true });
+    if (isInvalidEvidenceFixtureStatus(dataset?.fixture?.status)) {
+      await dependencies.updateWatch(row, {
+        status: "skipped",
+        attempts: Number(row.attempts || 0) + 1,
+        last_error: "Evidencia descartada: el partido fue pospuesto, cancelado o suspendido.",
+        updated_at: now.toISOString()
+      });
+      return { fixtureId: String(row.fixture_id), status: "skipped", reason: "invalid_fixture_status" };
+    }
     if (dataset?.fixture?.status !== "scheduled") throw new TypeError("El fixture ya no esta programado.");
     const snapshot = createAutomaticEvidenceSnapshot(dataset, now);
     await dependencies.saveEvidence(row, snapshot, now);

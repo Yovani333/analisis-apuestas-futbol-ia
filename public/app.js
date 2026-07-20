@@ -5,15 +5,16 @@ import {
   calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settlePickResult
 } from "./parlay-store.js?v=20260718-origin-results-v1";
-import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260714-evidence-audit-v1";
+import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260713-dashboard-fixes-v2";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260718-evidence-sync-v1";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260719-remove-invalid-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-expected-corners-v1";
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
-import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260718-evidence-batch-v2";
+import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260719-remove-invalid-v1";
+import { filterValidEvidenceSnapshots, isValidEvidenceSnapshot } from "./evidence-validity.js?v=20260719-remove-invalid-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -356,7 +357,7 @@ function applyCloudState(remoteState) {
     state.parlayDraft = remoteState.parlayDraft || [];
     state.savedPicks = remoteState.savedPicks || [];
     state.savedParlays = remoteState.savedParlays || [];
-    state.evidenceSnapshots = remoteState.evidenceSnapshots || [];
+    state.evidenceSnapshots = filterValidEvidenceSnapshots(remoteState.evidenceSnapshots || []);
     state.alerts = remoteState.alerts || [];
     saveParlayDraft(state.parlayDraft);
     saveSavedPicks(state.savedPicks);
@@ -2808,7 +2809,10 @@ function showAnalysisEmpty() {
 
 function allEvidenceSnapshots() {
   const rows = new Map();
-  for (const snapshot of [...state.evidenceLibrary, ...state.evidenceSnapshots]) if (snapshot?.id) rows.set(String(snapshot.id), snapshot);
+  const removedIds = new Set((state.preferences.removedEvidenceIds || []).map(String));
+  for (const snapshot of [...state.evidenceLibrary, ...state.evidenceSnapshots]) {
+    if (snapshot?.id && !removedIds.has(String(snapshot.id))) rows.set(String(snapshot.id), snapshot);
+  }
   return [...rows.values()].map((snapshot) => {
     const audit = state.preferences.evidenceAudits?.[snapshot.id];
     if (!audit) return snapshot;
@@ -2818,6 +2822,40 @@ function allEvidenceSnapshots() {
       auditSummary: audit.auditSummary
     };
   });
+}
+
+function purgeInvalidEvidenceSnapshots({ sync = false, render = true, evidenceIds = [] } = {}) {
+  const fixtureStatuses = new Map(state.fixtures.map((fixture) => [String(fixture.id), fixture.statusShort || fixture.status]));
+  const requestedIds = new Set([
+    ...(Array.isArray(state.preferences.removedEvidenceIds) ? state.preferences.removedEvidenceIds : []),
+    ...(Array.isArray(evidenceIds) ? evidenceIds : [])
+  ].map(String));
+  const localBefore = Array.isArray(state.evidenceSnapshots) ? state.evidenceSnapshots : [];
+  const libraryBefore = Array.isArray(state.evidenceLibrary) ? state.evidenceLibrary : [];
+  const shouldKeep = (snapshot) => !requestedIds.has(String(snapshot?.id || ""))
+    && isValidEvidenceSnapshot(snapshot, fixtureStatuses.get(String(snapshot?.fixture?.id || "")) || "");
+  const localAfter = localBefore.filter(shouldKeep);
+  const libraryAfter = libraryBefore.filter(shouldKeep);
+  const removed = [...localBefore, ...libraryBefore].filter((snapshot) => !shouldKeep(snapshot));
+  if (!removed.length) return 0;
+  const removedIds = new Set([
+    ...(Array.isArray(state.preferences.removedEvidenceIds) ? state.preferences.removedEvidenceIds : []),
+    ...removed.map((snapshot) => String(snapshot.id)).filter(Boolean)
+  ]);
+  state.evidenceSnapshots = localAfter;
+  state.evidenceLibrary = libraryAfter;
+  state.preferences.removedEvidenceIds = [...removedIds].slice(-500);
+  if (state.preferences.evidenceAudits) {
+    state.preferences.evidenceAudits = Object.fromEntries(Object.entries(state.preferences.evidenceAudits)
+      .filter(([id]) => !removedIds.has(String(id))));
+  }
+  try {
+    localStorage.setItem(EVIDENCE_SNAPSHOTS_KEY, JSON.stringify(localAfter));
+    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(state.preferences));
+  } catch { /* La limpieza sigue aplicada durante la sesion. */ }
+  if (sync) queueCloudSync();
+  if (render) renderAuditFixtureOptions();
+  return removed.length;
 }
 
 function renderEvidenceReadiness() {
@@ -2896,7 +2934,10 @@ async function evaluateCompetitionEvidence(competitionKey) {
       else progress.errors += 1;
     } catch (error) {
       const fixtureLabel = `${evidence.fixture?.home || "Local"} vs ${evidence.fixture?.away || "Visitante"}`;
-      if (error.code === "FIXTURE_NOT_FINISHED" || error.status === 409) progress.waiting += 1;
+      if (error.code === "FIXTURE_POSTPONED") {
+        purgeInvalidEvidenceSnapshots({ sync: false, render: false, evidenceIds: [evidence.id] });
+        error.message = "Evidencia eliminada: el partido fue pospuesto.";
+      } else if (error.code === "FIXTURE_NOT_FINISHED" || error.status === 409) progress.waiting += 1;
       else progress.errors += 1;
       progress.issues.push({ fixtureLabel, message: error.message || "No se pudo completar la evaluación." });
     }
@@ -2905,7 +2946,7 @@ async function evaluateCompetitionEvidence(competitionKey) {
     renderEvidenceReadiness();
   }
   progress.running = false;
-  if (progress.completed > 0) queueCloudSync();
+  if (progress.completed > 0 || progress.issues.some((issue) => issue.message.includes("Evidencia eliminada"))) queueCloudSync();
   renderAuditFixtureOptions();
   const issues = progress.issues.length ? `<div class="audit-pending-details"><h3>Evaluaciones que siguen pendientes</h3><ul>${progress.issues.map((issue) => `<li><strong>${escapeHtml(issue.fixtureLabel)}</strong><span>${escapeHtml(issue.message)}</span></li>`).join("")}</ul></div>` : "";
   elements.auditResults.innerHTML = `<div class="detail-note detail-note--info"><strong>Evaluación por competición finalizada</strong><span>${escapeHtml(progress.message)}. Los encuentros futuros o todavía no finalizados conservan su estado pendiente.</span></div>${issues}`;
@@ -2919,7 +2960,10 @@ function selectedAuditEvidence() {
 async function loadEvidenceLibrary() {
   if (state.evidenceLibrary.length || state.isLoadingEvidenceLibrary) return;
   state.isLoadingEvidenceLibrary = true;
-  try { state.evidenceLibrary = await footballDataService.getEvidenceLibrary(); }
+  try {
+    state.evidenceLibrary = await footballDataService.getEvidenceLibrary();
+    purgeInvalidEvidenceSnapshots({ sync: true, render: false });
+  }
   catch (error) { showNotice(error.message || "No se pudo cargar la biblioteca de evidencias."); }
   finally { state.isLoadingEvidenceLibrary = false; renderAuditFixtureOptions(); }
 }
@@ -2984,7 +3028,13 @@ async function runSelectedAudit() {
     renderAuditResults(audit);
     markEvidenceAudited(evidence, audit);
   }
-  catch (error) { elements.auditResults.innerHTML = `<div class="saved-empty"><h3>No se pudo ejecutar la auditoría</h3><p>${escapeHtml(error.message)}</p></div>`; }
+  catch (error) {
+    const evidence = selectedAuditEvidence();
+    if (error.code === "FIXTURE_POSTPONED" && evidence) {
+      purgeInvalidEvidenceSnapshots({ sync: true, evidenceIds: [evidence.id] });
+      elements.auditResults.innerHTML = '<div class="saved-empty"><h3>Evidencia eliminada</h3><p>El partido fue pospuesto y ya no forma parte de la auditoría.</p></div>';
+    } else elements.auditResults.innerHTML = `<div class="saved-empty"><h3>No se pudo ejecutar la auditoría</h3><p>${escapeHtml(error.message)}</p></div>`;
+  }
   finally { elements.runAudit.disabled = false; elements.runAudit.textContent = "Ejecutar auditoría"; }
 }
 
@@ -3789,6 +3839,7 @@ async function refreshFixtureStatuses() {
           ? result.penaltyScore : fixture.penaltyScore
       };
     });
+    purgeInvalidEvidenceSnapshots({ sync: true, render: false });
     renderMatches();
     if (selectedFixture()) renderFixtureData();
     showNotice(`Estados actualizados: ${byId.size} de ${apiFixtures.length} partido(s).`);
@@ -3938,6 +3989,7 @@ async function searchFixtures(event) {
       dateTo: elements.dateTo.value,
       status: elements.status.value
     });
+    purgeInvalidEvidenceSnapshots({ sync: true, render: false });
     const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
     const validCount = state.fixtures.length;
     elements.searchFeedback.textContent = `${validCount} ${validCount === 1 ? "encuentro válido" : "encuentros válidos"} desde ${source} · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
