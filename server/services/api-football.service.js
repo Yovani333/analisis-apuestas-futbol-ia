@@ -1333,22 +1333,130 @@ export async function refreshFixtureWeather(fixtureId, { forceRefresh = true } =
   };
 }
 
+function resultNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(typeof value === "string" ? value.trim().replace("%", "") : value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function resultScore(value) {
+  return { home: resultNumber(value?.home), away: resultNumber(value?.away) };
+}
+
+function resultStatValue(row, aliases) {
+  const names = aliases.map((value) => String(value).toLowerCase());
+  const raw = row?.statistics?.find((stat) => names.includes(String(stat?.type || "").toLowerCase()))?.value;
+  return resultNumber(typeof raw === "string" ? raw.replace("%", "") : raw);
+}
+
+function resultTeamRows(statistics, row) {
+  const rows = Array.isArray(statistics) ? statistics : [];
+  const find = (side) => rows.find((item) => String(item?.team?.id || "") === String(row?.teams?.[side]?.id || ""))
+    || rows.find((item) => String(item?.team?.name || "").toLowerCase() === String(row?.teams?.[side]?.name || "").toLowerCase());
+  return { home: find("home"), away: find("away") };
+}
+
+function resultFixtureStatistics(statistics, row) {
+  const teams = resultTeamRows(statistics, row);
+  const homeCorners = resultStatValue(teams.home, ["Corner Kicks"]);
+  const awayCorners = resultStatValue(teams.away, ["Corner Kicks"]);
+  const cornersAvailable = homeCorners !== null || awayCorners !== null;
+  const corners = cornersAvailable ? {
+    home: homeCorners,
+    away: awayCorners,
+    total: homeCorners !== null && awayCorners !== null ? homeCorners + awayCorners : null
+  } : null;
+
+  const cardsFor = (team) => {
+    const yellow = resultStatValue(team, ["Yellow Cards"]);
+    const red = resultStatValue(team, ["Red Cards"]);
+    return { yellow, red, total: yellow !== null && red !== null ? yellow + red : null };
+  };
+  const homeCards = cardsFor(teams.home);
+  const awayCards = cardsFor(teams.away);
+  const cardsAvailable = [homeCards.yellow, homeCards.red, awayCards.yellow, awayCards.red].some((value) => value !== null);
+  const cards = cardsAvailable ? {
+    home: homeCards.total,
+    away: awayCards.total,
+    total: homeCards.total !== null && awayCards.total !== null ? homeCards.total + awayCards.total : null,
+    breakdown: { home: homeCards, away: awayCards }
+  } : null;
+  return { corners, cards };
+}
+
+function normalizeResultPlayers(players) {
+  if (!Array.isArray(players)) return null;
+  const normalized = players.flatMap((team) => (Array.isArray(team?.players) ? team.players : []).map((entry) => {
+    const stats = Array.isArray(entry?.statistics) ? entry.statistics[0] || {} : {};
+    return {
+      playerId: entry?.player?.id ?? null,
+      playerName: entry?.player?.name || null,
+      teamId: team?.team?.id ?? null,
+      teamName: team?.team?.name || null,
+      minutes: resultNumber(stats.games?.minutes),
+      position: stats.games?.position || null,
+      substitute: typeof stats.games?.substitute === "boolean" ? stats.games.substitute : null,
+      rating: resultNumber(stats.games?.rating),
+      goals: resultNumber(stats.goals?.total),
+      assists: resultNumber(stats.goals?.assists),
+      shots: { total: resultNumber(stats.shots?.total), onTarget: resultNumber(stats.shots?.on) },
+      passes: { total: resultNumber(stats.passes?.total), key: resultNumber(stats.passes?.key), accuracy: resultNumber(stats.passes?.accuracy) },
+      cards: { yellow: resultNumber(stats.cards?.yellow), red: resultNumber(stats.cards?.red) }
+    };
+  }));
+  return normalized.length ? normalized : null;
+}
+
+function advancedTeam(row, shortStatus, penaltyScore) {
+  let side = null;
+  if (shortStatus === "PEN" && penaltyScore.home !== null && penaltyScore.away !== null && penaltyScore.home !== penaltyScore.away) {
+    side = penaltyScore.home > penaltyScore.away ? "home" : "away";
+  } else if (shortStatus === "AET") {
+    const goals = resultScore(row?.goals);
+    if (goals.home !== null && goals.away !== null && goals.home !== goals.away) side = goals.home > goals.away ? "home" : "away";
+  }
+  return side ? { side, id: row?.teams?.[side]?.id ?? null, name: row?.teams?.[side]?.name || null } : null;
+}
+
+export function normalizeFixtureResult(row, { statistics = [], players = [] } = {}) {
+  const shortStatus = row?.fixture?.status?.short || "TBD";
+  const halftimeScore = resultScore(row?.score?.halftime);
+  const regulationGoals = resultScore(row?.score?.fulltime);
+  const extraTimeScore = resultScore(row?.score?.extratime);
+  const penaltyScore = resultScore(row?.score?.penalty);
+  const fixtureStatistics = resultFixtureStatistics(statistics, row);
+  return {
+    fixtureId: String(row?.fixture?.id || ""),
+    status: shortStatus,
+    statusLabel: statusLabel(shortStatus),
+    appStatus: fixtureStatus(shortStatus),
+    elapsed: row?.fixture?.status?.elapsed ?? null,
+    finished: ["FT", "AET", "PEN"].includes(shortStatus),
+    goals: resultScore(row?.goals),
+    penaltyScore,
+    date: row?.fixture?.date,
+    home: row?.teams?.home?.name,
+    away: row?.teams?.away?.name,
+    officialStatus: { short: shortStatus, long: row?.fixture?.status?.long || null, elapsed: row?.fixture?.status?.elapsed ?? null },
+    halftimeScore,
+    regulationGoals,
+    fulltimeScore: regulationGoals,
+    extraTimeScore,
+    score: { halftime: halftimeScore, fulltime: regulationGoals, extratime: extraTimeScore, penalty: penaltyScore },
+    advancedTeam: advancedTeam(row, shortStatus, penaltyScore),
+    corners: fixtureStatistics.corners,
+    cards: fixtureStatistics.cards,
+    playerStatistics: normalizeResultPlayers(players)
+  };
+}
+
 export async function getFixtureResult(fixtureId) {
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const row = fixtureRows[0];
   if (!row) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
-  const shortStatus = row.fixture.status?.short || "TBD";
-  return {
-    fixtureId: String(row.fixture.id),
-    status: shortStatus,
-    statusLabel: statusLabel(shortStatus),
-    appStatus: fixtureStatus(shortStatus),
-    elapsed: row.fixture.status?.elapsed ?? null,
-    finished: ["FT", "AET", "PEN"].includes(shortStatus),
-    goals: { home: row.goals?.home ?? null, away: row.goals?.away ?? null },
-    penaltyScore: { home: row.score?.penalty?.home ?? null, away: row.score?.penalty?.away ?? null },
-    date: row.fixture.date,
-    home: row.teams?.home?.name,
-    away: row.teams?.away?.name
-  };
+  const cachedDataset = getCachedFixtureDataset(fixtureId);
+  return normalizeFixtureResult(row, {
+    statistics: cachedDataset?.confirmed?.statistics,
+    players: cachedDataset?.confirmed?.players
+  });
 }
