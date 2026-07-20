@@ -46,3 +46,32 @@ test("filtra evidencia invalida usando el estado actual del fixture", () => {
   const statuses = new Map([["200", "postponed"]]);
   assert.deepEqual(filterValidEvidenceSnapshots([valid, postponed], statuses).map((row) => row.id), ["evidence-1"]);
 });
+
+test("elimina solo la evidencia MLS de Chicago contra Vancouver pospuesta en julio", () => {
+  const postponed = snapshot({
+    id: "mls-chicago-vancouver-july",
+    capturedAt: "2026-07-16T22:30:00Z",
+    fixture: {
+      id: "mls-postponed",
+      home: "Chicago Fire",
+      away: "Vancouver Whitecaps",
+      status: "scheduled",
+      utcDateTime: "2026-07-17T00:30:00Z"
+    }
+  });
+  const rescheduled = snapshot({
+    id: "mls-chicago-vancouver-october",
+    capturedAt: "2026-10-06T21:00:00Z",
+    fixture: {
+      id: "mls-rescheduled",
+      home: "Chicago Fire",
+      away: "Vancouver Whitecaps",
+      status: "scheduled",
+      utcDateTime: "2026-10-07T00:30:00Z"
+    }
+  });
+
+  assert.equal(evidenceInvalidReason(postponed), "known_postponed_fixture");
+  assert.equal(isValidEvidenceSnapshot(rescheduled), true);
+  assert.deepEqual(filterValidEvidenceSnapshots([postponed, rescheduled]).map((row) => row.id), ["mls-chicago-vancouver-october"]);
+});

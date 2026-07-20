@@ -78,3 +78,24 @@ test("aplaza temporalmente una evidencia cuyo resultado oficial aun no esta disp
   const afterRetry = pendingEvidenceForCompetition([row], "league:1", new Date("2026-07-18T13:01:00Z"));
   assert.deepEqual(afterRetry.ready.map((item) => item.fixture.id), ["1"]);
 });
+
+test("MLS excluye la evidencia pospuesta de Chicago contra Vancouver del conteo", () => {
+  const validRows = Array.from({ length: 5 }, (_, index) => snapshot(index + 1, {
+    leagueId: 253,
+    leagueName: "MLS"
+  }));
+  const postponed = snapshot(99, { leagueId: 253, leagueName: "MLS" });
+  postponed.fixture = {
+    ...postponed.fixture,
+    id: "mls-postponed",
+    home: "Chicago Fire",
+    away: "Vancouver Whitecaps",
+    utcDateTime: "2026-07-17T00:30:00Z"
+  };
+  postponed.capturedAt = "2026-07-16T22:30:00Z";
+
+  const [mls] = summarizeEvidenceByCompetition([...validRows, postponed]);
+  assert.equal(mls.collected, 5);
+  assert.equal(mls.evaluated, 5);
+  assert.equal(mls.pendingEvaluation, 0);
+});
