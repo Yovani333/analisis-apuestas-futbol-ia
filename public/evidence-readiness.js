@@ -27,7 +27,7 @@ function latestByFixture(snapshots = []) {
     if (!isValidPreMatchSnapshot(snapshot)) continue;
     const fixtureId = String(snapshot.fixture.id);
     const current = rows.get(fixtureId);
-    if (!current || timestamp(snapshot.capturedAt) > timestamp(current.capturedAt)) rows.set(fixtureId, snapshot);
+    if (!current || (isEvaluated(snapshot) && !isEvaluated(current)) || (isEvaluated(snapshot) === isEvaluated(current) && timestamp(snapshot.capturedAt) > timestamp(current.capturedAt))) rows.set(fixtureId, snapshot);
   }
   return [...rows.values()];
 }

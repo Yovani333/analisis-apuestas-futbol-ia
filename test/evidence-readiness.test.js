@@ -24,8 +24,8 @@ test("agrupa evidencia unica por competición y separa pendientes", () => {
   assert.equal(worldCup.competitionKey, "league:1");
   assert.equal(worldCup.key, "low");
   assert.equal(worldCup.collected, 2);
-  assert.equal(worldCup.evaluated, 0);
-  assert.equal(worldCup.pendingEvaluation, 2);
+  assert.equal(worldCup.evaluated, 1);
+  assert.equal(worldCup.pendingEvaluation, 1);
   assert.equal(rows.find((row) => row.leagueId === 169).evaluated, 1);
 });
 

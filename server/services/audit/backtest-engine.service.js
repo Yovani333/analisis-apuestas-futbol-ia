@@ -3,7 +3,6 @@ import { calculatePoissonModel } from "../poisson-model.service.js";
 import { calculateTeamGoalProbability } from "../team-goal-probability.service.js";
 import { calculateCornersModel } from "../corners-model.service.js";
 import { evaluatePickOutcome } from "./pick-outcome-evaluator.service.js";
-import { auditPickRules } from "./market-rules-audit.service.js";
 
 export function resolvePendingAuditError(result = {}) {
   if (result.finished) return null;
@@ -112,17 +111,42 @@ function metricSummary(records = []) {
 
 function calibrationBands(records = []) {
   const valid = records.filter((row) => ["HIT", "MISS"].includes(row.outcome) && validProbability(row.modelProbability));
-  return [[0, 39], [40, 49], [50, 59], [60, 69], [70, 79], [80, 100]].map(([minimum, maximum]) => {
-    const rows = valid.filter((row) => Number(row.modelProbability) >= minimum && Number(row.modelProbability) <= maximum);
+  return [[0, 40, "0-39%"], [40, 50, "40-49%"], [50, 60, "50-59%"], [60, 70, "60-69%"], [70, 80, "70-79%"], [80, 100, "80-100%"]].map(([minimum, upperExclusive, label]) => {
+    const rows = valid.filter((row) => Number(row.modelProbability) >= minimum && (upperExclusive === 100 ? Number(row.modelProbability) <= upperExclusive : Number(row.modelProbability) < upperExclusive));
     const predicted = rows.length ? rows.reduce((sum, row) => sum + Number(row.modelProbability), 0) / rows.length : null;
     const observed = rows.length ? rows.filter((row) => row.outcome === "HIT").length / rows.length * 100 : null;
     return {
-      band: `${minimum}-${maximum}%`, count: rows.length,
+      band: label, count: rows.length,
       predictedPct: predicted === null ? null : Number(predicted.toFixed(2)),
       observedPct: observed === null ? null : Number(observed.toFixed(2)),
       gapPct: predicted === null ? null : Number(Math.abs(predicted - observed).toFixed(2))
     };
   });
+}
+
+function normalizedDecision(pick = {}) {
+  const decision = String(pick.decision || "").trim();
+  if (decision) return decision;
+  if (pick.decisionGroup === "discarded" || pick.noBet === true) return "NO BET";
+  if (pick.decisionGroup === "recommended") return "RECOMENDADO";
+  return "NO DISPONIBLE";
+}
+
+function wasDiscardedBeforeKickoff(pick = {}) {
+  const decision = normalizedDecision(pick).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replaceAll("_", " ");
+  return pick.noBet === true || pick.decisionGroup === "discarded" || ["EVITAR", "NO BET"].includes(decision);
+}
+
+function validateEvidenceTiming(evidence = {}) {
+  const capturedAt = Date.parse(evidence.capturedAt || "");
+  const kickoffAt = Date.parse(evidence.fixture?.utcDateTime || "");
+  if (!Number.isFinite(capturedAt) || !Number.isFinite(kickoffAt)) throw new TypeError("La evidencia no tiene timestamps suficientes para verificar que sea prepartido.");
+  if (capturedAt >= kickoffAt) throw new TypeError("La evidencia fue capturada durante o despues del inicio y no es auditable como prepartido.");
+}
+
+function finalScoreLabel(result = {}) {
+  const score = result.regulationGoals || result.score90 || result.fulltimeGoals || result.goals;
+  return result.finished && Number.isFinite(Number(score?.home)) && Number.isFinite(Number(score?.away)) ? `${score.home}-${score.away}` : "Pendiente";
 }
 
 function groupedMetrics(records, key) {
@@ -148,8 +172,8 @@ export function calculateAuditMetrics(records = []) {
 
 function buildBacktestResult(dataset, fixtureResult, generated, metadata = {}) {
   const records = generated.picks.map((pick) => {
-    const rules = auditPickRules(pick, generated.quality || dataset.dataQuality || {});
-    const candidate = { ...pick, noBet: rules.noBet || pick.highlightColor === "red" };
+    const decision = normalizedDecision(pick);
+    const candidate = { ...pick, noBet: wasDiscardedBeforeKickoff(pick) };
     const outcome = evaluatePickOutcome(candidate, fixtureResult);
     return {
       fixtureId: String(dataset.fixture?.id || ""), date: dataset.fixture?.date || "", match: `${dataset.fixture?.home || "Local"} vs ${dataset.fixture?.away || "Visitante"}`,
@@ -159,8 +183,8 @@ function buildBacktestResult(dataset, fixtureResult, generated, metadata = {}) {
       confidence: pick.confidenceScore, statisticalConfidence: pick.statisticalConfidenceScore ?? null,
       footballConfidence: pick.footballConfidenceScore ?? null, riskScore: pick.riskScore ?? null,
       dataQuality: generated.quality?.label || dataset.dataQuality?.level || "No disponible",
-      finalScore: fixtureResult?.finished ? `${fixtureResult.goals?.home}-${fixtureResult.goals?.away}` : "Pendiente",
-      outcome, decision: candidate.noBet ? "EVITAR" : rules.color === "green" ? "VALOR" : "RIESGO", errorDetected: rules.errors.join(" "), recommendation: rules.recommendation, color: rules.color,
+      finalScore: finalScoreLabel(fixtureResult),
+      outcome, decision, errorDetected: "", recommendation: pick.recommendation || pick.explanation || "Decision historica conservada sin reinterpretacion.", color: pick.highlightColor || pick.color || "No disponible",
       source: generated.source, sourceModule: pick.sourceModule,
       modelVersion: generated.modelVersion || pick.modelVersion || "No disponible",
       adjustmentsVersion: generated.adjustmentsVersion || pick.adjustmentsVersion || null,
@@ -181,6 +205,7 @@ export function runFixtureBacktest(dataset, fixtureResult) {
 export function runSavedEvidenceBacktest(evidence, fixtureResult) {
   if (!evidence?.fixture?.id || evidence.fixture.status !== "scheduled") throw new TypeError("La evidencia prepartido no es válida.");
   if (evidence.currentFixtureStatisticsUsed !== false || evidence.openAiUsed !== false) throw new TypeError("La evidencia contiene fuentes no permitidas para backtesting.");
+  validateEvidenceTiming(evidence);
   const generated = evidence.modules?.dataPicks;
   if (!generated || !Array.isArray(generated.picks)) throw new TypeError("La evidencia no contiene picks basados en datos.");
   const dataset = { fixture: evidence.fixture, dataQuality: evidence.dataQuality, researchData: evidence.researchData || {}, preMatch: evidence.preMatch || {}, marketAnalysis: evidence.marketAnalysis || [] };

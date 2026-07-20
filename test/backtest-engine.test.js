@@ -134,7 +134,7 @@ test("backtest no usa el fixture actual y devuelve registros auditables", () => 
 test("audita los picks exactos de una evidencia prepartido guardada", () => {
   const evidence = {
     capturedAt: "2026-07-02T18:00:00.000Z", currentFixtureStatisticsUsed: false, openAiUsed: false,
-    fixture: { id: 4, status: "scheduled", home: "A", away: "B", leagueName: "Prueba" }, dataQuality: { level: "Alta" }, researchData: {},
+    fixture: { id: 4, status: "scheduled", home: "A", away: "B", leagueName: "Prueba", utcDateTime: "2026-07-02T20:00:00.000Z" }, dataQuality: { level: "Alta" }, researchData: {},
     modules: { dataPicks: { source: "API-Football + modelo interno", modelVersion: "picks-data-engine-v3", adjustmentsVersion: "predictive-adjustments-v1", quality: { label: "Alta" }, warnings: [], picks: [{ market: "Total", selection: "Más de 2.5", selectionKey: "over_2_5", decimalOdds: 2, impliedProbabilityPct: 50, modelProbabilityPct: 60, expectedValuePct: 20, conservativeExpectedValuePct: 8, confidenceScore: 70, statisticalConfidenceScore: 68, footballConfidenceScore: 72, riskScore: 25, highlightColor: "green", sourceModule: "data_picks", contradictingData: [] }] } }
   };
   const result = runSavedEvidenceBacktest(evidence, finished(2, 1));
@@ -143,4 +143,73 @@ test("audita los picks exactos de una evidencia prepartido guardada", () => {
   assert.equal(result.capturedAt, evidence.capturedAt);
   assert.equal(result.records[0].modelVersion, "picks-data-engine-v3");
   assert.equal(result.records[0].conservativeExpectedValue, 8);
+});
+
+test("liquida doble oportunidad 12 y lineas totales", () => {
+  assert.equal(evaluatePickOutcome(pick("12"), finished(1, 1)), "MISS");
+  assert.equal(evaluatePickOutcome(pick("12"), finished(2, 1)), "HIT");
+  assert.equal(evaluatePickOutcome(pick("under_3_5"), finished(2, 1)), "HIT");
+  assert.equal(evaluatePickOutcome(pick("over_3"), finished(2, 1)), "VOID");
+  assert.equal(evaluatePickOutcome(pick("over_2_25"), finished(3, 0)), "HIT");
+  assert.equal(evaluatePickOutcome(pick("over_2_25"), finished(1, 1)), "DATA_INSUFFICIENT");
+});
+
+test("liquida corners solo cuando existe resultado oficial", () => {
+  const result = { ...finished(1, 0), corners: { home: 6, away: 4 } };
+  assert.equal(evaluatePickOutcome(pick("over_8_5_corners", { selection: "Mas de 8.5 corners" }), result), "HIT");
+  assert.equal(evaluatePickOutcome(pick("home_most_corners"), result), "HIT");
+  assert.equal(evaluatePickOutcome(pick("over_8_5_corners", { selection: "Mas de 8.5 corners" }), finished(1, 0)), "DATA_INSUFFICIENT");
+});
+
+test("prefiere marcador reglamentario sobre el total tras prorroga", () => {
+  const result = { finished: true, regulationGoals: { home: 1, away: 1 }, goals: { home: 2, away: 1 } };
+  assert.equal(evaluatePickOutcome(pick("draw"), result), "HIT");
+  assert.equal(evaluatePickOutcome(pick("home_win"), result), "MISS");
+});
+
+test("ECE incluye probabilidades decimales sin huecos entre bins", () => {
+  const records = [39.5, 49.5, 59.5, 69.5, 79.5].map((modelProbability, index) => ({ outcome: index % 2 ? "MISS" : "HIT", modelProbability }));
+  const metrics = calculateAuditMetrics(records);
+  assert.equal(metrics.calibrationSampleSize, 5);
+  assert.equal(metrics.calibrationBands.reduce((sum, band) => sum + band.count, 0), 5);
+  assert.ok(Number.isFinite(metrics.expectedCalibrationError));
+});
+
+test("conserva NO BET historico aunque el resultado cumpla el mercado", () => {
+  const evidence = {
+    capturedAt: "2026-07-02T18:00:00.000Z", currentFixtureStatisticsUsed: false, openAiUsed: false,
+    fixture: { id: 5, status: "scheduled", home: "A", away: "B", leagueName: "Prueba", utcDateTime: "2026-07-02T20:00:00.000Z" },
+    dataQuality: { level: "Alta" }, researchData: {},
+    modules: { dataPicks: { quality: { label: "Alta" }, warnings: [], picks: [{ market: "Total", selection: "Mas de 2.5", selectionKey: "over_2_5", decision: "NO BET", decisionGroup: "discarded", expectedValuePct: 20, modelProbabilityPct: 70, highlightColor: "green" }] } }
+  };
+  const result = runSavedEvidenceBacktest(evidence, finished(2, 1));
+  assert.equal(result.records[0].decision, "NO BET");
+  assert.equal(result.records[0].outcome, "NO_BET");
+  assert.equal(result.metrics.hits, 0);
+  assert.equal(result.metrics.misses, 0);
+});
+
+test("rechaza evidencia capturada durante o despues del partido", () => {
+  const evidence = {
+    capturedAt: "2026-07-02T20:00:00.000Z", currentFixtureStatisticsUsed: false, openAiUsed: false,
+    fixture: { id: 6, status: "scheduled", home: "A", away: "B", utcDateTime: "2026-07-02T20:00:00.000Z" },
+    modules: { dataPicks: { picks: [] } }
+  };
+  assert.throws(() => runSavedEvidenceBacktest(evidence, finished(1, 0)), /durante o despues/);
+  assert.throws(() => runSavedEvidenceBacktest({ ...evidence, capturedAt: "2026-07-02T18:00:00.000Z", fixture: { ...evidence.fixture, utcDateTime: null } }, finished(1, 0)), /timestamps suficientes/);
+});
+
+test("reevaluar es idempotente y no modifica el snapshot congelado", () => {
+  const evidence = {
+    capturedAt: "2026-07-02T18:00:00.000Z", currentFixtureStatisticsUsed: false, openAiUsed: false,
+    fixture: { id: 7, status: "scheduled", home: "A", away: "B", utcDateTime: "2026-07-02T20:00:00.000Z" },
+    dataQuality: {}, researchData: {},
+    modules: { dataPicks: { picks: [{ market: "1X2", selection: "A gana", selectionKey: "home_win", decision: "PRECAUCION", decisionGroup: "recommended", modelProbabilityPct: 55 }] } }
+  };
+  const frozenBefore = structuredClone(evidence);
+  const first = runSavedEvidenceBacktest(evidence, finished(1, 0));
+  const second = runSavedEvidenceBacktest(evidence, finished(1, 0));
+  assert.deepEqual(evidence, frozenBefore);
+  assert.deepEqual(first.records, second.records);
+  assert.deepEqual(first.metrics, second.metrics);
 });
