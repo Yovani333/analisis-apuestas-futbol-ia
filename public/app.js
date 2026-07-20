@@ -15,6 +15,7 @@ import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
 import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260719-remove-invalid-v1";
 import { filterValidEvidenceSnapshots, isValidEvidenceSnapshot } from "./evidence-validity.js?v=20260719-remove-invalid-v1";
+import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2h-suggestion-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -1373,6 +1374,41 @@ function researchTeamStats(title, values) {
   return `<section class="team-stat-card"><h3>${escapeHtml(title)}</h3>${values.map(([label, value]) => `<div class="stat-row"><span>${escapeHtml(label)}</span><strong>${displayValue(value)}</strong></div>`).join("")}</section>`;
 }
 
+function renderH2HSuggestion(analysis, homeName, awayName) {
+  const recommended = Boolean(analysis?.recommendedMarket);
+  const confidenceClass = analysis?.confidence === "Alta" ? "available" : analysis?.confidence === "Media" ? "partial" : "unavailable";
+  const winner = analysis?.calculationDetails?.winningCandidate;
+  const general = analysis?.generalMetrics || {};
+  const goalRows = [
+    ["Más de 0.5", general.over05], ["Más de 1.5", general.over15], ["Más de 2.5", general.over25],
+    ["Menos de 3.5", general.under35], ["Ambos anotan: Sí", general.bttsYes], ["Ambos anotan: No", general.bttsNo]
+  ];
+  const rejected = analysis?.rejectedCandidates || [];
+  const warnings = analysis?.warnings || [];
+  return `<section class="h2h-suggestion h2h-suggestion--${recommended ? confidenceClass : "unavailable"}">
+    <header><div><p class="eyebrow">Análisis contextual</p><h3>Sugerencia H2H</h3></div><span class="status-badge status-badge--${confidenceClass}">${escapeHtml(recommended ? analysis.confidence : "Sin pick")}</span></header>
+    <div class="h2h-suggestion__summary">
+      <div><span>Pick sugerido</span><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick H2H recomendado")}</strong><small>${recommended ? escapeHtml(analysis.recommendedMarket) : "No se fuerza una recomendación"}</small></div>
+      <div><span>Confianza de la tendencia H2H</span><strong>${escapeHtml(analysis?.confidence || "Baja")}</strong><small>No es una probabilidad real de acierto</small></div>
+      <div><span>Muestra utilizada</span><strong>${displayValue(analysis?.sampleSize, 0)} de ${displayValue(analysis?.totalAvailable, 0)}</strong><small>${displayValue(analysis?.comparableHomeMatches, 0)} con localías comparables</small></div>
+      <div><span>Cumplimiento ponderado</span><strong>${analysis?.weightedRate === null || analysis?.weightedRate === undefined ? "—" : `${displayValue(analysis.weightedRate)}%`}</strong><small>${winner ? `Puntuación interna ${displayValue(winner.score)}/100` : "Sin candidato ganador"}</small></div>
+    </div>
+    <p class="h2h-suggestion__explanation">${escapeHtml(analysis?.explanation || "Sin información suficiente para evaluar la tendencia.")}</p>
+    <div class="detail-note detail-note--warning"><strong>Uso responsable</strong><span>El H2H es evidencia contextual y no un pronóstico completo. No debe utilizarse solo para tomar una decisión de apuesta.</span></div>
+    <details class="h2h-calculation"><summary>Ver cálculo</summary>
+      <div class="h2h-calculation__counts"><span>H2H disponibles <strong>${displayValue(analysis?.totalAvailable, 0)}</strong></span><span>Utilizados <strong>${displayValue(analysis?.sampleSize, 0)}</strong></span><span>${escapeHtml(homeName)} en casa <strong>${displayValue(analysis?.comparableHomeMatches, 0)}</strong></span><span>${escapeHtml(awayName)} fuera <strong>${displayValue(analysis?.comparableAwayMatches, 0)}</strong></span></div>
+      <div class="team-stat-grid">
+        ${researchTeamStats(`${homeName} como local`, [["Victorias / Empates / Derrotas", `${analysis?.homeSummary?.wins ?? 0} / ${analysis?.homeSummary?.draws ?? 0} / ${analysis?.homeSummary?.losses ?? 0}`], ["Victoria simple / ponderada", `${analysis?.homeSummary?.winRatePct ?? 0}% / ${analysis?.homeSummary?.weightedWinRatePct ?? 0}%`], ["No derrota simple / ponderada", `${analysis?.homeSummary?.nonLossRatePct ?? 0}% / ${analysis?.homeSummary?.weightedNonLossRatePct ?? 0}%`], ["Goles anotados / recibidos", `${analysis?.homeSummary?.goalsFor ?? 0} / ${analysis?.homeSummary?.goalsAgainst ?? 0}`]])}
+        ${researchTeamStats(`${awayName} como visitante`, [["Victorias / Empates / Derrotas", `${analysis?.awaySummary?.wins ?? 0} / ${analysis?.awaySummary?.draws ?? 0} / ${analysis?.awaySummary?.losses ?? 0}`], ["Victoria simple / ponderada", `${analysis?.awaySummary?.winRatePct ?? 0}% / ${analysis?.awaySummary?.weightedWinRatePct ?? 0}%`], ["No derrota simple / ponderada", `${analysis?.awaySummary?.nonLossRatePct ?? 0}% / ${analysis?.awaySummary?.weightedNonLossRatePct ?? 0}%`], ["Goles anotados / recibidos", `${analysis?.awaySummary?.goalsFor ?? 0} / ${analysis?.awaySummary?.goalsAgainst ?? 0}`]])}
+      </div>
+      <div class="h2h-goal-summary"><span>Promedio <strong>${displayValue(general.averageGoals)}</strong></span><span>Mediana <strong>${displayValue(general.medianGoals)}</strong></span><span>Mínimo <strong>${displayValue(general.minimumGoals)}</strong></span><span>Máximo <strong>${displayValue(general.maximumGoals)}</strong></span></div>
+      ${detailTable(["Mercado", "Conteo", "Simple", "Ponderado"], goalRows.map(([label, metric]) => [escapeHtml(label), `${displayValue(metric?.hits, 0)}/${displayValue(analysis?.sampleSize, 0)}`, `${displayValue(metric?.simpleRatePct, 0)}%`, `${displayValue(metric?.weightedRatePct, 0)}%`]))}
+      <div class="h2h-rejected"><h4>Mercados descartados</h4>${rejected.length ? `<ul>${rejected.map((candidate) => `<li><strong>${escapeHtml(candidate.selection)}</strong><span>${escapeHtml((candidate.reasons || []).join(" "))}</span></li>`).join("")}</ul>` : "<p>No hubo mercados descartados adicionales.</p>"}</div>
+      ${warnings.length ? `<div class="h2h-warnings"><h4>Advertencias</h4><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
+    </details>
+  </section>`;
+}
+
 function renderResearchModuleDetail(moduleKey, research) {
   const module = research?.[moduleKey];
   if (!module) return emptyDetail("No existe información normalizada para este módulo.");
@@ -1381,7 +1417,8 @@ function renderResearchModuleDetail(moduleKey, research) {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Posición", module.home?.rank], ["Puntos", module.home?.points], ["Partidos", module.home?.played], ["Diferencia de gol", module.home?.goalDifference], ["Forma", module.home?.form]])}${researchTeamStats(research.awayTeam.name, [["Posición", module.away?.rank], ["Puntos", module.away?.points], ["Partidos", module.away?.played], ["Diferencia de gol", module.away?.goalDifference], ["Forma", module.away?.form]])}</div>`;
   } else if (moduleKey === "h2h") {
     const rows = (module.matches || []).map((match) => [displayValue(match.date), displayValue(match.homeTeam), `<strong>${displayValue(match.homeGoals)} – ${displayValue(match.awayGoals)}</strong>`, displayValue(match.awayTeam)]);
-    content = `<div class="research-kpis"><span>Victorias ${escapeHtml(research.homeTeam.name)} <strong>${displayValue(module.homeWins)}</strong></span><span>Empates <strong>${displayValue(module.draws)}</strong></span><span>Victorias ${escapeHtml(research.awayTeam.name)} <strong>${displayValue(module.awayWins)}</strong></span></div>${rows.length ? detailTable(["Fecha", "Local", "Marcador", "Visitante"], rows) : emptyDetail("No hay enfrentamientos disponibles.")}`;
+    const analysis = evaluateH2HRecommendation({ matches: module.matches || [], currentHomeTeam: research.homeTeam, currentAwayTeam: research.awayTeam, currentFixtureDate: research.dateTime, neutralVenue: research.venue?.neutral, source: module.source });
+    content = `<div class="research-kpis"><span>Victorias ${escapeHtml(research.homeTeam.name)} <strong>${displayValue(module.homeWins)}</strong></span><span>Empates <strong>${displayValue(module.draws)}</strong></span><span>Victorias ${escapeHtml(research.awayTeam.name)} <strong>${displayValue(module.awayWins)}</strong></span></div>${rows.length ? detailTable(["Fecha", "Local", "Marcador", "Visitante"], rows) : emptyDetail("No hay enfrentamientos disponibles.")}${renderH2HSuggestion(analysis, research.homeTeam.name, research.awayTeam.name)}`;
   } else if (moduleKey === "odds") {
     const decision = research.pickDecision || {};
     const roleFor = (market) => market.selectionKey === decision.recommendedPick?.selectionKey ? "Mejor pick"
@@ -1900,7 +1937,14 @@ function renderH2HDetail(data, fixture) {
     displayValue(match.teams?.away?.name),
     displayValue(match.league?.name)
   ]);
-  return detailTable(["Fecha", "Local", "Marcador", "Visitante", "Competición"], rows);
+  const analysis = evaluateH2HRecommendation({
+    matches: historical,
+    currentHomeTeam: { id: fixture.homeTeamId, name: fixture.home },
+    currentAwayTeam: { id: fixture.awayTeamId, name: fixture.away },
+    currentFixtureDate: fixture.utcDateTime || fixture.date,
+    neutralVenue: fixture.neutralVenue
+  });
+  return `${detailTable(["Fecha", "Local", "Marcador", "Visitante", "Competición"], rows)}${renderH2HSuggestion(analysis, fixture.home, fixture.away)}`;
 }
 
 function renderInjuriesDetail(data) {

@@ -201,6 +201,10 @@ test("H2H conserva solo partidos finalizados anteriores al fixture actual", () =
   ];
   const normalized = normalizeMatchResearchData(dataset);
   assert.deepEqual(normalized.h2h.matches.map((item) => item.fixtureId), ["9"]);
+  assert.equal(normalized.h2h.matches[0].homeTeamId, 10);
+  assert.equal(normalized.h2h.matches[0].awayTeamId, 20);
+  assert.equal(normalized.h2h.matches[0].regulationHomeGoals, 1);
+  assert.equal(normalized.h2h.totalAvailable, 1);
 });
 
 test("el constructor de contexto usa solo matchData normalizado", () => {

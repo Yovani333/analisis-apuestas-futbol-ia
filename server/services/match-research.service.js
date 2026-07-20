@@ -80,13 +80,19 @@ export function getH2HData(dataset) {
     return {
       ...moduleBase(DATA_STATUS.PARTIAL, soccerway.updatedAt || dataset.fetchedAt, "soccerway",
         "H2H complementario recuperado de Soccerway; requiere revisión y se usa como dato secundario."),
-      matches, homeWins, draws, awayWins
+      matches, homeWins, draws, awayWins, totalAvailable: matches.length
     };
   }
   let homeWins = 0; let draws = 0; let awayWins = 0;
-  const matches = rows.slice(0, 10).map((row) => {
+  const orderedRows = [...rows].sort((a, b) => Date.parse(b.fixture?.date || "") - Date.parse(a.fixture?.date || ""));
+  const matches = orderedRows.slice(0, 10).map((row) => {
     const homeGoals = row.goals?.home;
     const awayGoals = row.goals?.away;
+    const statusShort = row.fixture?.status?.short || "";
+    const regulationHomeGoals = Number.isFinite(row.score?.fulltime?.home)
+      ? row.score.fulltime.home : statusShort === "FT" || !statusShort ? homeGoals : null;
+    const regulationAwayGoals = Number.isFinite(row.score?.fulltime?.away)
+      ? row.score.fulltime.away : statusShort === "FT" || !statusShort ? awayGoals : null;
     const trackedHomeIsHome = row.teams?.home?.id === dataset.fixture.homeTeamId;
     if (Number.isFinite(homeGoals) && Number.isFinite(awayGoals)) {
       if (homeGoals === awayGoals) draws += 1;
@@ -95,15 +101,19 @@ export function getH2HData(dataset) {
     }
     return {
       fixtureId: String(row.fixture?.id || ""), date: row.fixture?.date?.slice(0, 10) || "",
+      statusShort,
+      homeTeamId: row.teams?.home?.id ?? null, awayTeamId: row.teams?.away?.id ?? null,
       homeTeam: row.teams?.home?.name || "", awayTeam: row.teams?.away?.name || "",
-      homeGoals: homeGoals ?? null, awayGoals: awayGoals ?? null
+      homeGoals: homeGoals ?? null, awayGoals: awayGoals ?? null,
+      regulationHomeGoals: regulationHomeGoals ?? null, regulationAwayGoals: regulationAwayGoals ?? null,
+      leagueId: row.league?.id ?? null, leagueName: row.league?.name || "", season: row.league?.season ?? null
     };
   });
   const status = matches.length ? DATA_STATUS.AVAILABLE : DATA_STATUS.NOT_AVAILABLE;
   return {
     ...moduleBase(status, dataset.fetchedAt, SOURCE, matches.length ? "" : "No se encontraron enfrentamientos directos."),
     matches, homeWins: matches.length ? homeWins : null, draws: matches.length ? draws : null,
-    awayWins: matches.length ? awayWins : null
+    awayWins: matches.length ? awayWins : null, totalAvailable: orderedRows.length
   };
 }
 
