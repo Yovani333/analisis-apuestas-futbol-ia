@@ -68,6 +68,13 @@ test("Dashboard prioriza la calidad canonica y no convierte datos ausentes en ce
   assert.match(qualityBody, /value === null \|\| value === undefined \|\| value === ""/);
 });
 
+test("Sugerencia H2H ofrece un boton para agregar el pick al cupon", () => {
+  assert.match(app, /data-add-h2h-pick/);
+  assert.match(app, /function h2hRecommendationLeg/);
+  assert.match(app, /Pick H2H agregado a Mi parlay/);
+  assert.match(app, /sourceModule: "h2h"/);
+});
+
 test("Transparencia muestra cuotas normalizadas si la respuesta cruda viene vacia", () => {
   assert.match(app, /function renderNormalizedOddsDetail\(module\)/);
   assert.match(app, /function renderOddsDetail\(data, normalizedModule = null\)/);

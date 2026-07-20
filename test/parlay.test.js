@@ -44,6 +44,12 @@ test("resultados por origen agrupa anticipacion y clasifica picks ganados", () =
   assert.equal(rows[0].wonPicks.length, 2);
 });
 
+test("liquida el total H2H mas de 0.5 sin convertir datos ausentes en cero", () => {
+  assert.equal(settleLegResult("over_0_5", { finished: true, goals: { home: 1, away: 0 } }), "won");
+  assert.equal(settleLegResult("over_0_5", { finished: true, goals: { home: 0, away: 0 } }), "lost");
+  assert.equal(settleLegResult("over_0_5", { finished: true, goals: { home: null, away: 0 } }), "pending");
+});
+
 test("resultados por origen conserva el detalle y categorias de picks perdidos", () => {
   const rows = calculateOriginPerformance([{
     id: "lost-1", sourceModule: "poisson", result: "lost", selection: "Menos de 2.5 goles", market: "Total",

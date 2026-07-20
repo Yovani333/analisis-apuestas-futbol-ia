@@ -91,8 +91,11 @@ export function calculateParlayResult(legs = []) {
 
 export function settleLegResult(selectionCode, fixtureResult) {
   if (!fixtureResult?.finished) return "pending";
-  const home = Number(fixtureResult.goals?.home);
-  const away = Number(fixtureResult.goals?.away);
+  const rawHome = fixtureResult.goals?.home;
+  const rawAway = fixtureResult.goals?.away;
+  if (rawHome === null || rawHome === undefined || rawHome === "" || rawAway === null || rawAway === undefined || rawAway === "") return "pending";
+  const home = Number(rawHome);
+  const away = Number(rawAway);
   if (!Number.isFinite(home) || !Number.isFinite(away)) return "pending";
   const total = home + away;
   if (selectionCode === "home_dnb") return home === away ? "void" : home > away ? "won" : "lost";
@@ -108,6 +111,7 @@ export function settleLegResult(selectionCode, fixtureResult) {
     home_over_1_5: home > 1,
     away_over_0_5: away > 0,
     away_over_1_5: away > 1,
+    over_0_5: total > 0.5,
     over_1_5: total > 1.5,
     over_2_5: total > 2.5,
     over_3_5: total > 3.5,

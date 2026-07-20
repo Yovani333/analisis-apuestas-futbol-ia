@@ -367,6 +367,9 @@ button { touch-action: manipulation; }
 .h2h-suggestion__summary > div { display: grid; align-content: start; gap: 3px; min-width: 0; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .h2h-suggestion__summary span, .h2h-suggestion__summary small { color: var(--muted); font-size: .62rem; }
 .h2h-suggestion__summary strong { overflow-wrap: anywhere; font-size: .78rem; }
+.h2h-suggestion__pick-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.h2h-suggestion__pick-line strong { min-width: 0; }
+.h2h-suggestion__pick-line .pick-add-icon { flex: 0 0 30px; }
 .h2h-suggestion__explanation { margin: 12px 0; color: var(--text); font-size: .74rem; line-height: 1.55; }
 .h2h-calculation { margin-top: 10px; border-top: 1px solid var(--border); }
 .h2h-calculation > summary { padding: 11px 2px 2px; font-size: .72rem; font-weight: 800; cursor: pointer; }

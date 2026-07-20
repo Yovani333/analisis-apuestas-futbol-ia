@@ -4,11 +4,11 @@ import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js
 import {
   calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
   hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settlePickResult
-} from "./parlay-store.js?v=20260718-origin-results-v1";
+} from "./parlay-store.js?v=20260719-h2h-parlay-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginLabel } from "./pick-origins.js?v=20260713-dashboard-fixes-v2";
+import { pickOriginLabel } from "./pick-origins.js?v=20260719-h2h-parlay-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260719-remove-invalid-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260715-expected-corners-v1";
@@ -1388,7 +1388,7 @@ function renderH2HSuggestion(analysis, homeName, awayName) {
   return `<section class="h2h-suggestion h2h-suggestion--${recommended ? confidenceClass : "unavailable"}">
     <header><div><p class="eyebrow">Análisis contextual</p><h3>Sugerencia H2H</h3></div><span class="status-badge status-badge--${confidenceClass}">${escapeHtml(recommended ? analysis.confidence : "Sin pick")}</span></header>
     <div class="h2h-suggestion__summary">
-      <div><span>Pick sugerido</span><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick H2H recomendado")}</strong><small>${recommended ? escapeHtml(analysis.recommendedMarket) : "No se fuerza una recomendación"}</small></div>
+      <div><span>Pick sugerido</span><div class="h2h-suggestion__pick-line"><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick H2H recomendado")}</strong>${recommended && winner?.key ? `<button class="pick-add-icon" type="button" data-add-h2h-pick data-h2h-key="${escapeHtml(winner.key)}" data-h2h-market="${escapeHtml(analysis.recommendedMarket)}" data-h2h-selection="${escapeHtml(analysis.recommendedSelection)}" data-h2h-confidence="${escapeHtml(analysis.confidence)}" data-h2h-rate="${escapeHtml(analysis.weightedRate)}" data-h2h-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>` : ""}</div><small>${recommended ? escapeHtml(analysis.recommendedMarket) : "No se fuerza una recomendación"}</small></div>
       <div><span>Confianza de la tendencia H2H</span><strong>${escapeHtml(analysis?.confidence || "Baja")}</strong><small>No es una probabilidad real de acierto</small></div>
       <div><span>Muestra utilizada</span><strong>${displayValue(analysis?.sampleSize, 0)} de ${displayValue(analysis?.totalAvailable, 0)}</strong><small>${displayValue(analysis?.comparableHomeMatches, 0)} con localías comparables</small></div>
       <div><span>Cumplimiento ponderado</span><strong>${analysis?.weightedRate === null || analysis?.weightedRate === undefined ? "—" : `${displayValue(analysis.weightedRate)}%`}</strong><small>${winner ? `Puntuación interna ${displayValue(winner.score)}/100` : "Sin candidato ganador"}</small></div>
@@ -1407,6 +1407,59 @@ function renderH2HSuggestion(analysis, homeName, awayName) {
       ${warnings.length ? `<div class="h2h-warnings"><h4>Advertencias</h4><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
     </details>
   </section>`;
+}
+
+function h2hRecommendationLeg(dataset = {}) {
+  const fixture = selectedFixture();
+  const codes = {
+    home_win: ["match_winner", "home_win"],
+    away_win: ["match_winner", "away_win"],
+    home_double_chance: ["double_chance", "1X"],
+    away_double_chance: ["double_chance", "X2"],
+    over05: ["total_goals", "over_0_5"],
+    over15: ["total_goals", "over_1_5"],
+    over25: ["total_goals", "over_2_5"],
+    under35: ["total_goals", "under_3_5"],
+    btts_yes: ["both_teams_to_score", "btts_yes"],
+    btts_no: ["both_teams_to_score", "btts_no"]
+  };
+  const [marketCode, selectionCode] = codes[dataset.h2hKey] || [];
+  if (!fixture || !marketCode || !selectionCode || !dataset.h2hMarket || !dataset.h2hSelection) return null;
+  const weightedRate = Number(dataset.h2hRate);
+  return {
+    id: `${fixture.id}:h2h:${dataset.h2hKey}`,
+    fixtureId: fixture.id,
+    league: fixture.leagueName,
+    home: fixture.home,
+    away: fixture.away,
+    date: fixture.date,
+    market: dataset.h2hMarket,
+    selection: dataset.h2hSelection,
+    marketCode,
+    selectionCode,
+    decimalOdds: null,
+    originalOdds: null,
+    updatedOdds: null,
+    impliedProbability: null,
+    modelProbability: null,
+    expectedValue: null,
+    fixtureStatus: fixture.statusLabel || fixture.status,
+    kickoffAt: fixture.utcDateTime || null,
+    lastUpdatedAt: new Date().toISOString(),
+    confidence: `Tendencia H2H ${dataset.h2hConfidence || "Media"}`,
+    risk: dataset.h2hConfidence === "Alta" ? "contextual" : "review",
+    reasoning: dataset.h2hExplanation || "Sugerencia contextual basada en enfrentamientos directos.",
+    requiresReview: true,
+    sourceModule: "h2h",
+    source: "API-Football + análisis H2H determinístico",
+    supportingData: Number.isFinite(weightedRate) ? [`Cumplimiento H2H ponderado: ${weightedRate}%`] : [],
+    contradictingData: ["El H2H es evidencia contextual y no un pronóstico completo."]
+  };
+}
+
+function addH2HRecommendationToParlay(dataset) {
+  const leg = h2hRecommendationLeg(dataset);
+  if (leg) appendPickToParlay(leg, "Pick H2H agregado a Mi parlay. Se guardará únicamente cuando nombres y guardes el parlay.");
 }
 
 function renderResearchModuleDetail(moduleKey, research) {
@@ -4201,8 +4254,10 @@ elements.fixtureReadyAccept.addEventListener("click", () => elements.fixtureRead
 elements.dataDialogContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-odds-pick]");
   const saveButton = event.target.closest("[data-save-odds-pick]");
+  const addH2HButton = event.target.closest("[data-add-h2h-pick]");
   if (addButton) addOddsPickToParlay(addButton.dataset.addOddsPick);
   if (saveButton) saveOddsPick(saveButton.dataset.saveOddsPick);
+  if (addH2HButton) addH2HRecommendationToParlay(addH2HButton.dataset);
 });
 elements.dataDialog.addEventListener("click", (event) => {
   if (event.target === elements.dataDialog) closeDataDialog();
