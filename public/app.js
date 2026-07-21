@@ -5,7 +5,7 @@ import {
   calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayResult, createSavedParlay, createSavedPick,
   filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg,
   resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260720-saved-results-v2";
+} from "./parlay-store.js?v=20260720-saved-results-v3";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -2358,6 +2358,7 @@ function updateSavedDateFilterStatus() {
   elements.savedDateFilterStatus.textContent = state.savedDateFilter
     ? `Mostrando partidos del ${formatDate(state.savedDateFilter)}.`
     : "Mostrando todas las fechas.";
+  elements.clearSavedDateFilter.textContent = state.savedDateFilter ? "Mostrar todas" : "Ocultar";
 }
 
 function renderSavedPicks() {
@@ -2377,7 +2378,7 @@ function renderSavedPicks() {
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.finalScore ? `<small>Marcador final: ${escapeHtml(pick.finalScore)}</small>` : ""}${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
+    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.finalScore ? `<small>Marcador final: ${escapeHtml(pick.finalScore)}</small>` : ""}${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`; }).join("");
 }
@@ -4371,8 +4372,8 @@ elements.applySavedDateFilter.addEventListener("click", () => {
   renderSavedParlays();
 });
 elements.clearSavedDateFilter.addEventListener("click", () => {
-  state.savedDateFilter = "";
-  elements.savedDateFilter.value = "";
+  state.savedDateFilter = state.savedDateFilter ? "" : pacificToday();
+  elements.savedDateFilter.value = state.savedDateFilter;
   renderSavedPicks();
   renderSavedParlays();
 });
@@ -4410,6 +4411,30 @@ elements.savedParlaysList.addEventListener("change", (event) => {
   parlay.updatedAt = leg.updatedAt;
   persistSavedParlays();
   renderSavedParlays();
+});
+elements.savedPicksList.addEventListener("change", (event) => {
+  const select = event.target.closest("[data-pick-result]");
+  const card = event.target.closest("[data-pick-id]");
+  if (!select || !card) return;
+  const pick = state.savedPicks.find((item) => item.id === card.dataset.pickId);
+  if (!pick) return;
+  pick.result = select.value;
+  if (select.value === "pending") {
+    delete pick.resultSource;
+    delete pick.settlementVerificationVersion;
+    delete pick.settlementVerificationStatus;
+    delete pick.settlementVerifiedAt;
+  } else {
+    pick.resultSource = "manual";
+    pick.settlementVerificationVersion = SETTLEMENT_VERIFICATION_VERSION;
+    pick.settlementVerificationStatus = "manual";
+    pick.settlementVerifiedAt = new Date().toISOString();
+  }
+  pick.updatedAt = new Date().toISOString();
+  persistSavedPicks();
+  renderSavedPicks();
+  renderOriginPerformance();
+  showNotice(`Resultado manual guardado como ${resultLabels[pick.result].toLowerCase()}.`);
 });
 elements.savedParlaysList.addEventListener("input", (event) => {
   const notes = event.target.closest("[data-parlay-notes]");

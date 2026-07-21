@@ -4,7 +4,7 @@ export const PARLAY_DRAFT_KEY = "football-ai.parlay-draft.v1";
 export const SAVED_PARLAYS_KEY = "football-ai.saved-parlays.v1";
 export const SAVED_PICKS_KEY = "football-ai.saved-picks.v1";
 export const LEG_RESULTS = Object.freeze(["pending", "won", "lost", "void"]);
-export const SETTLEMENT_VERIFICATION_VERSION = "regulation-score-v2";
+export const SETTLEMENT_VERIFICATION_VERSION = "regulation-score-v3";
 
 const AUTO_SETTLEMENT_CODES = new Set([
   "home_dnb", "away_dnb", "home_win", "draw", "away_win", "1X", "X2", "12",
@@ -177,6 +177,7 @@ export function canAutomaticallySettlePick(leg = {}) {
 
 export function needsSettlementRefresh(leg = {}, version = SETTLEMENT_VERIFICATION_VERSION) {
   if (!leg.fixtureId || !canAutomaticallySettlePick(leg)) return false;
+  if (leg.result !== "pending" && leg.resultSource === "manual") return false;
   return leg.result === "pending" || leg.settlementVerificationVersion !== version;
 }
 

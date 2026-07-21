@@ -208,6 +208,11 @@ test("verifica una sola vez el historial y después consulta solo picks pendient
   assert.equal(needsSettlementRefresh(historical), false);
   historical.result = "pending";
   assert.equal(needsSettlementRefresh(historical), true);
+  historical.result = "lost";
+  historical.settlementVerificationVersion = "regulation-score-v2";
+  assert.equal(needsSettlementRefresh(historical), true);
+  historical.resultSource = "manual";
+  assert.equal(needsSettlementRefresh(historical), false);
 });
 
 test("no consulta repetidamente mercados de jugador que el resultado del fixture no puede liquidar", () => {
