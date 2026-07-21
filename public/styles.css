@@ -1522,6 +1522,10 @@ body {
 }
 .saved-tabs .button { width: 100%; min-width: 0; white-space: normal; }
 .saved-tab--active { color: white !important; background: var(--primary) !important; border-color: var(--primary) !important; }
+.saved-date-filter { display: grid; grid-template-columns: minmax(210px, 1fr) auto auto minmax(220px, 1.2fr); gap: 8px; align-items: end; margin-bottom: 10px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.saved-date-filter > div { display: grid; gap: 4px; }
+.saved-date-filter label { color: var(--muted); font-size: .66rem; font-weight: 800; text-transform: uppercase; }
+.saved-date-filter span { align-self: center; color: var(--muted); font-size: .7rem; }
 .trash-parlay { padding: 12px; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid #64748b; border-radius: 8px; }
 .trash-parlay header, .trash-parlay footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .trash-parlay header > div { display: grid; gap: 3px; }
@@ -1562,6 +1566,8 @@ body {
   .saved-pick { grid-template-columns: 1fr 1fr; }
   .saved-pick > div:first-child, .saved-pick > div:nth-child(2) { grid-column: 1 / -1; }
   .saved-market-metrics { grid-column: 1 / -1; }
+  .saved-date-filter { grid-template-columns: 1fr 1fr; }
+  .saved-date-filter > div, .saved-date-filter span { grid-column: 1 / -1; }
 }
 
 @media (max-width: 520px) {
@@ -2829,6 +2835,9 @@ body {
     min-width: 0;
     padding-inline: 8px;
   }
+
+  .saved-date-filter { grid-template-columns: minmax(0, 1fr); }
+  .saved-date-filter > div, .saved-date-filter .button, .saved-date-filter span { width: 100%; grid-column: 1; }
 
   .saved-pick,
   .saved-leg,

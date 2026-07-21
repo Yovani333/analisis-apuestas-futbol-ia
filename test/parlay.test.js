@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayResult, createSavedParlay, createSavedPick, hasDuplicatePick, moveParlayToTrash, normalizePickLeg, pickIdentity, resolveSelectionCode, restoreParlayFromTrash, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayResult, canAutomaticallySettlePick, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, pickIdentity, resolveSelectionCode, restoreParlayFromTrash, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -16,7 +16,7 @@ test("ordena el rendimiento de picks concluidos por origen", () => {
   assert.equal(rows[1].winRate, 50);
 });
 
-test("resultados por origen incluye selecciones concluidas de parlays activos", () => {
+test("resultados por origen conserva selecciones concluidas aunque el parlay se elimine", () => {
   const rows = calculateOriginPerformance(
     [{ sourceModule: "data_picks", result: "won" }, { sourceModule: "data_picks", result: "pending" }],
     [
@@ -27,7 +27,25 @@ test("resultados por origen incluye selecciones concluidas de parlays activos", 
   const data = rows.find((row) => row.origin === "data_picks");
   const poisson = rows.find((row) => row.origin === "poisson");
   assert.deepEqual({ evaluated: data.evaluated, won: data.won, lost: data.lost, individual: data.individual, parlayLegs: data.parlayLegs }, { evaluated: 2, won: 1, lost: 1, individual: 1, parlayLegs: 1 });
-  assert.deepEqual({ evaluated: poisson.evaluated, won: poisson.won, lost: poisson.lost, individual: poisson.individual, parlayLegs: poisson.parlayLegs }, { evaluated: 1, won: 1, lost: 0, individual: 0, parlayLegs: 1 });
+  assert.deepEqual({ evaluated: poisson.evaluated, won: poisson.won, lost: poisson.lost, individual: poisson.individual, parlayLegs: poisson.parlayLegs }, { evaluated: 2, won: 1, lost: 1, individual: 0, parlayLegs: 2 });
+});
+
+test("filtra picks y parlays por la fecha del partido", () => {
+  const picks = [{ id: "a", date: "2026-07-20" }, { id: "b", date: "2026-07-21" }, { id: "c", date: "20/07/2026" }];
+  const parlays = [
+    { id: "p1", legs: [{ date: "2026-07-20" }, { date: "2026-07-22" }] },
+    { id: "p2", legs: [{ date: "2026-07-21" }] }
+  ];
+  assert.deepEqual(filterPicksByFixtureDate(picks, "2026-07-20").map((pick) => pick.id), ["a", "c"]);
+  assert.deepEqual(filterParlaysByFixtureDate(parlays, "2026-07-20").map((parlay) => parlay.id), ["p1"]);
+  assert.equal(filterPicksByFixtureDate(picks, "").length, 3);
+});
+
+test("cuenta por separado picks ganados y perdidos dentro de parlays", () => {
+  assert.deepEqual(calculateParlayLegCounts([
+    { legs: [{ result: "won" }, { result: "lost" }, { result: "pending" }] },
+    { legs: [{ result: "won" }, { result: "void" }] }
+  ]), { won: 2, lost: 1 });
 });
 
 test("resultados por origen agrupa anticipacion y clasifica picks ganados", () => {
@@ -156,6 +174,39 @@ test("liquida corners cuando las estadísticas finales están disponibles", () =
   assert.equal(settlePickResult({ home: "A", away: "B", market: "Total de corners", selection: "Más de 8.5 corners" }, result), "won");
   assert.equal(settlePickResult({ home: "A", away: "B", market: "Más corners", selection: "A más corners" }, result), "won");
   assert.equal(settlePickResult({ home: "A", away: "B", market: "Total de corners", selection: "Más de 8.5 corners" }, { ...result, corners: null }), "pending");
+  assert.equal(settlePickResult({ home: "A", away: "B", market: "Total de corners", selection: "Más de 8.5 corners" }, { ...result, corners: { home: null, away: null } }), "pending");
+});
+
+test("no liquida corners de prórroga como si fueran exclusivamente de 90 minutos", () => {
+  const result = {
+    finished: true,
+    regulationGoals: { home: 1, away: 1 },
+    extraTimeScore: { home: 2, away: 1 },
+    corners: { home: 7, away: 3 }
+  };
+  assert.equal(settlePickResult({ market: "Total de corners", selection: "Más de 8.5 corners" }, result), "pending");
+});
+
+test("liquida 1X2 con 90 minutos y no con prórroga o penales", () => {
+  const result = { finished: true, goals: { home: 2, away: 1 }, regulationGoals: { home: 1, away: 1 } };
+  assert.equal(settlePickResult({ selectionCode: "draw" }, result), "won");
+  assert.equal(settlePickResult({ selectionCode: "home_win" }, result), "lost");
+});
+
+test("verifica una sola vez el historial y después consulta solo picks pendientes", () => {
+  const historical = { fixtureId: 10, selectionCode: "home_win", result: "won" };
+  assert.equal(canAutomaticallySettlePick(historical), true);
+  assert.equal(needsSettlementRefresh(historical), true);
+  historical.settlementVerificationVersion = SETTLEMENT_VERIFICATION_VERSION;
+  assert.equal(needsSettlementRefresh(historical), false);
+  historical.result = "pending";
+  assert.equal(needsSettlementRefresh(historical), true);
+});
+
+test("no consulta repetidamente mercados de jugador que el resultado del fixture no puede liquidar", () => {
+  const scorer = { fixtureId: 10, selectionCode: "player_goal_9", result: "pending" };
+  assert.equal(canAutomaticallySettlePick(scorer), false);
+  assert.equal(needsSettlementRefresh(scorer), false);
 });
 
 test("liquida DNB como ganado, perdido o anulado", () => {

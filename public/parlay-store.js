@@ -4,6 +4,15 @@ export const PARLAY_DRAFT_KEY = "football-ai.parlay-draft.v1";
 export const SAVED_PARLAYS_KEY = "football-ai.saved-parlays.v1";
 export const SAVED_PICKS_KEY = "football-ai.saved-picks.v1";
 export const LEG_RESULTS = Object.freeze(["pending", "won", "lost", "void"]);
+export const SETTLEMENT_VERIFICATION_VERSION = "regulation-score-v1";
+
+const AUTO_SETTLEMENT_CODES = new Set([
+  "home_dnb", "away_dnb", "home_win", "draw", "away_win", "1X", "X2", "12",
+  "home_over_0_5", "home_over_1_5", "away_over_0_5", "away_over_1_5",
+  "over_0_5", "over_1_5", "over_2_5", "over_3_5",
+  "under_1_5", "under_2_5", "under_3_5", "btts_yes", "btts_no",
+  "home_most_corners", "away_most_corners", "over_corners", "under_corners"
+]);
 
 function readArray(storage, key) {
   try {
@@ -162,13 +171,39 @@ export function resolveSelectionCode(leg = {}) {
   return null;
 }
 
+export function canAutomaticallySettlePick(leg = {}) {
+  return AUTO_SETTLEMENT_CODES.has(resolveSelectionCode(leg));
+}
+
+export function needsSettlementRefresh(leg = {}, version = SETTLEMENT_VERIFICATION_VERSION) {
+  if (!leg.fixtureId || !canAutomaticallySettlePick(leg)) return false;
+  return leg.result === "pending" || leg.settlementVerificationVersion !== version;
+}
+
 export function settlePickResult(leg, fixtureResult) {
   const selectionCode = resolveSelectionCode(leg);
   if (!selectionCode || !fixtureResult?.finished) return "pending";
-  if (!/corners/.test(selectionCode)) return settleLegResult(selectionCode, fixtureResult);
+  if (!/corners/.test(selectionCode)) {
+    const regulation = fixtureResult.regulationGoals || fixtureResult.fulltimeScore || fixtureResult.score?.fulltime;
+    const hasRegulationScore = regulation?.home !== null && regulation?.home !== undefined && regulation?.home !== ""
+      && regulation?.away !== null && regulation?.away !== undefined && regulation?.away !== ""
+      && Number.isFinite(Number(regulation.home)) && Number.isFinite(Number(regulation.away));
+    return settleLegResult(selectionCode, hasRegulationScore ? { ...fixtureResult, goals: regulation } : fixtureResult);
+  }
 
-  const homeCorners = Number(fixtureResult.corners?.home);
-  const awayCorners = Number(fixtureResult.corners?.away);
+  const extraTime = fixtureResult.extraTimeScore || fixtureResult.score?.extratime;
+  const penalties = fixtureResult.penaltyScore || fixtureResult.score?.penalty;
+  const hasExtendedPlay = [extraTime, penalties].some((score) => score
+    && score.home !== null && score.home !== undefined && score.home !== ""
+    && score.away !== null && score.away !== undefined && score.away !== "");
+  if (hasExtendedPlay) return "pending";
+
+  const rawHomeCorners = fixtureResult.corners?.home;
+  const rawAwayCorners = fixtureResult.corners?.away;
+  if (rawHomeCorners === null || rawHomeCorners === undefined || rawHomeCorners === ""
+    || rawAwayCorners === null || rawAwayCorners === undefined || rawAwayCorners === "") return "pending";
+  const homeCorners = Number(rawHomeCorners);
+  const awayCorners = Number(rawAwayCorners);
   if (!Number.isFinite(homeCorners) || !Number.isFinite(awayCorners)) return "pending";
   if (selectionCode === "home_most_corners") return homeCorners === awayCorners ? "void" : homeCorners > awayCorners ? "won" : "lost";
   if (selectionCode === "away_most_corners") return homeCorners === awayCorners ? "void" : awayCorners > homeCorners ? "won" : "lost";
@@ -197,6 +232,35 @@ export function calculateHistoryMetrics(parlays = []) {
     winRate: won.length + lost.length ? Number((won.length / (won.length + lost.length) * 100).toFixed(1)) : null,
     theoreticalUnits: Number(theoreticalUnits.toFixed(2))
   };
+}
+
+export function calculateParlayLegCounts(parlays = []) {
+  const legs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
+  return {
+    won: legs.filter((leg) => leg?.result === "won").length,
+    lost: legs.filter((leg) => leg?.result === "lost").length
+  };
+}
+
+function fixtureDateValue(item = {}) {
+  const storedDate = String(item.date || "").trim();
+  const direct = storedDate.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(direct)) return direct;
+  const localized = storedDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (localized) return `${localized[3]}-${localized[2]}-${localized[1]}`;
+  const timestamp = Date.parse(item.kickoffAt || item.utcDateTime || "");
+  if (!Number.isFinite(timestamp)) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Tijuana", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(new Date(timestamp));
+}
+
+export function filterPicksByFixtureDate(picks = [], date = "") {
+  return date ? picks.filter((pick) => fixtureDateValue(pick) === date) : [...picks];
+}
+
+export function filterParlaysByFixtureDate(parlays = [], date = "") {
+  return date ? parlays.filter((parlay) => (parlay.legs || []).some((leg) => fixtureDateValue(leg) === date)) : [...parlays];
 }
 
 export function createSavedParlay(name, legs, now = new Date()) {
@@ -232,7 +296,7 @@ export function createSavedPick(leg, now = new Date()) {
 
 export function calculateOriginPerformance(picks = [], parlays = []) {
   const groups = new Map();
-  const parlayLegs = parlays.filter((parlay) => !parlay?.trashed).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
+  const parlayLegs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
   const rows = [...picks.map((pick) => ({ pick, kind: "individual" })), ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))];
   const leadLabel = (pick) => {
     const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || "");

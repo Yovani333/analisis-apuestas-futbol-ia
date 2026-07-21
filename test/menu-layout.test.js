@@ -89,6 +89,8 @@ test("modo oscuro cubre picks individuales y sus metricas", () => {
 
 test("Mis apuestas separa picks, resultados ganados, perdidos, mejores picks, parlays y papelera", () => {
   assert.match(html, /data-saved-tab="individual"[^>]*>Picks individuales/);
+  assert.match(html, /id="saved-date-filter" type="date"/);
+  assert.match(html, /id="apply-saved-date-filter"[^>]*>Buscar/);
   assert.match(html, /data-saved-tab="origins-won"[^>]*>Resultados por origen Ganados/);
   assert.match(html, /data-saved-tab="origins-lost"[^>]*>Resultados por origen Perdidos/);
   assert.match(html, /data-saved-tab="origin-recommendations"[^>]*>Mejores picks/);
@@ -98,6 +100,12 @@ test("Mis apuestas separa picks, resultados ganados, perdidos, mejores picks, pa
   assert.match(html, /id="origin-recommendations-section"[\s\S]*id="update-origin-recommendations"/);
   assert.match(html, /id="saved-parlays-section"[\s\S]*id="update-parlay-results"/);
   assert.match(app, /calculateOriginPerformance\(state\.savedPicks, state\.savedParlays\)/);
+  assert.match(app, /leg\.resultSource = "manual"/);
+  assert.match(app, /leg\.settlementVerificationVersion = SETTLEMENT_VERIFICATION_VERSION/);
+  assert.match(app, /fixtureIdsNeedingDetails\.has\(String\(fixtureId\)\)/);
+  assert.match(app, /Picks ganados/);
+  assert.match(app, /Picks perdidos/);
+  assert.match(app, /deletedPermanently: true/);
   assert.match(app, /calculateOriginRecommendations\(rows\)/);
 });
 

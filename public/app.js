@@ -2,9 +2,10 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayResult, createSavedParlay, createSavedPick, loadParlayDraft, loadSavedParlays,
-  hasDuplicatePick, loadSavedPicks, moveParlayToTrash, normalizePickLeg, resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, settlePickResult
-} from "./parlay-store.js?v=20260719-h2h-parlay-v1";
+  calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayResult, createSavedParlay, createSavedPick,
+  filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg,
+  resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
+} from "./parlay-store.js?v=20260720-saved-results-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -53,6 +54,7 @@ const state = {
   evidenceLibrary: [],
   evidenceEvaluationByCompetition: new Map(),
   savedTab: "individual",
+  savedDateFilter: "",
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
   expandedOrigins: { won: null, lost: null },
@@ -169,6 +171,11 @@ const elements = {
   updateOriginResults: document.querySelector("#update-origin-results"),
   updateOriginLostResults: document.querySelector("#update-origin-lost-results"),
   updateOriginRecommendations: document.querySelector("#update-origin-recommendations"),
+  savedDateFilterPanel: document.querySelector("#saved-date-filter-panel"),
+  savedDateFilter: document.querySelector("#saved-date-filter"),
+  applySavedDateFilter: document.querySelector("#apply-saved-date-filter"),
+  clearSavedDateFilter: document.querySelector("#clear-saved-date-filter"),
+  savedDateFilterStatus: document.querySelector("#saved-date-filter-status"),
   savedIndividualSection: document.querySelector("#saved-individual-section"),
   originResultsSection: document.querySelector("#origin-results-section"),
   originLostResultsSection: document.querySelector("#origin-lost-results-section"),
@@ -2338,14 +2345,35 @@ function oddsUpdateHtml(item) {
   return `<strong class="odds-change odds-change--${trend}">${displayValue(updated)}</strong>`;
 }
 
+function activeSavedPicks() {
+  return state.savedPicks.filter((pick) => !pick.trashed && !pick.deletedPermanently);
+}
+
+function activeSavedParlays() {
+  return state.savedParlays.filter((parlay) => !parlay.trashed && !parlay.deletedPermanently);
+}
+
+function updateSavedDateFilterStatus() {
+  if (!elements.savedDateFilterStatus) return;
+  elements.savedDateFilterStatus.textContent = state.savedDateFilter
+    ? `Mostrando partidos del ${formatDate(state.savedDateFilter)}.`
+    : "Mostrando todas las fechas.";
+}
+
 function renderSavedPicks() {
-  elements.savedParlayCount.textContent = state.savedParlays.filter((parlay) => !parlay.trashed).length + state.savedPicks.length;
+  const activePicks = activeSavedPicks();
+  const visiblePicks = filterPicksByFixtureDate(activePicks, state.savedDateFilter);
+  elements.savedParlayCount.textContent = activeSavedParlays().length + activePicks.length;
   elements.updateIndividualResults.disabled = state.savedPicks.length === 0;
-  if (!state.savedPicks.length) {
-    elements.savedPicksList.innerHTML = '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis con datos.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
+  updateSavedDateFilterStatus();
+  if (!visiblePicks.length) {
+    const filtered = Boolean(state.savedDateFilter && activePicks.length);
+    elements.savedPicksList.innerHTML = filtered
+      ? '<div class="saved-empty"><h3>Sin picks en esta fecha</h3><p>Prueba otra fecha o selecciona “Mostrar todas”.</p></div>'
+      : '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis con datos.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
   }
-  elements.savedPicksList.innerHTML = state.savedPicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}" data-pick-id="${escapeHtml(pick.id)}">
+  elements.savedPicksList.innerHTML = visiblePicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}" data-pick-id="${escapeHtml(pick.id)}">
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
@@ -2357,7 +2385,7 @@ function renderSavedPicks() {
 function renderOriginPerformance() {
   if (!elements.originPerformance || !elements.originLostPerformance || !elements.originRecommendations) return;
   const rows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
-  const noStoredPicks = state.savedPicks.length === 0 && state.savedParlays.every((parlay) => parlay.trashed);
+  const noStoredPicks = state.savedPicks.length === 0 && state.savedParlays.length === 0;
   [elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations].forEach((button) => { button.disabled = noStoredPicks; });
   if (!rows.length) {
     elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen Ganados</h3><p>El conteo aparecerá cuando existan picks concluidos como ganados.</p></div>';
@@ -2377,7 +2405,7 @@ function renderOriginPerformance() {
     const rateLabel = isWon ? "Acierto" : "Tasa de pérdida";
     const detail = expanded ? `<section class="origin-pick-detail origin-pick-detail--${result}"><header><div><span>${isWon ? "Picks acertados" : "Picks fallados"}</span><h4>${escapeHtml(pickOriginLabel(expanded.origin))}</h4></div><button class="button button--secondary button--compact" type="button" data-close-origin-picks="${result}">Cerrar</button></header><div class="origin-category-list">${expanded[categoriesKey].map((item) => `<span><strong>${escapeHtml(item.category)}</strong>${item.count} ${item.count === 1 ? "pick" : "picks"}</span>`).join("")}</div><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Clasificación</th><th>Pick</th><th>Partido</th><th>Liga</th><th>Cuota</th><th>Agregado</th></tr></thead><tbody>${expanded[picksKey].map((pick) => `<tr><td>${escapeHtml(pick.category)}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league)}</td><td>${displayValue(pick.odds)}</td><td>${escapeHtml(pick.addedLead)}</td></tr>`).join("")}</tbody></table></div></section>` : "";
     if (!filteredRows.length) return `<div class="saved-empty"><h3>${title}</h3><p>Todavía no hay picks ${isWon ? "ganados" : "perdidos"} para mostrar.</p></div>`;
-    return `<header><div><span>Seguimiento automático</span><h3>${title}</h3></div><small>Incluye picks individuales y selecciones de parlays activos. Pendientes y anulados no cuentan.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Origen</th><th>Agregados</th><th>Individuales</th><th>En parlays</th><th>${isWon ? "Ganados" : "Perdidos"}</th><th>Evaluados</th><th>${rateLabel}</th><th>Detalle</th></tr></thead><tbody>${filteredRows.map((row) => { const rate = isWon ? row.winRate : Number((row.lost / row.evaluated * 100).toFixed(1)); return `<tr><td data-label="Origen"><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong></td><td data-label="Agregados">${escapeHtml(row.addedSummary || "Sin dato")}</td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="${isWon ? "Ganados" : "Perdidos"}" class="${isWon ? "value-positive" : "value-negative"}">${row[countKey]}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="${rateLabel}"><strong>${displayValue(rate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}" data-origin-result="${result}">Ver picks ${isWon ? "ganados" : "perdidos"}</button></td></tr>`; }).join("")}</tbody></table></div>${detail}`;
+    return `<header><div><span>Seguimiento automático</span><h3>${title}</h3></div><small>Incluye el historial concluido de picks individuales y parlays, aunque después se oculten o eliminen. Pendientes y anulados no cuentan.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Origen</th><th>Agregados</th><th>Individuales</th><th>En parlays</th><th>${isWon ? "Ganados" : "Perdidos"}</th><th>Evaluados</th><th>${rateLabel}</th><th>Detalle</th></tr></thead><tbody>${filteredRows.map((row) => { const rate = isWon ? row.winRate : Number((row.lost / row.evaluated * 100).toFixed(1)); return `<tr><td data-label="Origen"><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong></td><td data-label="Agregados">${escapeHtml(row.addedSummary || "Sin dato")}</td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="${isWon ? "Ganados" : "Perdidos"}" class="${isWon ? "value-positive" : "value-negative"}">${row[countKey]}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="${rateLabel}"><strong>${displayValue(rate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}" data-origin-result="${result}">Ver picks ${isWon ? "ganados" : "perdidos"}</button></td></tr>`; }).join("")}</tbody></table></div>${detail}`;
   };
 
   elements.originPerformance.innerHTML = renderResult("won");
@@ -2389,19 +2417,26 @@ function renderOriginPerformance() {
 }
 
 function renderSavedParlays() {
-  const activeParlays = state.savedParlays.filter((parlay) => !parlay.trashed);
-  elements.savedParlayCount.textContent = activeParlays.length + state.savedPicks.length;
+  const allActiveParlays = activeSavedParlays();
+  const activeParlays = filterParlaysByFixtureDate(allActiveParlays, state.savedDateFilter);
   const metrics = calculateHistoryMetrics(activeParlays);
+  const legCounts = calculateParlayLegCounts(activeParlays);
+  elements.savedParlayCount.textContent = allActiveParlays.length + activeSavedPicks().length;
+  updateSavedDateFilterStatus();
   elements.historyMetrics.innerHTML = `
     <article><span>Parlays</span><strong>${metrics.total}</strong></article>
     <article><span>Evaluados</span><strong>${metrics.settled}</strong></article>
     <article><span>Ganados / perdidos</span><strong>${metrics.won} / ${metrics.lost}</strong></article>
+    <article><span>Picks ganados</span><strong class="value-positive">${legCounts.won}</strong></article>
+    <article><span>Picks perdidos</span><strong class="value-negative">${legCounts.lost}</strong></article>
     <article><span>Acierto</span><strong>${metrics.winRate === null ? "—" : `${metrics.winRate}%`}</strong></article>
     <article><span>Unidades teóricas</span><strong class="${metrics.theoreticalUnits >= 0 ? "value-positive" : "value-negative"}">${metrics.theoreticalUnits}</strong></article>`;
   renderOriginPerformance();
-  elements.updateParlayResults.disabled = activeParlays.length === 0 && state.savedPicks.length === 0;
+  elements.updateParlayResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
   if (!activeParlays.length) {
-    elements.savedParlaysList.innerHTML = '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis con datos y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
+    elements.savedParlaysList.innerHTML = state.savedDateFilter && allActiveParlays.length
+      ? '<div class="saved-empty"><h3>Sin parlays en esta fecha</h3><p>Prueba otra fecha o selecciona “Mostrar todas”.</p></div>'
+      : '<div class="saved-empty"><h3>Aún no hay parlays guardados</h3><p>Agrega dos o más mercados desde un análisis con datos y guarda el cupón para comenzar el seguimiento.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
   }
 
@@ -2434,7 +2469,7 @@ function parlayTotalOdds(legs, key) {
 }
 
 function renderTrashParlays() {
-  const trashed = state.savedParlays.filter((parlay) => parlay.trashed);
+  const trashed = state.savedParlays.filter((parlay) => parlay.trashed && !parlay.deletedPermanently);
   if (!trashed.length) {
     elements.trashParlaysList.innerHTML = '<div class="saved-empty"><h3>No hay parlays eliminados.</h3><p>Los parlays enviados a Papelera podrán recuperarse desde aquí.</p></div>';
     return;
@@ -2447,29 +2482,38 @@ function renderTrashParlays() {
 }
 
 async function updateSavedParlayResults() {
-  const allSavedLegs = [...state.savedPicks, ...state.savedParlays.filter((parlay) => !parlay.trashed).flatMap((parlay) => parlay.legs)];
-  const fixtureIds = [...new Set(allSavedLegs.filter((leg) => leg.fixtureId).map((leg) => leg.fixtureId))];
+  const allSavedLegs = [...state.savedPicks, ...state.savedParlays.flatMap((parlay) => parlay.legs || [])];
+  const legsToUpdate = allSavedLegs.filter((leg) => needsSettlementRefresh(leg));
+  const fixtureIds = [...new Set(legsToUpdate.map((leg) => leg.fixtureId))];
   if (!fixtureIds.length) {
-    showNotice("No hay selecciones compatibles pendientes de actualización automática.");
+    showNotice("No hay picks pendientes. Los resultados resueltos compatibles ya fueron verificados con el marcador reglamentario.");
     return;
   }
-  const updateButtons = [elements.updateIndividualResults, elements.updateOriginResults, elements.updateParlayResults];
+  const updateButtons = [elements.updateIndividualResults, elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateParlayResults];
   updateButtons.forEach((button) => { button.disabled = true; button.textContent = "Consultando resultados…"; });
   try {
+    const fixtureIdsNeedingDetails = new Set(legsToUpdate
+      .filter((leg) => leg.result === "pending" || /corners/.test(resolveSelectionCode(leg) || ""))
+      .map((leg) => String(leg.fixtureId)));
     const updates = await Promise.all(fixtureIds.map(async (fixtureId) => {
       const fixture = { id: fixtureId };
       const [result, details] = await Promise.all([
         footballDataService.getFixtureResult(fixtureId).catch(() => null),
-        footballDataService.getFixtureData(fixture, true).catch(() => null)
+        fixtureIdsNeedingDetails.has(String(fixtureId))
+          ? footballDataService.getFixtureData(fixture, true).catch(() => null)
+          : Promise.resolve(null)
       ]);
       return { fixtureId: String(fixtureId), result, details };
     }));
     const byFixture = new Map(updates.map((item) => [item.fixtureId, item]));
     let updated = 0;
+    let verified = 0;
+    let unverifiable = 0;
     const fixtureCorners = (details, fixtureResult) => {
       const rows = details?.confirmedData?.statistics || [];
       const read = (row) => {
         const raw = row?.statistics?.find((stat) => String(stat.type || "").toLowerCase() === "corner kicks")?.value;
+        if (raw === null || raw === undefined || raw === "") return null;
         const value = Number(raw);
         return Number.isFinite(value) ? value : null;
       };
@@ -2478,6 +2522,7 @@ async function updateSavedParlayResults() {
       return { home: read(homeRow), away: read(awayRow) };
     };
     const updateLeg = (leg) => {
+      if (!needsSettlementRefresh(leg)) return;
       const update = byFixture.get(String(leg.fixtureId));
       if (!update) return;
       const fixtureResult = update.result;
@@ -2495,17 +2540,39 @@ async function updateSavedParlayResults() {
       leg.lastUpdatedAt = new Date().toISOString();
       leg.updatedAt = leg.lastUpdatedAt;
       Object.assign(leg, applyAnalysisTiming(leg));
-      if (leg.result !== "pending") return;
-      const nextResult = settlePickResult(leg, { ...fixtureResult, corners: fixtureCorners(update.details, fixtureResult) });
+      const detailCorners = fixtureCorners(update.details, fixtureResult);
+      const resultCorners = fixtureResult?.corners || {};
+      const corners = {
+        home: resultCorners.home ?? detailCorners.home,
+        away: resultCorners.away ?? detailCorners.away
+      };
+      const nextResult = settlePickResult(leg, { ...fixtureResult, corners });
       if (nextResult !== "pending") {
+        const regulation = fixtureResult?.regulationGoals || fixtureResult?.fulltimeScore || fixtureResult?.goals;
+        const changed = leg.result !== nextResult;
         leg.result = nextResult;
-        leg.finalScore = `${fixtureResult.goals.home}-${fixtureResult.goals.away}`;
+        leg.resultSource = "api-football";
+        leg.settlementVerificationVersion = SETTLEMENT_VERIFICATION_VERSION;
+        leg.settlementVerificationStatus = "verified";
+        leg.settlementVerifiedAt = new Date().toISOString();
+        if (regulation?.home !== null && regulation?.home !== undefined && regulation?.away !== null && regulation?.away !== undefined) {
+          leg.finalScore = `${regulation.home}-${regulation.away}`;
+        }
         leg.resolvedAt = new Date().toISOString();
-        updated += 1;
+        if (changed) updated += 1;
+        verified += 1;
+      } else if (leg.result !== "pending") {
+        // Mantiene el resultado histórico cuando la API no permite comprobarlo y evita consultas repetidas.
+        leg.settlementVerificationVersion = SETTLEMENT_VERIFICATION_VERSION;
+        leg.settlementVerificationStatus = fixtureResult
+          ? (fixtureResult.finished ? "missing_settlement_data" : "fixture_not_final")
+          : "api_unavailable";
+        leg.settlementVerifiedAt = new Date().toISOString();
+        unverifiable += 1;
       }
     };
     state.savedPicks.forEach(updateLeg);
-    state.savedParlays.filter((parlay) => !parlay.trashed).forEach((parlay) => {
+    state.savedParlays.forEach((parlay) => {
       parlay.legs.forEach(updateLeg);
       parlay.result = calculateParlayResult(parlay.legs);
       parlay.lastCheckedAt = new Date().toISOString();
@@ -2515,11 +2582,15 @@ async function updateSavedParlayResults() {
     persistSavedPicks();
     renderSavedPicks();
     renderSavedParlays();
-    showNotice(updated ? `${updated} selección(es) actualizadas con API-Football.` : "Los partidos pendientes todavía no tienen resultado final.");
+    const summary = [];
+    if (updated) summary.push(`${updated} resultado(s) corregidos`);
+    if (verified) summary.push(`${verified} verificados a 90 minutos`);
+    if (unverifiable) summary.push(`${unverifiable} conservados sin datos suficientes para verificarlos`);
+    showNotice(summary.length ? `${summary.join(" · ")}.` : "Los picks pendientes todavía no tienen un resultado final evaluable.");
   } finally {
     elements.updateIndividualResults.disabled = state.savedPicks.length === 0;
-    elements.updateOriginResults.disabled = state.savedParlays.filter((parlay) => !parlay.trashed).length === 0 && state.savedPicks.length === 0;
-    elements.updateParlayResults.disabled = state.savedParlays.filter((parlay) => !parlay.trashed).length === 0;
+    elements.updateOriginResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
+    elements.updateParlayResults.disabled = state.savedParlays.length === 0;
     updateButtons.forEach((button) => { button.textContent = "Actualizar datos"; });
   }
 }
@@ -4294,6 +4365,17 @@ elements.parlayFab.addEventListener("click", () => renderParlayDraft(true, false
 elements.saveParlay.addEventListener("click", saveCurrentParlay);
 [elements.updateIndividualResults, elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateParlayResults]
   .forEach((button) => button.addEventListener("click", updateSavedParlayResults));
+elements.applySavedDateFilter.addEventListener("click", () => {
+  state.savedDateFilter = elements.savedDateFilter.value;
+  renderSavedPicks();
+  renderSavedParlays();
+});
+elements.clearSavedDateFilter.addEventListener("click", () => {
+  state.savedDateFilter = "";
+  elements.savedDateFilter.value = "";
+  renderSavedPicks();
+  renderSavedParlays();
+});
 const handleOriginDetailClick = (event) => {
   const open = event.target.closest("[data-view-origin-picks]");
   const close = event.target.closest("[data-close-origin-picks]");
@@ -4312,6 +4394,17 @@ elements.savedParlaysList.addEventListener("change", (event) => {
   const leg = parlay?.legs.find((item) => item.id === legRow.dataset.legId);
   if (!leg) return;
   leg.result = select.value;
+  if (select.value === "pending") {
+    delete leg.resultSource;
+    delete leg.settlementVerificationVersion;
+    delete leg.settlementVerificationStatus;
+    delete leg.settlementVerifiedAt;
+  } else {
+    leg.resultSource = "manual";
+    leg.settlementVerificationVersion = SETTLEMENT_VERIFICATION_VERSION;
+    leg.settlementVerificationStatus = "manual";
+    leg.settlementVerifiedAt = new Date().toISOString();
+  }
   leg.updatedAt = new Date().toISOString();
   parlay.result = calculateParlayResult(parlay.legs);
   parlay.updatedAt = leg.updatedAt;
@@ -4356,16 +4449,21 @@ elements.trashParlaysList.addEventListener("click", (event) => {
   }
   if (!event.target.closest("[data-delete-parlay-forever]")) return;
   if (!window.confirm("¿Eliminar definitivamente este parlay? Esta acción no se puede deshacer.")) return;
-  state.savedParlays = state.savedParlays.filter((parlay) => parlay.id !== id);
-  persistSavedParlays(); renderSavedParlays(); showNotice("Parlay eliminado definitivamente.");
+  state.savedParlays = state.savedParlays.map((parlay) => parlay.id === id
+    ? { ...parlay, trashed: true, deletedPermanently: true, purgedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    : parlay);
+  persistSavedParlays(); renderSavedParlays(); showNotice("Parlay retirado de la vista. Sus resultados concluidos se conservan en el conteo por origen.");
 });
 elements.savedPicksList.addEventListener("click", (event) => {
   const card = event.target.closest("[data-pick-id]");
   if (!card || !event.target.closest("[data-delete-pick]")) return;
-  state.savedPicks = state.savedPicks.filter((pick) => pick.id !== card.dataset.pickId);
+  state.savedPicks = state.savedPicks.map((pick) => pick.id === card.dataset.pickId
+    ? { ...pick, trashed: true, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    : pick);
   persistSavedPicks();
   renderSavedPicks();
   renderOriginPerformance();
+  showNotice("Pick retirado de la vista. Si está concluido, permanece en el conteo por origen.");
 });
 document.addEventListener("click", (event) => {
   const savedTab = event.target.closest("[data-saved-tab]");
@@ -4378,6 +4476,7 @@ document.addEventListener("click", (event) => {
     elements.originRecommendationsSection.hidden = state.savedTab !== "origin-recommendations";
     elements.savedParlaysSection.hidden = state.savedTab !== "parlays";
     elements.trashResultsSection.hidden = state.savedTab !== "trash";
+    elements.savedDateFilterPanel.hidden = !["individual", "parlays"].includes(state.savedTab);
   }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);
