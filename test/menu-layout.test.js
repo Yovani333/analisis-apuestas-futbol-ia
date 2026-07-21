@@ -91,6 +91,7 @@ test("Mis apuestas separa picks, resultados ganados, perdidos, mejores picks, pa
   assert.match(html, /data-saved-tab="individual"[^>]*>Picks individuales/);
   assert.match(html, /id="saved-date-filter" type="date"/);
   assert.match(html, /id="apply-saved-date-filter"[^>]*>Buscar/);
+  assert.match(app, /savedDateFilter: pacificToday\(\)/);
   assert.match(html, /data-saved-tab="origins-won"[^>]*>Resultados por origen Ganados/);
   assert.match(html, /data-saved-tab="origins-lost"[^>]*>Resultados por origen Perdidos/);
   assert.match(html, /data-saved-tab="origin-recommendations"[^>]*>Mejores picks/);

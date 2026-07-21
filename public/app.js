@@ -5,7 +5,7 @@ import {
   calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayResult, createSavedParlay, createSavedPick,
   filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg,
   resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260720-saved-results-v1";
+} from "./parlay-store.js?v=20260720-saved-results-v2";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -54,7 +54,7 @@ const state = {
   evidenceLibrary: [],
   evidenceEvaluationByCompetition: new Map(),
   savedTab: "individual",
-  savedDateFilter: "",
+  savedDateFilter: pacificToday(),
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
   expandedOrigins: { won: null, lost: null },
@@ -4669,6 +4669,7 @@ async function initializeApp() {
   const today = pacificToday();
   elements.dateFrom.value ||= today;
   elements.dateTo.value ||= today;
+  elements.savedDateFilter.value = state.savedDateFilter;
   elements.competition.value = "world-cup";
   elements.season.value = "auto";
   syncCompetitionCheckboxes();

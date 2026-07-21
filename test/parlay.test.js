@@ -177,6 +177,13 @@ test("liquida corners cuando las estadísticas finales están disponibles", () =
   assert.equal(settlePickResult({ home: "A", away: "B", market: "Total de corners", selection: "Más de 8.5 corners" }, { ...result, corners: { home: null, away: null } }), "pending");
 });
 
+test("liquida una línea entera de corners como ganada, perdida o anulada", () => {
+  const leg = { market: "Total de corners", selection: "Más de 11 corners" };
+  assert.equal(settlePickResult(leg, { finished: true, corners: { home: 5, away: 7 } }), "won");
+  assert.equal(settlePickResult(leg, { finished: true, corners: { home: 5, away: 5 } }), "lost");
+  assert.equal(settlePickResult(leg, { finished: true, corners: { home: 5, away: 6 } }), "void");
+});
+
 test("no liquida corners de prórroga como si fueran exclusivamente de 90 minutos", () => {
   const result = {
     finished: true,

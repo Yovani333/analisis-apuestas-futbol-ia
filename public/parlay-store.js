@@ -4,7 +4,7 @@ export const PARLAY_DRAFT_KEY = "football-ai.parlay-draft.v1";
 export const SAVED_PARLAYS_KEY = "football-ai.saved-parlays.v1";
 export const SAVED_PICKS_KEY = "football-ai.saved-picks.v1";
 export const LEG_RESULTS = Object.freeze(["pending", "won", "lost", "void"]);
-export const SETTLEMENT_VERIFICATION_VERSION = "regulation-score-v1";
+export const SETTLEMENT_VERIFICATION_VERSION = "regulation-score-v2";
 
 const AUTO_SETTLEMENT_CODES = new Set([
   "home_dnb", "away_dnb", "home_win", "draw", "away_win", "1X", "X2", "12",
@@ -210,6 +210,7 @@ export function settlePickResult(leg, fixtureResult) {
   const threshold = Number.parseFloat(normalizedSelectionText(leg.selection).match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(",", ".") || "");
   if (!Number.isFinite(threshold)) return "pending";
   const total = homeCorners + awayCorners;
+  if (Number.isInteger(threshold) && total === threshold) return "void";
   return selectionCode === "over_corners" ? (total > threshold ? "won" : "lost") : total < threshold ? "won" : "lost";
 }
 
