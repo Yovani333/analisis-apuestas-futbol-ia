@@ -87,7 +87,7 @@ test("modo oscuro cubre picks individuales y sus metricas", () => {
   assert.match(styles, /data-theme="dark"[^}]*\.saved-market-metrics/);
 });
 
-test("Mis apuestas separa picks, resultados ganados, perdidos, mejores picks, parlays y papelera", () => {
+test("Mis apuestas separa picks, resultados por origen, competición, mejores picks, parlays y papelera", () => {
   assert.match(html, /data-saved-tab="individual"[^>]*>Picks individuales/);
   assert.match(html, /id="saved-date-filter" type="date"/);
   assert.match(html, /id="apply-saved-date-filter"[^>]*>Buscar/);
@@ -97,13 +97,18 @@ test("Mis apuestas separa picks, resultados ganados, perdidos, mejores picks, pa
   assert.match(app, /pick\.resultSource = "manual"/);
   assert.match(html, /data-saved-tab="origins-won"[^>]*>Resultados por origen Ganados/);
   assert.match(html, /data-saved-tab="origins-lost"[^>]*>Resultados por origen Perdidos/);
+  assert.match(html, /data-saved-tab="competitions"[^>]*>Resultados por competición/);
   assert.match(html, /data-saved-tab="origin-recommendations"[^>]*>Mejores picks/);
   assert.match(html, /id="saved-individual-section"[\s\S]*id="update-individual-results"/);
   assert.match(html, /id="origin-results-section"[\s\S]*id="update-origin-results"/);
   assert.match(html, /id="origin-lost-results-section"[\s\S]*id="update-origin-lost-results"/);
+  assert.match(html, /id="competition-results-section"[\s\S]*id="update-competition-results"/);
   assert.match(html, /id="origin-recommendations-section"[\s\S]*id="update-origin-recommendations"/);
   assert.match(html, /id="saved-parlays-section"[\s\S]*id="update-parlay-results"/);
   assert.match(app, /calculateOriginPerformance\(state\.savedPicks, state\.savedParlays\)/);
+  assert.match(app, /calculateCompetitionPerformance\(state\.savedPicks, state\.savedParlays\)/);
+  assert.doesNotMatch(app, /<th>Agregados<\/th>/);
+  assert.doesNotMatch(app, /<th>Agregado<\/th>/);
   assert.match(app, /leg\.resultSource = "manual"/);
   assert.match(app, /leg\.settlementVerificationVersion = SETTLEMENT_VERIFICATION_VERSION/);
   assert.match(app, /fixtureIdsNeedingDetails\.has\(String\(fixtureId\)\)/);
@@ -111,6 +116,19 @@ test("Mis apuestas separa picks, resultados ganados, perdidos, mejores picks, pa
   assert.match(app, /Picks perdidos/);
   assert.match(app, /deletedPermanently: true/);
   assert.match(app, /calculateOriginRecommendations\(rows\)/);
+});
+
+test("forma reciente permite agregar su recomendación al parlay", () => {
+  assert.match(app, /data-add-recent-form-pick/);
+  assert.match(app, /sourceModule: "recent_form"/);
+  assert.match(app, /addRecentFormRecommendationToParlay/);
+});
+
+test("parlays muestran marcador y minuto cuando el encuentro está en vivo", () => {
+  assert.match(app, /function savedLegScoreHtml\(leg\)/);
+  assert.match(app, /leg\.liveScore = \{ home, away \}/);
+  assert.match(app, /leg\.liveElapsed = Number\(fixtureResult\.elapsed\)/);
+  assert.match(app, /savedLegScoreHtml\(leg\)/);
 });
 
 test("En vivo permite scroll vertical interno y continuar en la pagina", () => {
@@ -129,7 +147,7 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260718-mobile-tabs-v2/);
+  assert.match(html, /styles\.css\?v=20260722-live-score-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
 });

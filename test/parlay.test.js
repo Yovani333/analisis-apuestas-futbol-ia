@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayResult, canAutomaticallySettlePick, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, pickIdentity, resolveSelectionCode, restoreParlayFromTrash, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayResult, canAutomaticallySettlePick, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, pickIdentity, resolveSelectionCode, restoreParlayFromTrash, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -28,6 +28,33 @@ test("resultados por origen conserva selecciones concluidas aunque el parlay se 
   const poisson = rows.find((row) => row.origin === "poisson");
   assert.deepEqual({ evaluated: data.evaluated, won: data.won, lost: data.lost, individual: data.individual, parlayLegs: data.parlayLegs }, { evaluated: 2, won: 1, lost: 1, individual: 1, parlayLegs: 1 });
   assert.deepEqual({ evaluated: poisson.evaluated, won: poisson.won, lost: poisson.lost, individual: poisson.individual, parlayLegs: poisson.parlayLegs }, { evaluated: 2, won: 1, lost: 1, individual: 0, parlayLegs: 2 });
+});
+
+test("cuenta picks ganados y perdidos por competición incluyendo parlays", () => {
+  const rows = calculateCompetitionPerformance(
+    [
+      { leagueId: 253, league: "MLS", result: "won" },
+      { leagueId: 253, league: "MLS", result: "pending" },
+      { leagueId: 71, league: "Brasileirão Serie A", result: "lost" }
+    ],
+    [
+      { legs: [{ leagueId: 253, league: "Major League Soccer", result: "lost" }, { league: "Liga MX", result: "won" }] },
+      { trashed: true, legs: [{ league: "Liga MX", result: "lost" }] }
+    ]
+  );
+  const mls = rows.find((row) => row.leagueId === 253);
+  const ligaMx = rows.find((row) => row.competition === "Liga MX");
+  assert.deepEqual({ evaluated: mls.evaluated, won: mls.won, lost: mls.lost, individual: mls.individual, parlayLegs: mls.parlayLegs },
+    { evaluated: 2, won: 1, lost: 1, individual: 1, parlayLegs: 1 });
+  assert.deepEqual({ evaluated: ligaMx.evaluated, won: ligaMx.won, lost: ligaMx.lost, parlayLegs: ligaMx.parlayLegs },
+    { evaluated: 2, won: 1, lost: 1, parlayLegs: 2 });
+});
+
+test("resultados por competición ignora pendientes y anulados", () => {
+  assert.deepEqual(calculateCompetitionPerformance([
+    { league: "MLS", result: "pending" },
+    { league: "MLS", result: "void" }
+  ]), []);
 });
 
 test("filtra picks y parlays por la fecha del partido", () => {

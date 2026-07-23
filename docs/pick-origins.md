@@ -11,6 +11,7 @@ El valor `sourceModule` se conserva como identificador técnico dentro de picks 
 | `corners` | Corners | `server/services/corners-model.service.js` | Mercados de tiros de esquina | Activo | `addCornerPick()` / `saveCornerPick()` |
 | `team_goal_probability` | Probabilidad de gol | `server/services/team-goal-probability.service.js` | Goles por equipo y BTTS | Activo | `addTeamGoalPick()` / `saveTeamGoalPick()` |
 | `team_average_performance` | Rendimiento promedio por equipo | `server/services/team-performance-picks.service.js` | DNB, doble oportunidad, gol de equipo y resultado derivados de tiros, pases, disciplina y muestra | Activo | `addTeamPerformancePick()` / `saveTeamPerformancePick()` |
+| `recent_form` | Forma reciente | `public/recent-form-recommendation.js` | Un pick contextual derivado de los partidos recientes ya mostrados en Estadísticas / forma | Activo | `addRecentFormRecommendationToParlay()` |
 | `player_goal_candidate` | Jugador con posible gol | `server/services/player-goal-candidates.service.js` | Candidato a anotar basado en minutos, titularidad, tiros, tiros a puerta, goles, penales y expectativa ofensiva | Activo | `addPlayerGoalPick()` / `savePlayerGoalPick()` |
 | `manual` | Manual | Captura manual | Reservado para una futura captura manual | Reservado; no existe UI activa | Ninguno actualmente |
 | `manual_picks` | Manual | Alias histórico previsto | Picks manuales | Alias legado; no generado actualmente | Ninguno actualmente |

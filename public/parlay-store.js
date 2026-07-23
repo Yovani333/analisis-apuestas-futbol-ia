@@ -360,6 +360,35 @@ export function calculateOriginPerformance(picks = [], parlays = []) {
   return [...groups.values()].sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.origin.localeCompare(b.origin));
 }
 
+export function calculateCompetitionPerformance(picks = [], parlays = []) {
+  const groups = new Map();
+  const parlayLegs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
+  const rows = [
+    ...picks.map((pick) => ({ pick, kind: "individual" })),
+    ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))
+  ];
+
+  for (const { pick, kind } of rows) {
+    if (!['won', 'lost'].includes(pick?.result)) continue;
+    const competition = String(pick.league || pick.competition || "Competición no disponible").trim();
+    const leagueId = pick.leagueId ?? pick.league_id ?? null;
+    const key = leagueId === null || leagueId === undefined || leagueId === ""
+      ? `name:${competition.toLowerCase()}`
+      : `id:${leagueId}`;
+    const current = groups.get(key) || {
+      key, competition, leagueId, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0
+    };
+    current.evaluated += 1;
+    current[pick.result] += 1;
+    if (kind === "parlay") current.parlayLegs += 1;
+    else current.individual += 1;
+    current.winRate = Number((current.won / current.evaluated * 100).toFixed(1));
+    groups.set(key, current);
+  }
+
+  return [...groups.values()].sort((a, b) => b.evaluated - a.evaluated || b.winRate - a.winRate || a.competition.localeCompare(b.competition));
+}
+
 export function calculateOriginRecommendations(performanceRows = []) {
   const entries = performanceRows.flatMap((row) => (row.categoryPerformance || []).map((category) => ({
     ...category,
