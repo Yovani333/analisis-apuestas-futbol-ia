@@ -17,6 +17,7 @@ import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favor
 import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260719-remove-invalid-v1";
 import { filterValidEvidenceSnapshots, isValidEvidenceSnapshot } from "./evidence-validity.js?v=20260719-remove-invalid-v1";
 import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2h-suggestion-v1";
+import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.js?v=20260722-recent-form-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -1469,6 +1470,50 @@ function addH2HRecommendationToParlay(dataset) {
   if (leg) appendPickToParlay(leg, "Pick H2H agregado a Mi parlay. Se guardará únicamente cuando nombres y guardes el parlay.");
 }
 
+function renderRecentFormSuggestion(analysis, homeName, awayName) {
+  const recommended = Boolean(analysis?.recommendedMarket);
+  const confidenceClass = analysis?.confidence === "Alta" ? "available" : analysis?.confidence === "Media" ? "partial" : "unavailable";
+  const home = analysis?.calculationDetails?.home || {};
+  const away = analysis?.calculationDetails?.away || {};
+  const candidates = analysis?.calculationDetails?.candidates || [];
+  const warnings = analysis?.warnings || [];
+  const metricRows = (team, metrics, contextLabel) => [
+    [team, "Partidos", displayValue(metrics.sampleSize, 0)],
+    [team, "Victorias / Empates / Derrotas", `${displayValue(metrics.wins, 0)} / ${displayValue(metrics.draws, 0)} / ${displayValue(metrics.losses, 0)}`],
+    [team, "Victoria simple / ponderada", `${displayValue(metrics.simpleWinRatePct, 0)}% / ${displayValue(metrics.weightedWinRatePct, 0)}%`],
+    [team, "No derrota ponderada", `${displayValue(metrics.weightedNonLossRatePct, 0)}%`],
+    [team, "Goles a favor / en contra", `${displayValue(metrics.goalsFor, 0)} / ${displayValue(metrics.goalsAgainst, 0)}`],
+    [team, "Promedio ponderado GF / GC", `${displayValue(metrics.weightedGoalsFor)} / ${displayValue(metrics.weightedGoalsAgainst)}`],
+    [team, "Diferencia ponderada", displayValue(metrics.weightedGoalDifference)],
+    [team, contextLabel, `${displayValue(metrics.contextualMatches, 0)} partido(s) · ${displayValue(metrics.contextualWinRatePct, 0)}% victorias`],
+    [team, "Porterías a cero", `${displayValue(metrics.cleanSheetRatePct, 0)}%`],
+    [team, "Marca / No marca", `${displayValue(metrics.scoredRatePct, 0)}% / ${displayValue(metrics.failedToScoreRatePct, 0)}%`],
+    [team, "Over 1.5 / Over 2.5", `${displayValue(metrics.over15RatePct, 0)}% / ${displayValue(metrics.over25RatePct, 0)}%`],
+    [team, "Under 3.5 / BTTS", `${displayValue(metrics.under35RatePct, 0)}% / ${displayValue(metrics.bttsRatePct, 0)}%`]
+  ];
+  const candidateRows = candidates.map((candidate) => [
+    escapeHtml(candidate.selection), `${displayValue(candidate.weightedRatePct, 0)}%`, `${displayValue(candidate.score, 0)}/100`,
+    candidate.status === "Candidato" ? '<span class="status-badge status-badge--available">Candidato</span>' : '<span class="status-badge status-badge--unavailable">Descartado</span>',
+    escapeHtml(candidate.reasons?.join(" ") || (candidate.status === "Candidato" ? "Supera los filtros mínimos." : "No supera los filtros mínimos."))
+  ]);
+  return `<section class="recent-form-suggestion recent-form-suggestion--${recommended ? confidenceClass : "unavailable"}">
+    <header><div><p class="eyebrow">Análisis contextual</p><h3>Sugerencia por forma reciente</h3></div><span class="status-badge status-badge--${confidenceClass}">${escapeHtml(recommended ? analysis.confidence : "Sin pick")}</span></header>
+    <div class="recent-form-suggestion__summary">
+      <div><span>Pick sugerido</span><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick recomendado por forma reciente")}</strong><small>${escapeHtml(analysis?.recommendedMarket || "No se fuerza una recomendación")}</small></div>
+      <div><span>Confianza de la tendencia reciente</span><strong>${escapeHtml(analysis?.confidence || "Baja")}</strong><small>No es una probabilidad real de acierto</small></div>
+      <div><span>Muestra</span><strong>${escapeHtml(homeName)}: ${displayValue(analysis?.homeSampleSize, 0)} · ${escapeHtml(awayName)}: ${displayValue(analysis?.awaySampleSize, 0)}</strong><small>Calidad ${escapeHtml(analysis?.dataQuality || "Baja")}</small></div>
+      <div><span>Cumplimiento ponderado</span><strong>${analysis?.weightedRate === null || analysis?.weightedRate === undefined ? "—" : `${displayValue(analysis.weightedRate)}%`}</strong><small>Recencia y localía ajustadas</small></div>
+    </div>
+    <p class="recent-form-suggestion__explanation">${escapeHtml(analysis?.explanation || "Sin información suficiente para evaluar la forma reciente.")}</p>
+    <div class="detail-note detail-note--warning"><strong>Uso responsable</strong><span>La forma reciente es evidencia contextual. No representa por sí sola una probabilidad completa del partido y debe complementarse con disponibilidad de jugadores, alineaciones, cuotas, rendimiento colectivo y otros modelos.</span></div>
+    <details class="recent-form-calculation"><summary>Ver cálculo</summary>
+      ${detailTable(["Equipo", "Indicador", "Valor"], [...metricRows(homeName, home, "Rendimiento en casa"), ...metricRows(awayName, away, "Rendimiento fuera")])}
+      <section class="detail-section"><h4>Comparación de candidatos</h4>${candidateRows.length ? detailTable(["Mercado", "Frecuencia", "Puntuación", "Estado", "Motivo"], candidateRows) : emptyDetail("No fue posible construir candidatos evaluables.")}</section>
+      ${warnings.length ? `<div class="recent-form-warnings"><h4>Advertencias</h4><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
+    </details>
+  </section>`;
+}
+
 function renderResearchModuleDetail(moduleKey, research) {
   const module = research?.[moduleKey];
   if (!module) return emptyDetail("No existe información normalizada para este módulo.");
@@ -1506,7 +1551,9 @@ function renderResearchModuleDetail(moduleKey, research) {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
   } else if (moduleKey === "statsForm") {
     const matchRows = (team, matches) => (matches || []).map((match) => [escapeHtml(team), displayValue(match.date), displayValue(match.opponent), displayValue(match.venue), `<strong>${displayValue(match.goalsFor)}–${displayValue(match.goalsAgainst)}</strong>`, displayValue(match.result)]);
-    content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Goles a favor", module.homeGoalsFor], ["Goles en contra", module.homeGoalsAgainst], ["Tasa de victoria", module.homeWinRate === null ? null : `${module.homeWinRate}%`], ["Porterías a cero", module.homeCleanSheets]])}${researchTeamStats(research.awayTeam.name, [["Goles a favor", module.awayGoalsFor], ["Goles en contra", module.awayGoalsAgainst], ["Tasa de victoria", module.awayWinRate === null ? null : `${module.awayWinRate}%`], ["Porterías a cero", module.awayCleanSheets]])}</div>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "Marcador", "Resultado"], [...matchRows(research.homeTeam.name, module.homeLastMatches), ...matchRows(research.awayTeam.name, module.awayLastMatches)])}`;
+    const analysis = evaluateRecentFormRecommendation({ homeMatches: module.homeLastMatches, awayMatches: module.awayLastMatches,
+      homeTeamName: research.homeTeam.name, awayTeamName: research.awayTeam.name, currentFixtureDate: research.dateTime });
+    content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Goles a favor", module.homeGoalsFor], ["Goles en contra", module.homeGoalsAgainst], ["Tasa de victoria", module.homeWinRate === null ? null : `${module.homeWinRate}%`], ["Porterías a cero", module.homeCleanSheets]])}${researchTeamStats(research.awayTeam.name, [["Goles a favor", module.awayGoalsFor], ["Goles en contra", module.awayGoalsAgainst], ["Tasa de victoria", module.awayWinRate === null ? null : `${module.awayWinRate}%`], ["Porterías a cero", module.awayCleanSheets]])}</div>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "Marcador", "Resultado"], [...matchRows(research.homeTeam.name, module.homeLastMatches), ...matchRows(research.awayTeam.name, module.awayLastMatches)])}${renderRecentFormSuggestion(analysis, research.homeTeam.name, research.awayTeam.name)}`;
   } else if (moduleKey === "injuriesSuspensions") {
     const absenceRows = (team, side) => ["injuries", "suspensions", "doubts"].flatMap((kind) => (side?.[kind] || []).map((player) => [escapeHtml(team), kind === "injuries" ? "Lesión" : kind === "suspensions" ? "Sanción" : "Duda", displayValue(player.name), displayValue(player.reason || player.type)]));
     const rows = [...absenceRows(research.homeTeam.name, module.home), ...absenceRows(research.awayTeam.name, module.away)];

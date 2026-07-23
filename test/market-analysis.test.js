@@ -16,6 +16,31 @@ test("resume únicamente partidos terminados anteriores al fixture", () => {
   assert.equal(summary.bttsRate, 100);
 });
 
+test("usa el marcador reglamentario en partidos con prórroga o penales", () => {
+  const row = fixtureRow(3, "2026-06-10T12:00:00Z", 10, 20, 3, 2);
+  row.fixture.status.short = "PEN";
+  row.score = { fulltime: { home: 1, away: 1 }, extratime: { home: 2, away: 2 }, penalty: { home: 5, away: 4 } };
+  const summary = summarizeRecentFixtures([row], 10, "2026-06-20T12:00:00Z");
+  assert.equal(summary.played, 1);
+  assert.equal(summary.matches[0].goalsFor, 1);
+  assert.equal(summary.matches[0].goalsAgainst, 1);
+  assert.equal(summary.matches[0].result, "D");
+});
+
+test("no convierte marcadores ausentes en cero ni duplica fixtures", () => {
+  const valid = fixtureRow(4, "2026-06-10T12:00:00Z", 10, 20, 2, 0);
+  const missing = fixtureRow(5, "2026-06-09T12:00:00Z", 10, 30, null, null);
+  const summary = summarizeRecentFixtures([valid, { ...valid }, missing], 10, "2026-06-20T12:00:00Z");
+  assert.equal(summary.played, 1);
+  assert.equal(summary.matches[0].fixtureId, 4);
+});
+
+test("descarta filas que no contienen al equipo solicitado", () => {
+  const unrelated = fixtureRow(6, "2026-06-10T12:00:00Z", 30, 40, 2, 1);
+  const summary = summarizeRecentFixtures([unrelated], 10, "2026-06-20T12:00:00Z");
+  assert.equal(summary.played, 0);
+});
+
 test("calcula probabilidad, cuota justa y valor esperado sin IA", () => {
   const form = { played: 5, matches: Array.from({ length: 5 }, () => ({ result: "W", over25: true, btts: true })) };
   const calculations = calculateMarketAnalysis(form, form, { selections: [{ marketKey: "over_under_2_5", selectionKey: "over_2_5", market: "Total", selection: "Más de 2.5", decimalOdds: 1.8 }] });

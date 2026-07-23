@@ -7,27 +7,45 @@ const asDecimal = (value) => {
 };
 
 function teamScore(row, teamId) {
-  const isHome = row.teams?.home?.id === teamId;
+  const isHome = String(row.teams?.home?.id) === String(teamId);
+  const isAway = String(row.teams?.away?.id) === String(teamId);
+  if (!isHome && !isAway) return null;
+  const status = String(row.fixture?.status?.short || "").toUpperCase();
+  const scoreNumber = (value) => value === null || value === undefined || value === "" ? null : Number(value);
+  const fulltimeHome = scoreNumber(row.score?.fulltime?.home);
+  const fulltimeAway = scoreNumber(row.score?.fulltime?.away);
+  const hasFulltime = Number.isFinite(fulltimeHome) && Number.isFinite(fulltimeAway);
+  const rawHome = scoreNumber(row.goals?.home);
+  const rawAway = scoreNumber(row.goals?.away);
+  const canUseRaw = status === "FT" && Number.isFinite(rawHome) && Number.isFinite(rawAway);
+  if (!hasFulltime && !canUseRaw) return null;
+  const homeGoals = hasFulltime ? fulltimeHome : rawHome;
+  const awayGoals = hasFulltime ? fulltimeAway : rawAway;
   return {
     isHome,
-    goalsFor: Number(isHome ? row.goals?.home : row.goals?.away) || 0,
-    goalsAgainst: Number(isHome ? row.goals?.away : row.goals?.home) || 0,
+    goalsFor: isHome ? homeGoals : awayGoals,
+    goalsAgainst: isHome ? awayGoals : homeGoals,
     opponent: isHome ? row.teams?.away?.name : row.teams?.home?.name
   };
 }
 
 export function summarizeRecentFixtures(rows = [], teamId, fixtureDate) {
   const fixtureTime = Date.parse(fixtureDate);
+  const seenFixtures = new Set();
   const matches = rows
     .filter((row) => FINISHED_STATUSES.has(row.fixture?.status?.short) && Date.parse(row.fixture?.date) < fixtureTime)
     .sort((a, b) => Date.parse(b.fixture.date) - Date.parse(a.fixture.date))
-    .slice(0, 5)
     .map((row) => {
       const score = teamScore(row, teamId);
+      if (!score || seenFixtures.has(String(row.fixture?.id))) return null;
+      seenFixtures.add(String(row.fixture.id));
       const result = score.goalsFor > score.goalsAgainst ? "W" : score.goalsFor < score.goalsAgainst ? "L" : "D";
       return {
         fixtureId: row.fixture.id,
         date: row.fixture.date.slice(0, 10),
+        statusShort: row.fixture.status.short,
+        competition: row.league?.name || "No disponible",
+        competitionId: row.league?.id ?? null,
         opponent: score.opponent || "No disponible",
         venue: score.isHome ? "Local" : "Visitante",
         goalsFor: score.goalsFor,
@@ -36,7 +54,9 @@ export function summarizeRecentFixtures(rows = [], teamId, fixtureDate) {
         over25: score.goalsFor + score.goalsAgainst > 2.5,
         btts: score.goalsFor > 0 && score.goalsAgainst > 0
       };
-    });
+    })
+    .filter(Boolean)
+    .slice(0, 5);
 
   const played = matches.length;
   const sum = (key) => matches.reduce((total, match) => total + Number(match[key] || 0), 0);
