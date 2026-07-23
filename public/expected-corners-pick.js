@@ -1,4 +1,5 @@
 function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -7,9 +8,9 @@ export function buildExpectedCornersPick(result = {}) {
   const projectedTotal = finiteNumber(result.totalExpectedCorners);
   if (projectedTotal === null || projectedTotal <= 0) return null;
 
-  const quotedPick = Array.isArray(result.picks)
-    ? result.picks.find((pick) => pick?.selectionKey === "over_corners")
-    : null;
+  const quotedPick = result.recommendation || (Array.isArray(result.picks)
+    ? result.picks.find((pick) => /^(over|under).+corners$/.test(pick?.selectionKey || ""))
+    : null);
 
   if (quotedPick) {
     return {

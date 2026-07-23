@@ -32,16 +32,17 @@ test("normaliza strings y calcula amenaza sin NaN", () => {
   assert.ok(players[0].individualFormScore > 0);
 });
 
-test("genera máximo tres candidatos ordenados y permite ambos equipos", () => {
+test("genera hasta tres candidatos estrictos ordenados y permite ambos equipos", () => {
   const homeRows = historyRows(1, Array.from({ length: 5 }, () => [attacker(9, "Kane"), attacker(10, "Saka", { shots: 3, on: 1, goals: 0 })]));
   const awayRows = historyRows(2, Array.from({ length: 5 }, () => [attacker(20, "Haaland", { shots: 5, on: 3 }), attacker(21, "Wing", { shots: 2, on: 1, goals: 0 })]));
   const home = normalizeTeamPlayerHistory({ teamId: 1, teamName: "England", fixtureRows: homeRows, teamContext: { lambda: 1.6 } });
   const away = normalizeTeamPlayerHistory({ teamId: 2, teamName: "Norway", fixtureRows: awayRows, teamContext: { lambda: 1.8 } });
   const result = buildPlayerGoalCandidates(match, home, away, { "1": { lambda: 1.6 }, "2": { lambda: 1.8 } });
-  assert.equal(result.candidates.length, 3);
+  assert.ok(result.candidates.length > 0 && result.candidates.length <= 3);
   assert.ok(result.candidates.some((row) => row.teamName === "England"));
   assert.ok(result.candidates.some((row) => row.teamName === "Norway"));
   assert.ok(result.candidates.every((row, index, rows) => index === 0 || rows[index - 1].goalThreatScore >= row.goalThreatScore));
+  assert.ok(result.candidates.every((row) => row.stats.startsLast5 === 5 && row.goalThreatScore >= 85));
 });
 
 test("excluye porteros, lesionados y jugadores con pocos minutos", () => {
@@ -51,10 +52,18 @@ test("excluye porteros, lesionados y jugadores con pocos minutos", () => {
   assert.equal(result.candidates.length, 0);
 });
 
-test("alineaciones ausentes no rompen el cálculo si hay minutos y apariciones", () => {
+test("alineaciones ausentes no permiten afirmar cinco titularidades", () => {
   const rows = historyRows(1, Array.from({ length: 4 }, () => [attacker(9, "Kane")])).map((row) => ({ ...row, lineups: [] }));
   const players = normalizeTeamPlayerHistory({ teamId: 1, teamName: "England", fixtureRows: rows, teamContext: { lambda: 1.8 } });
-  assert.equal(buildPlayerGoalCandidates(match, players, [], { "1": { lambda: 1.8 } }).candidates[0].playerName, "Kane");
+  assert.equal(buildPlayerGoalCandidates(match, players, [], { "1": { lambda: 1.8 } }).candidates.length, 0);
+});
+
+test("excluye jugador que no fue titular en los cinco partidos", () => {
+  const rows = historyRows(1, Array.from({ length: 5 }, () => [attacker(9, "Kane") ]));
+  rows[4].lineups[0].startXI = [];
+  const players = normalizeTeamPlayerHistory({ teamId: 1, teamName: "England", fixtureRows: rows, teamContext: { lambda: 1.8 } });
+  assert.equal(players[0].startsLast5, 4);
+  assert.equal(buildPlayerGoalCandidates(match, players, [], { "1": { lambda: 1.8 } }).candidates.length, 0);
 });
 
 test("una cuota ausente conserva el pick pendiente sin romperlo", () => {

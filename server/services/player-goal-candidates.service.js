@@ -164,11 +164,10 @@ export function calculateIndividualFormScore(player = {}) {
 
 function confidenceFor(player, teamContext) {
   const goodTeamAttack = offensiveExpectation(teamContext) >= 55;
-  const tournamentSampleLimited = teamContext.tournament?.isShortTournament && player.matchesEvaluated < 4;
-  if (!tournamentSampleLimited && player.appearancesLast5 >= 4 && player.avgMinutes >= 60 && player.shotsLast5 > 0 && player.shotsOnTargetLast5 > 0 && goodTeamAttack) {
+  if (player.matchesEvaluated === 5 && player.startsLast5 === 5 && player.appearancesLast5 === 5
+    && player.goalThreatScore >= 85 && player.shotsLast5 > 0 && player.shotsOnTargetLast5 > 0 && goodTeamAttack) {
     return { confidence: "Alta", color: "green" };
   }
-  if (player.goalThreatScore >= 45 && player.shotsLast5 > 0) return { confidence: "Media", color: "orange" };
   return { confidence: "Baja", color: "red" };
 }
 
@@ -264,10 +263,10 @@ export function normalizeTeamPlayerHistory({ teamId, teamName, fixtureRows = [],
 }
 
 function isEligible(player) {
-  const regular = player.appearancesLast5 >= 3 || player.minutesLast5 >= 180 || (player.startsLast5 >= 2 && player.shotsLast5 > 0);
+  const regular = player.matchesEvaluated === 5 && player.appearancesLast5 === 5 && player.startsLast5 === 5;
   const shooting = player.shotsLast5 > 0 || player.penaltiesScoredLast5 > 0;
   const defenderException = !player.isDefender || player.goalsLast5 > 0 || player.shotsLast5 >= 3;
-  return regular && player.minutesLast5 >= 90 && shooting && defenderException && !player.isGoalkeeper && !player.isInjuredOrSuspended;
+  return regular && player.goalThreatScore >= 85 && shooting && defenderException && !player.isGoalkeeper && !player.isInjuredOrSuspended;
 }
 
 export function buildPlayerGoalCandidates(match, homeTeamData = [], awayTeamData = [], teamContext = {}) {

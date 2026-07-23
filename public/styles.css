@@ -637,6 +637,11 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .origin-pick-detail h4 { margin: 2px 0 0; }
 .origin-pick-detail--won { border-left: 3px solid var(--success); }
 .origin-pick-detail--lost { border-left: 3px solid var(--danger); }
+.rank-movement { display: inline-block; margin-left: 6px; font-size: .68rem; font-weight: 800; }
+.rank-movement--up { color: var(--success); }
+.rank-movement--down { color: var(--danger); }
+.rank-movement--same { color: var(--muted); }
+.origin-picks-dialog .origin-category-list { margin-bottom: 12px; }
 .origin-recommendations { display: grid; gap: 12px; }
 .origin-recommendations__notice { display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px; }
 .origin-recommendations__notice span { color: var(--muted); font-size: .72rem; }

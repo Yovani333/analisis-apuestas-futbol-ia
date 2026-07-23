@@ -25,3 +25,11 @@ test("no crea picks cuando la proyeccion no es valida", () => {
   assert.equal(buildExpectedCornersPick({ totalExpectedCorners: "" }), null);
   assert.equal(buildExpectedCornersPick({ totalExpectedCorners: -1 }), null);
 });
+
+test("respeta una recomendación de menos de generada por el modelo", () => {
+  const recommendation = { selectionKey: "under_10_5_corners", selection: "Menos de 10.5 corners", decimalOdds: null };
+  const pick = buildExpectedCornersPick({ totalExpectedCorners: 9.7, recommendation });
+  assert.equal(pick.selection, "Menos de 10.5 corners");
+  assert.equal(pick.selectionKey, "under_10_5_corners");
+  assert.equal(pick.hasOdds, false);
+});

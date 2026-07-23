@@ -386,7 +386,7 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
     groups.set(key, current);
   }
 
-  return [...groups.values()].sort((a, b) => b.evaluated - a.evaluated || b.winRate - a.winRate || a.competition.localeCompare(b.competition));
+  return [...groups.values()].sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.competition.localeCompare(b.competition));
 }
 
 export function calculateOriginRecommendations(performanceRows = []) {
@@ -397,9 +397,9 @@ export function calculateOriginRecommendations(performanceRows = []) {
   const recommended = entries.filter((entry) => entry.evaluated >= 3 && entry.winRate >= 60)
     .sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.category.localeCompare(b.category));
   const notRecommended = entries.filter((entry) => entry.evaluated >= 3 && entry.winRate < 50)
-    .sort((a, b) => a.winRate - b.winRate || b.evaluated - a.evaluated || a.category.localeCompare(b.category));
+    .sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.category.localeCompare(b.category));
   const observing = entries.filter((entry) => !recommended.includes(entry) && !notRecommended.includes(entry))
-    .sort((a, b) => b.evaluated - a.evaluated || b.winRate - a.winRate || a.category.localeCompare(b.category));
+    .sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.category.localeCompare(b.category));
   return { recommended, notRecommended, observing };
 }
 

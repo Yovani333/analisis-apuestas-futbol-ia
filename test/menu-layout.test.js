@@ -118,6 +118,10 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(app, /Picks perdidos/);
   assert.match(app, /deletedPermanently: true/);
   assert.match(app, /calculateOriginRecommendations\(rows\)/);
+  assert.match(html, /id="competition-main"><option value="all" selected>Todas las competiciones/);
+  assert.match(html, /id="origin-picks-dialog"/);
+  assert.match(app, /showOriginPicksDialog\(open\.dataset\.viewOriginPicks/);
+  assert.match(app, /performancePreviousRanks/);
 });
 
 test("forma reciente permite agregar su recomendación al parlay", () => {

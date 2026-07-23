@@ -126,7 +126,7 @@
           </div>
           <div class="field">
             <label for="competition-main">Competición</label>
-            <select id="competition-main"><option value="world-cup">Copa Mundial FIFA 2026</option><option value="liga-mx">Liga MX</option><option value="americas">América</option><option value="europe">Europa</option><option value="international-clubs">Clubes internacionales</option><option value="leagues">Ligas regulares</option><option value="cups">Copas y clasificatorias</option><option value="all">Todas las competiciones</option><option value="custom">Personalizado</option></select>
+            <select id="competition-main"><option value="all" selected>Todas las competiciones</option><option value="world-cup">Copa Mundial FIFA 2026</option><option value="liga-mx">Liga MX</option><option value="americas">América</option><option value="europe">Europa</option><option value="international-clubs">Clubes internacionales</option><option value="leagues">Ligas regulares</option><option value="cups">Copas y clasificatorias</option><option value="custom">Personalizado</option></select>
           </div>
 
           <div class="field">
@@ -561,6 +561,14 @@
       <div id="data-detail-content" class="data-dialog__content"></div>
     </dialog>
 
+    <dialog id="origin-picks-dialog" class="data-dialog origin-picks-dialog" aria-labelledby="origin-picks-title">
+      <div class="data-dialog__header">
+        <div><p class="eyebrow">Historial por origen</p><h2 id="origin-picks-title">Picks evaluados</h2><p id="origin-picks-subtitle" class="data-dialog__subtitle"></p></div>
+        <button id="origin-picks-close" class="data-dialog__close" type="button" aria-label="Cerrar picks">×</button>
+      </div>
+      <div id="origin-picks-content" class="data-dialog__content"></div>
+    </dialog>
+
     <dialog id="fixture-ready-dialog" class="ready-dialog" aria-labelledby="fixture-ready-title">
       <div class="ready-dialog__panel">
         <p class="eyebrow">Encuentro seleccionado</p>
@@ -594,6 +602,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260722-saved-competition-v1"></script>
+    <script type="module" src="app.js?v=20260722-picks-quality-v2"></script>
   </body>
 </html>

@@ -97,6 +97,23 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.analysisStatus, ANALYSIS_STATUS.COMPLETE);
 });
 
+test("bajas vigentes no se acumulan y conservan fecha de inicio solo si existe", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.injuries.push({ ...dataset.confirmed.injuries[0], startDate: "2026-06-18T00:00:00Z" });
+  dataset.confirmed.injuries[0].startDate = "2026-06-18T00:00:00Z";
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.injuriesSuspensions.home.injuries.length, 1);
+  assert.equal(normalized.injuriesSuspensions.home.injuries[0].startDate, "2026-06-18T00:00:00Z");
+  assert.equal(normalized.injuriesSuspensions.sampleWindow, 5);
+});
+
+test("bajas con inicio anterior a la ventana reciente no se acumulan", () => {
+  const dataset = datasetFixture();
+  dataset.confirmed.injuries.push({ team: { id: 10 }, player: { id: 99, name: "Baja antigua", type: "Injury", reason: "Injury" }, startDate: "2026-01-01T00:00:00Z" });
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.injuriesSuspensions.home.injuries.some((item) => item.playerId === 99), false);
+});
+
 test("Estadisticas de temporada usa fallback de ultimos partidos oficiales con transparencia", () => {
   const dataset = datasetFixture();
   dataset.confirmed.teamStatistics = {

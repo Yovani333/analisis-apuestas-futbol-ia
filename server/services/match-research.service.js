@@ -216,12 +216,22 @@ export function getInjuriesSuspensionsData(dataset) {
     home: { injuries: [], suspensions: [], doubts: [] },
     away: { injuries: [], suspensions: [], doubts: [] }
   };
+  const seen = new Set();
   rows.forEach((item) => {
     const side = item.team?.id === dataset.fixture.homeTeamId ? "home" : item.team?.id === dataset.fixture.awayTeamId ? "away" : null;
     if (!side) return;
-    sides[side][absenceKind(item)].push({
+    const startDate = item.player?.startDate || item.startDate || item.injury?.startDate || null;
+    const recentDates = (dataset.preMatch?.[side]?.matches || []).slice(0, 5).map((match) => Date.parse(match.date)).filter(Number.isFinite);
+    const recentCutoff = recentDates.length ? Math.min(...recentDates) : null;
+    if (startDate && recentCutoff !== null && Date.parse(startDate) < recentCutoff) return;
+    const kind = absenceKind(item);
+    const key = `${side}:${item.player?.id || String(item.player?.name || "").toLowerCase()}:${kind}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    sides[side][kind].push({
       playerId: item.player?.id || null, name: item.player?.name || "",
-      type: item.player?.type || "", reason: item.player?.reason || ""
+      type: item.player?.type || "", reason: item.player?.reason || "",
+      startDate
     });
   });
   const homeAvailable = rows.some((item) => item.team?.id === dataset.fixture.homeTeamId);
@@ -251,7 +261,9 @@ export function getInjuriesSuspensionsData(dataset) {
   const status = statusForSides(homeAvailable, awayAvailable);
   return {
     ...moduleBase(status, dataset.fetchedAt, rows.length ? SOURCE : "", rows.length ? "" : "El endpoint no devolvió registros; no se puede confirmar que no existan bajas."),
-    ...sides
+    ...sides,
+    sampleWindow: 5,
+    notes: ["Bajas vigentes reportadas para el encuentro, sin acumulados duplicados. La fecha de inicio se muestra solo cuando la fuente la proporciona."]
   };
 }
 

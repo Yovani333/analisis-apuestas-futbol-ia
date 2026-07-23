@@ -57,6 +57,16 @@ test("resultados por competición ignora pendientes y anulados", () => {
   ]), []);
 });
 
+test("resultados por competición se ordenan por porcentaje descendente", () => {
+  const rows = calculateCompetitionPerformance([
+    { league: "Liga A", result: "won" }, { league: "Liga A", result: "lost" },
+    { league: "Liga B", result: "won" }, { league: "Liga B", result: "won" },
+    { league: "Liga C", result: "lost" }
+  ]);
+  assert.deepEqual(rows.map((row) => row.competition), ["Liga B", "Liga A", "Liga C"]);
+  assert.deepEqual(rows.map((row) => row.winRate), [100, 50, 0]);
+});
+
 test("filtra picks y parlays por la fecha del partido", () => {
   const picks = [{ id: "a", date: "2026-07-20" }, { id: "b", date: "2026-07-21" }, { id: "c", date: "20/07/2026" }];
   const parlays = [
