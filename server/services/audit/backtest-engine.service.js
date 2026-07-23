@@ -2,7 +2,7 @@ import { generateDataPicks } from "../data-picks.service.js";
 import { calculatePoissonModel } from "../poisson-model.service.js";
 import { calculateTeamGoalProbability } from "../team-goal-probability.service.js";
 import { calculateCornersModel } from "../corners-model.service.js";
-import { evaluatePickOutcome } from "./pick-outcome-evaluator.service.js";
+import { evaluateDiscardedPickCounterfactual, evaluatePickOutcome } from "./pick-outcome-evaluator.service.js";
 
 export function resolvePendingAuditError(result = {}) {
   if (result.finished) return null;
@@ -91,9 +91,20 @@ function metricSummary(records = []) {
   const decisiveTotal = hits + misses;
   const hitRateInterval95 = wilsonInterval(hits, decisiveTotal);
   const highConfidenceSettled = records.filter((row) => ["HIT", "MISS"].includes(row.outcome) && Number(row.confidence) >= 70);
+  const discarded = records.filter((row) => row.outcome === "NO_BET");
+  const counterfactual = discarded.map((row) => row.counterfactualOutcome).filter((outcome) => ["HIT", "MISS", "VOID"].includes(outcome));
+  const counterfactualHits = counterfactual.filter((outcome) => outcome === "HIT").length;
+  const counterfactualMisses = counterfactual.filter((outcome) => outcome === "MISS").length;
+  const counterfactualVoids = counterfactual.filter((outcome) => outcome === "VOID").length;
+  const counterfactualDecisive = counterfactualHits + counterfactualMisses;
+  const bands = calibrationBands(records);
+  const calibrationTotal = bands.reduce((sum, band) => sum + band.count, 0);
   return {
     totalPicks: records.length, eligiblePicks: bettable.length, hits, misses, voids,
+    decisivePicks: decisiveTotal,
     noBets: records.filter((row) => row.outcome === "NO_BET").length,
+    dataInsufficient: records.filter((row) => row.outcome === "DATA_INSUFFICIENT").length,
+    livePending: records.filter((row) => row.outcome === "LIVE_PENDING").length,
     hitRate: hits + misses ? Number((hits / (hits + misses) * 100).toFixed(2)) : null,
     hitRateInterval95,
     avgConfidence: mean("confidence"), avgOdds: mean("odds"), impliedProbability: mean("impliedProbability"),
@@ -105,7 +116,22 @@ function metricSummary(records = []) {
     brierScore: calibration.length ? Number((calibration.reduce((sum, row) => sum + row.squaredError, 0) / calibration.length).toFixed(4)) : null,
     logLoss: calibration.length ? Number((calibration.reduce((sum, row) => sum + row.logLoss, 0) / calibration.length).toFixed(4)) : null,
     falseConfidenceRate: Number((records.filter((row) => row.outcome === "MISS" && row.confidence >= 70).length / Math.max(1, misses) * 100).toFixed(2)),
-    highConfidenceErrorRate: highConfidenceSettled.length ? Number((highConfidenceSettled.filter((row) => row.outcome === "MISS").length / highConfidenceSettled.length * 100).toFixed(2)) : null
+    highConfidenceErrorRate: highConfidenceSettled.length ? Number((highConfidenceSettled.filter((row) => row.outcome === "MISS").length / highConfidenceSettled.length * 100).toFixed(2)) : null,
+    calibrationBands: bands,
+    expectedCalibrationError: calibrationTotal
+      ? Number((bands.reduce((sum, band) => sum + (band.count / calibrationTotal) * band.gapPct, 0)).toFixed(2))
+      : null,
+    discardAudit: {
+      total: discarded.length,
+      assessable: counterfactual.length,
+      hits: counterfactualHits,
+      misses: counterfactualMisses,
+      voids: counterfactualVoids,
+      unavailable: discarded.length - counterfactual.length,
+      hypotheticalHitRate: counterfactualDecisive
+        ? Number((counterfactualHits / counterfactualDecisive * 100).toFixed(2))
+        : null
+    }
   };
 }
 
@@ -154,19 +180,13 @@ function groupedMetrics(records, key) {
 }
 
 export function calculateAuditMetrics(records = []) {
-  const bands = calibrationBands(records);
-  const calibrationTotal = bands.reduce((sum, band) => sum + band.count, 0);
-  const expectedCalibrationError = calibrationTotal
-    ? Number((bands.reduce((sum, band) => sum + (band.count / calibrationTotal) * band.gapPct, 0)).toFixed(2))
-    : null;
   return {
     ...metricSummary(records),
     byMarket: groupedMetrics(records, "market"),
+    byOrigin: groupedMetrics(records, "sourceModule"),
     byConfidence: groupedMetrics(records.map((row) => ({ ...row, confidenceBand: row.confidence >= 70 ? "Alta" : row.confidence >= 50 ? "Media" : "Baja" })), "confidenceBand"),
     byColor: groupedMetrics(records, "color"),
-    byModelVersion: groupedMetrics(records, "modelVersion"),
-    calibrationBands: bands,
-    expectedCalibrationError
+    byModelVersion: groupedMetrics(records, "modelVersion")
   };
 }
 
@@ -175,6 +195,9 @@ function buildBacktestResult(dataset, fixtureResult, generated, metadata = {}) {
     const decision = normalizedDecision(pick);
     const candidate = { ...pick, noBet: wasDiscardedBeforeKickoff(pick) };
     const outcome = evaluatePickOutcome(candidate, fixtureResult);
+    const counterfactualOutcome = candidate.noBet
+      ? evaluateDiscardedPickCounterfactual(candidate, fixtureResult)
+      : null;
     return {
       fixtureId: String(dataset.fixture?.id || ""), date: dataset.fixture?.date || "", match: `${dataset.fixture?.home || "Local"} vs ${dataset.fixture?.away || "Visitante"}`,
       league: dataset.fixture?.leagueName || "", market: pick.market, pick: pick.selection, selectionKey: pick.selectionKey,
@@ -184,7 +207,7 @@ function buildBacktestResult(dataset, fixtureResult, generated, metadata = {}) {
       footballConfidence: pick.footballConfidenceScore ?? null, riskScore: pick.riskScore ?? null,
       dataQuality: generated.quality?.label || dataset.dataQuality?.level || "No disponible",
       finalScore: finalScoreLabel(fixtureResult),
-      outcome, decision, errorDetected: "", recommendation: pick.recommendation || pick.explanation || "Decision historica conservada sin reinterpretacion.", color: pick.highlightColor || pick.color || "No disponible",
+      outcome, counterfactualOutcome, decision, errorDetected: "", recommendation: pick.recommendation || pick.explanation || "Decision historica conservada sin reinterpretacion.", color: pick.highlightColor || pick.color || "No disponible",
       source: generated.source, sourceModule: pick.sourceModule,
       modelVersion: generated.modelVersion || pick.modelVersion || "No disponible",
       adjustmentsVersion: generated.adjustmentsVersion || pick.adjustmentsVersion || null,

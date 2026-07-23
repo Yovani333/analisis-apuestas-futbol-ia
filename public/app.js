@@ -3187,7 +3187,7 @@ function renderEvidenceReadiness() {
       : "Evalúa los resultados disponibles sin modificar las fórmulas.");
     return `<article class="evidence-readiness-card evidence-readiness-card--${escapeHtml(group.color)}">
     <header><span class="evidence-light evidence-light--${escapeHtml(group.color)}" aria-hidden="true"></span><div><h3>${escapeHtml(group.competition)}</h3><p>${group.leagueId ? `Liga API-Football ${escapeHtml(group.leagueId)}` : "Competición identificada por nombre"}</p></div><strong>${escapeHtml(group.label)}</strong></header>
-    <div class="evidence-readiness-counts"><div><span>Recolectadas</span><strong>${escapeHtml(group.collected)}</strong></div><div><span>Evaluadas</span><strong>${escapeHtml(group.evaluated)}</strong></div><div><span>Pendientes</span><strong>${escapeHtml(group.pendingEvaluation)}</strong></div></div>
+    <div class="evidence-readiness-counts"><div><span>Recolectadas</span><strong>${escapeHtml(group.collected)}</strong></div><div><span>Evaluadas</span><strong>${escapeHtml(group.evaluated)}</strong></div><div><span>Pendientes</span><strong>${escapeHtml(group.pendingEvaluation)}</strong></div><div><span>Picks decisivos</span><strong>${escapeHtml(group.decisivePicks)}</strong></div><div><span>Descartados</span><strong>${escapeHtml(group.discardedPicks)}</strong></div><div><span>Descartes auditables</span><strong>${escapeHtml(group.counterfactualAssessable)}</strong></div></div>
     <div class="evidence-readiness-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(group.progressPct)}" aria-label="Progreso hacia cien evidencias evaluadas"><i style="width:${group.progressPct}%"></i></div>
     <p>${escapeHtml(group.recommendation)}</p>
     <small>${group.nextTarget === null ? "Ya alcanzó el umbral orientativo de 100 evidencias evaluadas." : `Faltan ${escapeHtml(group.remaining)} auditorías para el siguiente nivel.`}</small>
@@ -3196,10 +3196,35 @@ function renderEvidenceReadiness() {
   }).join("");
 }
 
+function compactAuditMetric(metric = {}) {
+  return {
+    total: Number(metric.totalPicks || 0),
+    decisive: Number(metric.decisivePicks || 0),
+    hits: Number(metric.hits || 0),
+    misses: Number(metric.misses || 0),
+    voids: Number(metric.voids || 0),
+    noBets: Number(metric.noBets || 0),
+    eligible: Number(metric.eligiblePicks || 0),
+    hitRate: metric.hitRate ?? null,
+    ROI: metric.ROI ?? null,
+    calibrationSample: Number(metric.calibrationSampleSize || 0),
+    brier: metric.brierScore ?? null,
+    logLoss: metric.logLoss ?? null,
+    ECE: metric.expectedCalibrationError ?? null
+  };
+}
+
+function compactAuditGroups(groups = {}) {
+  return Object.fromEntries(Object.entries(groups).map(([key, metric]) => [key, compactAuditMetric(metric)]));
+}
+
 function markEvidenceAudited(evidence, audit, { render = true, sync = true } = {}) {
   if (!evidence?.id || !audit) return;
   const records = Array.isArray(audit.records) ? audit.records : [];
   const evaluablePicks = records.filter((row) => ["HIT", "MISS", "VOID"].includes(row?.outcome)).length;
+  const decisivePicks = records.filter((row) => ["HIT", "MISS"].includes(row?.outcome)).length;
+  const discardedPicks = records.filter((row) => row?.outcome === "NO_BET").length;
+  const counterfactualRows = records.filter((row) => row?.outcome === "NO_BET" && ["HIT", "MISS", "VOID"].includes(row?.counterfactualOutcome));
   const finalScore = records.find((row) => row?.finalScore && row.finalScore !== "Pendiente")?.finalScore || null;
   const auditedAt = new Date().toISOString();
   state.preferences.evidenceAudits = {
@@ -3208,11 +3233,25 @@ function markEvidenceAudited(evidence, audit, { render = true, sync = true } = {
       auditedAt,
       auditSummary: {
         evaluablePicks,
+        decisivePicks,
+        discardedPicks,
+        counterfactualAssessable: counterfactualRows.length,
+        counterfactualHits: counterfactualRows.filter((row) => row.counterfactualOutcome === "HIT").length,
+        counterfactualMisses: counterfactualRows.filter((row) => row.counterfactualOutcome === "MISS").length,
         completed: Boolean(finalScore),
         hits: Number(audit.metrics?.hits || 0),
         misses: Number(audit.metrics?.misses || 0),
         voids: Number(audit.metrics?.voids || 0),
-        finalScore
+        finalScore,
+        auditSchemaVersion: 2,
+        metrics: compactAuditMetric(audit.metrics),
+        dimensions: {
+          market: compactAuditGroups(audit.metrics?.byMarket),
+          origin: compactAuditGroups(audit.metrics?.byOrigin),
+          confidence: compactAuditGroups(audit.metrics?.byConfidence),
+          color: compactAuditGroups(audit.metrics?.byColor),
+          modelVersion: compactAuditGroups(audit.metrics?.byModelVersion)
+        }
       }
     }
   };
@@ -3311,16 +3350,17 @@ function renderAuditFixtureOptions() {
     const fixture = snapshot?.fixture;
     if (!fixture?.id) continue;
     const evaluated = Boolean(snapshot.auditMetadata?.auditedAt && snapshot.auditSummary?.completed === true);
-    available.set(String(fixture.id), { ...fixture, hasEvidence: true, evaluated });
+    available.set(String(fixture.id), { ...fixture, hasEvidence: true, evaluated, evidenceStatus: evaluated ? "evaluated" : "pending" });
   }
   for (const fixture of state.fixtures.filter((item) => item.status === "finished")) {
     const id = String(fixture.id);
     const evidence = latestEvidenceForFixture(snapshots, id);
-    available.set(id, { ...available.get(id), ...fixture, hasEvidence: Boolean(evidence), evaluated: Boolean(evidence?.auditMetadata?.auditedAt && evidence?.auditSummary?.completed === true) });
+    const evaluated = Boolean(evidence?.auditMetadata?.auditedAt && evidence?.auditSummary?.completed === true);
+    available.set(id, { ...available.get(id), ...fixture, hasEvidence: Boolean(evidence), evaluated, evidenceStatus: evidence ? (evaluated ? "evaluated" : "pending") : "missing" });
   }
   const fixtures = [...available.values()].sort((a, b) => String(b.utcDateTime || b.date || "").localeCompare(String(a.utcDateTime || a.date || "")));
   elements.auditFixture.innerHTML = fixtures.length
-    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}" class="${fixture.evaluated ? "audit-option--evaluated" : ""}">${fixture.evaluated ? "✓ Evaluada · " : ""}${escapeHtml(fixture.leagueName || "Liga no disponible")} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · ${fixture.hasEvidence ? "Evidencia prepartido" : "Sin snapshot"}</option>`).join("")}`
+    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}" class="${fixture.evidenceStatus === "evaluated" ? "audit-option--evaluated" : fixture.evidenceStatus === "pending" ? "audit-option--pending" : ""}">${fixture.evidenceStatus === "evaluated" ? "● Evaluada · " : fixture.evidenceStatus === "pending" ? "● Pendiente · " : ""}${escapeHtml(fixture.leagueName || "Liga no disponible")} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · ${fixture.hasEvidence ? "Evidencia prepartido" : "Sin snapshot"}</option>`).join("")}`
     : '<option value="">No hay evidencias prepartido guardadas</option>';
   elements.runAudit.disabled = true;
   elements.viewAuditEvidence.disabled = true;
@@ -3344,8 +3384,8 @@ function renderAuditResults(audit) {
     <td data-label="Mercado">${escapeHtml(row.market)}</td><td data-label="Pick">${escapeHtml(row.pick)}</td><td data-label="Cuota">${displayValue(row.odds)}</td>
     <td data-label="Implícita">${displayValue(row.impliedProbability)}%</td><td data-label="Modelo">${displayValue(row.modelProbability)}%</td><td data-label="EV">${displayValue(row.expectedValue)}%</td><td data-label="EV conservador">${displayValue(row.conservativeExpectedValue)}%</td>
     <td data-label="Confianza">${displayValue(row.confidence)}/100</td><td data-label="Calidad">${escapeHtml(row.dataQuality)}</td><td data-label="Resultado">${escapeHtml(row.finalScore)}</td>
-    <td data-label="Estado"><strong>${escapeHtml(row.outcome)}</strong></td><td data-label="Error">${escapeHtml(row.errorDetected || "Sin error crítico")}</td><td data-label="Recomendación">${escapeHtml(row.recommendation)}</td></tr>`).join("");
-  elements.auditResults.innerHTML = `<div class="history-metrics"><article><span>Candidatos evaluados</span><strong>${displayValue(metrics.totalPicks, 0)}</strong></article><article><span>Picks con cuota elegibles</span><strong>${displayValue(metrics.eligiblePicks, 0)}</strong></article><article><span>Hit rate descriptivo</span><strong>${displayValue(metrics.hitRate)}%</strong><small>IC 95% ${displayValue(metrics.hitRateInterval95?.lowPct)}-${displayValue(metrics.hitRateInterval95?.highPct)}%</small></article><article><span>ROI elegible</span><strong>${displayValue(metrics.ROI)}%</strong></article><article><span>ECE</span><strong>${displayValue(metrics.expectedCalibrationError)} pp</strong></article><article><span>Brier Score</span><strong>${displayValue(metrics.brierScore, 4)}</strong><small>Muestra ${displayValue(metrics.calibrationSampleSize, 0)}</small></article><article><span>Log Loss</span><strong>${displayValue(metrics.logLoss, 4)}</strong></article><article><span>NO BET</span><strong>${displayValue(metrics.noBets, 0)}</strong></article></div><div class="detail-note ${readiness.canRecalibrate ? "detail-note--info" : ""}"><strong>${escapeHtml(readiness.label || "Calibración no evaluada")}</strong><span>${readiness.canRecalibrate ? "La muestra permite estudiar una recalibración por versión y mercado." : `No recalibrar automáticamente: se requieren al menos ${displayValue(readiness.minimumRequired, 0)} resultados válidos en la misma versión y mercado.`}</span></div><p class="market-disclaimer">El ROI usa únicamente picks elegibles con cuota válida. Brier Score, Log Loss y ECE solo usan resultados HIT/MISS con probabilidad válida; menor es mejor. La tabla completa también enseña candidatos descartados para explicar por qué fueron NO BET.</p>${calibrationRows ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Banda modelo</th><th>Muestra</th><th>Prob. media</th><th>Acierto real</th><th>Brecha</th></tr></thead><tbody>${calibrationRows}</tbody></table></div>` : ""}<div class="detail-table-wrap audit-table-wrap"><table class="detail-table"><thead><tr><th>Decisión</th><th>Fecha</th><th>Partido</th><th>Liga</th><th>Mercado</th><th>Pick</th><th>Cuota</th><th>Prob. implícita</th><th>Prob. modelo</th><th>EV</th><th>EV conservador</th><th>Confianza</th><th>Data Quality</th><th>Resultado final</th><th>Estado</th><th>Error detectado</th><th>Recomendación</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <td data-label="Estado"><strong>${escapeHtml(row.outcome)}</strong>${row.outcome === "NO_BET" ? `<small class="audit-counterfactual">Descarte: ${escapeHtml(row.counterfactualOutcome || "No evaluable")}</small>` : ""}</td><td data-label="Error">${escapeHtml(row.errorDetected || "Sin error crítico")}</td><td data-label="Recomendación">${escapeHtml(row.recommendation)}</td></tr>`).join("");
+  elements.auditResults.innerHTML = `<div class="history-metrics"><article><span>Candidatos evaluados</span><strong>${displayValue(metrics.totalPicks, 0)}</strong></article><article><span>Picks decisivos</span><strong>${displayValue(metrics.decisivePicks, 0)}</strong><small>Solo HIT + MISS</small></article><article><span>Picks con cuota elegibles</span><strong>${displayValue(metrics.eligiblePicks, 0)}</strong></article><article><span>Hit rate descriptivo</span><strong>${displayValue(metrics.hitRate)}%</strong><small>IC 95% ${displayValue(metrics.hitRateInterval95?.lowPct)}-${displayValue(metrics.hitRateInterval95?.highPct)}%</small></article><article><span>ROI elegible</span><strong>${displayValue(metrics.ROI)}%</strong></article><article><span>ECE</span><strong>${displayValue(metrics.expectedCalibrationError)} pp</strong></article><article><span>Brier Score</span><strong>${displayValue(metrics.brierScore, 4)}</strong><small>Muestra ${displayValue(metrics.calibrationSampleSize, 0)}</small></article><article><span>Log Loss</span><strong>${displayValue(metrics.logLoss, 4)}</strong></article><article><span>NO BET</span><strong>${displayValue(metrics.noBets, 0)}</strong></article><article><span>Descartes auditables</span><strong>${displayValue(metrics.discardAudit?.assessable, 0)}</strong><small>${displayValue(metrics.discardAudit?.hits, 0)} habrían acertado · ${displayValue(metrics.discardAudit?.misses, 0)} habrían fallado</small></article></div><div class="detail-note ${readiness.canRecalibrate ? "detail-note--info" : ""}"><strong>${escapeHtml(readiness.label || "Calibración no evaluada")}</strong><span>${readiness.canRecalibrate ? "La muestra permite estudiar una recalibración por versión y mercado." : `No recalibrar automáticamente: se requieren al menos ${displayValue(readiness.minimumRequired, 0)} resultados válidos en la misma versión y mercado.`}</span></div><p class="market-disclaimer">El ROI usa únicamente picks elegibles con cuota válida. Brier Score, Log Loss y ECE solo usan resultados HIT/MISS con probabilidad válida; menor es mejor. La evaluación de descartes es contrafactual e informativa: nunca aumenta ni reduce el hit rate o ROI oficial.</p>${calibrationRows ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Banda modelo</th><th>Muestra</th><th>Prob. media</th><th>Acierto real</th><th>Brecha</th></tr></thead><tbody>${calibrationRows}</tbody></table></div>` : ""}<div class="detail-table-wrap audit-table-wrap"><table class="detail-table"><thead><tr><th>Decisión</th><th>Fecha</th><th>Partido</th><th>Liga</th><th>Mercado</th><th>Pick</th><th>Cuota</th><th>Prob. implícita</th><th>Prob. modelo</th><th>EV</th><th>EV conservador</th><th>Confianza</th><th>Data Quality</th><th>Resultado final</th><th>Estado</th><th>Error detectado</th><th>Recomendación</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   const evidenceNote = audit.mode === "saved_pre_match_evidence"
     ? `<div class="detail-note detail-note--info"><strong>Snapshot prepartido verificado</strong><span>Capturado ${escapeHtml(formatUpdatedAt(audit.capturedAt))}. Se usan exactamente los picks guardados antes del inicio.</span></div>`
     : '<div class="detail-note"><strong>Reconstrucción histórica</strong><span>No se encontró un snapshot guardado para este partido.</span></div>';

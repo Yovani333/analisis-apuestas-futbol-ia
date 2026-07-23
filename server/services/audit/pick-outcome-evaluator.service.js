@@ -117,3 +117,7 @@ export function evaluatePickOutcome(pick = {}, result = {}) {
 
   return "DATA_INSUFFICIENT";
 }
+
+export function evaluateDiscardedPickCounterfactual(pick = {}, result = {}) {
+  return evaluatePickOutcome({ ...pick, noBet: false }, result);
+}

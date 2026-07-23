@@ -60,6 +60,9 @@ export function summarizeEvidenceByCompetition(snapshots = [], now = new Date())
       competition: fixture.leagueName || "Competición no disponible",
       collected: 0,
       evaluated: 0,
+      decisivePicks: 0,
+      discardedPicks: 0,
+      counterfactualAssessable: 0,
       pendingEvaluation: 0,
       readyToEvaluate: 0,
       fixtures: []
@@ -68,6 +71,9 @@ export function summarizeEvidenceByCompetition(snapshots = [], now = new Date())
     const readyToEvaluate = !evaluated && isReadyForEvaluation(snapshot, cutoff);
     group.collected += 1;
     group.evaluated += evaluated ? 1 : 0;
+    group.decisivePicks += evaluated ? Number(snapshot.auditSummary?.decisivePicks ?? 0) : 0;
+    group.discardedPicks += evaluated ? Number(snapshot.auditSummary?.discardedPicks ?? 0) : 0;
+    group.counterfactualAssessable += evaluated ? Number(snapshot.auditSummary?.counterfactualAssessable ?? 0) : 0;
     group.pendingEvaluation += evaluated ? 0 : 1;
     group.readyToEvaluate += readyToEvaluate ? 1 : 0;
     group.fixtures.push(String(fixture.id));

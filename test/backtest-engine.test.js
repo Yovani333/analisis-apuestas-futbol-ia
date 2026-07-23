@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateAuditMetrics, createPreMatchSnapshot, resolvePendingAuditError, runFixtureBacktest, runSavedEvidenceBacktest } from "../server/services/audit/backtest-engine.service.js";
-import { evaluatePickOutcome } from "../server/services/audit/pick-outcome-evaluator.service.js";
+import { evaluateDiscardedPickCounterfactual, evaluatePickOutcome } from "../server/services/audit/pick-outcome-evaluator.service.js";
 import { auditPickRules } from "../server/services/audit/market-rules-audit.service.js";
 import { auditTodayResults } from "../server/services/audit/audit-today-results.service.js";
 
@@ -185,8 +185,33 @@ test("conserva NO BET historico aunque el resultado cumpla el mercado", () => {
   const result = runSavedEvidenceBacktest(evidence, finished(2, 1));
   assert.equal(result.records[0].decision, "NO BET");
   assert.equal(result.records[0].outcome, "NO_BET");
+  assert.equal(result.records[0].counterfactualOutcome, "HIT");
   assert.equal(result.metrics.hits, 0);
   assert.equal(result.metrics.misses, 0);
+  assert.equal(result.metrics.decisivePicks, 0);
+  assert.deepEqual(result.metrics.discardAudit, { total: 1, assessable: 1, hits: 1, misses: 0, voids: 0, unavailable: 0, hypotheticalHitRate: 100 });
+});
+
+test("audita descartes por separado sin contaminar hit rate ni ROI", () => {
+  const records = [
+    { outcome: "NO_BET", counterfactualOutcome: "HIT", odds: 2, modelProbability: 70, sourceModule: "data_picks" },
+    { outcome: "NO_BET", counterfactualOutcome: "MISS", odds: 2, modelProbability: 60, sourceModule: "data_picks" }
+  ];
+  const metrics = calculateAuditMetrics(records);
+  assert.equal(metrics.hitRate, null);
+  assert.equal(metrics.ROI, null);
+  assert.equal(metrics.calibrationSampleSize, 0);
+  assert.equal(metrics.discardAudit.hypotheticalHitRate, 50);
+  assert.equal(metrics.byOrigin.data_picks.discardAudit.assessable, 2);
+  assert.equal(metrics.byOrigin.data_picks.expectedCalibrationError, null);
+});
+
+test("la evaluacion contrafactual no modifica el pick descartado", () => {
+  const discarded = { selectionKey: "over_1_5", noBet: true };
+  const before = structuredClone(discarded);
+  assert.equal(evaluateDiscardedPickCounterfactual(discarded, finished(1, 1)), "HIT");
+  assert.deepEqual(discarded, before);
+  assert.equal(evaluatePickOutcome(discarded, finished(1, 1)), "NO_BET");
 });
 
 test("rechaza evidencia capturada durante o despues del partido", () => {

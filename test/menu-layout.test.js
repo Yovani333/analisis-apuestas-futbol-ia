@@ -44,7 +44,9 @@ test("Auditoria aprovecha el ancho y permite continuar el scroll de pagina", () 
   assert.match(app, /data-evaluate-evidence=/);
   assert.match(app, /pendingEvidenceForCompetition\(allEvidenceSnapshots\(\), competitionKey\)/);
   assert.match(app, /audit-option--evaluated/);
+  assert.match(app, /audit-option--pending/);
   assert.match(styles, /#audit-fixture option\.audit-option--evaluated/);
+  assert.match(styles, /#audit-fixture option\.audit-option--pending/);
 });
 
 test("la Guia conserva el orden Cobertura, Ataque, Poisson, Mercado y Decision", () => {

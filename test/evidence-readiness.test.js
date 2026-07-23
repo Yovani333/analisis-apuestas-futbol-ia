@@ -9,7 +9,7 @@ function snapshot(index, { leagueId = 1, leagueName = "Copa Mundial FIFA", audit
     fixture: { id: String(index), leagueId, leagueName, utcDateTime: "2026-08-01T18:00:00Z" },
     currentFixtureStatisticsUsed: false,
     auditMetadata: audited ? { auditedAt: "2026-08-02T10:00:00Z" } : {},
-    auditSummary: audited ? { completed: true, evaluablePicks: 2 } : null
+    auditSummary: audited ? { completed: true, evaluablePicks: 2, decisivePicks: 1, discardedPicks: 3, counterfactualAssessable: 2 } : null
   };
 }
 
@@ -26,6 +26,9 @@ test("agrupa evidencia unica por competición y separa pendientes", () => {
   assert.equal(worldCup.collected, 2);
   assert.equal(worldCup.evaluated, 1);
   assert.equal(worldCup.pendingEvaluation, 1);
+  assert.equal(worldCup.decisivePicks, 1);
+  assert.equal(worldCup.discardedPicks, 3);
+  assert.equal(worldCup.counterfactualAssessable, 2);
   assert.equal(rows.find((row) => row.leagueId === 169).evaluated, 1);
 });
 
