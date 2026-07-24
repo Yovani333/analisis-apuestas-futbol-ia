@@ -298,10 +298,7 @@ export function createSavedPick(leg, now = new Date()) {
 
 export function calculateOriginPerformance(picks = [], parlays = []) {
   const groups = new Map();
-  const parlayLegs = parlays.flatMap((parlay) => [
-    ...(Array.isArray(parlay?.legs) ? parlay.legs : []),
-    ...(Array.isArray(parlay?.removedLegs) ? parlay.removedLegs : [])
-  ]);
+  const parlayLegs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
   const rows = [...picks.map((pick) => ({ pick, kind: "individual" })), ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))];
   const leadLabel = (pick) => {
     const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || "");
@@ -372,8 +369,7 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
   const allRows = [
     ...picks.map((pick) => ({ pick, kind: "individual", activeEligible: !pick?.trashed })),
     ...parlays.flatMap((parlay) => [
-      ...(Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay", activeEligible: !parlay?.trashed })) : []),
-      ...(Array.isArray(parlay?.removedLegs) ? parlay.removedLegs.map((pick) => ({ pick, kind: "parlay", activeEligible: false })) : [])
+      ...(Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay", activeEligible: !parlay?.trashed })) : [])
     ])
   ];
   const identityToLeagueId = new Map();
@@ -447,7 +443,7 @@ export function classifyParlayPickType(pick = {}) {
 export function calculateParlayPickTypePerformance(parlays = []) {
   const groups = new Map();
   for (const parlay of parlays) {
-    const legs = [...(Array.isArray(parlay?.legs) ? parlay.legs : []), ...(Array.isArray(parlay?.removedLegs) ? parlay.removedLegs : [])];
+    const legs = Array.isArray(parlay?.legs) ? parlay.legs : [];
     for (const leg of legs) {
       if (!['won', 'lost'].includes(leg?.result)) continue;
       const type = classifyParlayPickType(leg);
@@ -468,6 +464,29 @@ export function removeParlayLeg(parlay, legId, now = new Date()) {
     ...parlay,
     legs: parlay.legs.filter((item) => String(item.id) !== String(legId)),
     removedLegs: [...(Array.isArray(parlay.removedLegs) ? parlay.removedLegs : []), { ...leg, removedFromParlayAt: now.toISOString() }],
+    updatedAt: now.toISOString()
+  };
+}
+
+export function restoreRemovedParlayLeg(parlay, legId, now = new Date()) {
+  const leg = parlay?.removedLegs?.find((item) => String(item.id) === String(legId) && !item.deletedPermanently);
+  if (!leg) return parlay;
+  const restored = { ...leg, restoredToParlayAt: now.toISOString() };
+  delete restored.removedFromParlayAt;
+  return {
+    ...parlay,
+    legs: [...(Array.isArray(parlay.legs) ? parlay.legs : []), restored],
+    removedLegs: parlay.removedLegs.filter((item) => String(item.id) !== String(legId)),
+    updatedAt: now.toISOString()
+  };
+}
+
+export function permanentlyDeleteRemovedParlayLeg(parlay, legId, now = new Date()) {
+  return {
+    ...parlay,
+    removedLegs: (Array.isArray(parlay?.removedLegs) ? parlay.removedLegs : []).map((item) => String(item.id) === String(legId)
+      ? { ...item, deletedPermanently: true, purgedAt: now.toISOString() }
+      : item),
     updatedAt: now.toISOString()
   };
 }

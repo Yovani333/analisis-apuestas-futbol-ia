@@ -4,14 +4,14 @@ import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js
 import {
   calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, createSavedParlay, createSavedPick,
   filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg,
-  removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260723-betting-summary-v1";
+  permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
+} from "./parlay-store.js?v=20260724-parlay-trash-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginLabel } from "./pick-origins.js?v=20260722-recent-form-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260719-remove-invalid-v1";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260724-parlay-trash-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260722-corners-v2";
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
 import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260719-remove-invalid-v1";
@@ -150,6 +150,11 @@ const elements = {
   playerGoalStatus: document.querySelector("#player-goal-status"), playerGoalContent: document.querySelector("#player-goal-content"), togglePlayerGoal: document.querySelector("#toggle-player-goal"), refreshPlayerGoal: document.querySelector("#refresh-player-goal"),
   fixtureReadyDialog: document.querySelector("#fixture-ready-dialog"),
   fixtureReadyAccept: document.querySelector("#fixture-ready-accept"),
+  deleteConfirmationDialog: document.querySelector("#delete-confirmation-dialog"),
+  deleteConfirmationTitle: document.querySelector("#delete-confirmation-title"),
+  deleteConfirmationMessage: document.querySelector("#delete-confirmation-message"),
+  deleteConfirmationCancel: document.querySelector("#delete-confirmation-cancel"),
+  deleteConfirmationConfirm: document.querySelector("#delete-confirmation-confirm"),
   parlaySlip: document.querySelector("#parlay-slip"),
   parlayMinimize: document.querySelector("#parlay-slip-minimize"),
   parlayDraftList: document.querySelector("#parlay-draft-list"),
@@ -395,6 +400,7 @@ function applyCloudState(remoteState) {
     renderAlerts();
     renderAuditFixtureOptions();
     renderFavoriteTeams();
+    refreshActivePickIndicators();
   } finally {
     state.cloudApplying = false;
   }
@@ -1017,6 +1023,17 @@ function hydrateModulesFromEvidence(fixture) {
   if (modules.corners && modules.corners.status !== "not_available" && !state.cornersByFixture.has(fixture.id)) state.cornersByFixture.set(fixture.id, modules.corners);
 }
 
+function activePickCountForFixture(fixture) {
+  if (!fixture?.id || !["scheduled", "live"].includes(fixture.status)) return 0;
+  const fixtureId = String(fixture.id);
+  const individual = state.savedPicks.filter((pick) => !pick.trashed && !pick.deletedPermanently
+    && pick.result === "pending" && String(pick.fixtureId) === fixtureId).length;
+  const parlayLegs = state.savedParlays.filter((parlay) => !parlay.trashed && !parlay.deletedPermanently)
+    .flatMap((parlay) => Array.isArray(parlay.legs) ? parlay.legs : [])
+    .filter((leg) => leg.result === "pending" && String(leg.fixtureId) === fixtureId).length;
+  return individual + parlayLegs;
+}
+
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
@@ -1043,7 +1060,7 @@ function renderMatches() {
       <div id="league-matches-${escapeHtml(league.slug)}" class="league-group__matches" ${expanded ? "" : "hidden"}>
       ${fixtures.map((fixture) => {
         const selected = state.selectedFixtureId === fixture.id;
-        const isFinished = fixture.status === "finished";
+        const activePickCount = activePickCountForFixture(fixture);
         const showScore = ["finished", "live"].includes(fixture.status) && fixture.score?.home !== null && fixture.score?.away !== null;
         const homeFavorite = Boolean(fixture.favorite && fixture.favorite.teamId === fixture.homeTeamId);
         const awayFavorite = Boolean(fixture.favorite && fixture.favorite.teamId === fixture.awayTeamId);
@@ -1061,7 +1078,7 @@ function renderMatches() {
           <article class="match-card${selected ? " match-card--selected" : ""}" data-fixture-id="${escapeHtml(fixture.id)}" tabindex="0" ${selected ? 'aria-current="true"' : ""}>
             <div class="match-card__topline">
               <span class="match-card__league">${escapeHtml(fixture.leagueName)}</span>
-              ${statusBadge(fixture.statusLabel)}
+              <div class="match-card__status-stack">${activePickCount ? `<span class="match-active-pick">Pick Activo${activePickCount > 1 ? ` · ${activePickCount}` : ""}</span>` : ""}${statusBadge(fixture.statusLabel)}</div>
             </div>
             <div class="match-card__teams">
               ${teamName(fixture.home, fixture.homeLogo, fixture.homeTeamId, "home", homeFavorite)}
@@ -2217,6 +2234,31 @@ function openDataDetail(categoryKey) {
 }
 
 const resultLabels = Object.freeze({ pending: "Pendiente", won: "Ganado", lost: "Perdido", void: "Anulado" });
+let pendingDeleteConfirmation = null;
+
+function finishDeleteConfirmation(confirmed) {
+  if (!pendingDeleteConfirmation) return;
+  const resolve = pendingDeleteConfirmation;
+  pendingDeleteConfirmation = null;
+  if (elements.deleteConfirmationDialog?.open) elements.deleteConfirmationDialog.close();
+  resolve(confirmed);
+}
+
+function confirmDeletion(message, title = "¿Deseas eliminar este elemento?") {
+  if (!elements.deleteConfirmationDialog?.showModal) return Promise.resolve(window.confirm(message));
+  if (pendingDeleteConfirmation) finishDeleteConfirmation(false);
+  elements.deleteConfirmationTitle.textContent = title;
+  elements.deleteConfirmationMessage.textContent = message;
+  elements.deleteConfirmationDialog.showModal();
+  return new Promise((resolve) => { pendingDeleteConfirmation = resolve; });
+}
+
+elements.deleteConfirmationCancel?.addEventListener("click", () => finishDeleteConfirmation(false));
+elements.deleteConfirmationConfirm?.addEventListener("click", () => finishDeleteConfirmation(true));
+elements.deleteConfirmationDialog?.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  finishDeleteConfirmation(false);
+});
 
 function persistParlayDraft() {
   state.preferences.parlayDraftUpdatedAt = new Date().toISOString();
@@ -2233,6 +2275,10 @@ function persistSavedParlays() {
 function persistSavedPicks() {
   saveSavedPicks(state.savedPicks);
   queueCloudSync();
+}
+
+function refreshActivePickIndicators() {
+  if (state.fixtures.length) renderMatches();
 }
 
 function normalizedSavedStatus(value) {
@@ -2269,6 +2315,7 @@ function saveIndividualLeg(leg) {
   persistSavedPicks();
   renderSavedPicks();
   renderOriginPerformance();
+  refreshActivePickIndicators();
   showNotice("Pick individual guardado en Mis apuestas.");
 }
 
@@ -2458,6 +2505,7 @@ function saveCurrentParlay() {
   persistParlayDraft();
   renderParlayDraft();
   renderSavedParlays();
+  refreshActivePickIndicators();
   switchView("saved");
   showNotice("Parlay guardado. Ya puedes registrar sus resultados.");
 }
@@ -2629,8 +2677,7 @@ function renderSavedParlays() {
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
           <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${savedLegScoreHtml(leg)}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)} · Origen ${escapeHtml(pickOriginLabel(leg.sourceModule))} ${infoTooltip("pick_origin")}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
-          <label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label>
-          <button class="button button--danger button--compact" type="button" data-remove-parlay-leg aria-label="Quitar ${escapeHtml(leg.selection)} del parlay" ${result === "pending" ? "" : "disabled title=\"Los parlays resueltos conservan su historial\""}>Quitar pick</button>
+          <div class="saved-leg__controls"><label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label><div><button class="button button--secondary button--compact" type="button" data-save-parlay-leg>Guardar</button><button class="button button--danger button--compact" type="button" data-remove-parlay-leg aria-label="Quitar ${escapeHtml(leg.selection)} del parlay">Quitar</button></div></div>
         </section>`; }).join("")}</div>
       <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>
       <footer class="saved-parlay__footer" ${expanded ? "" : "hidden"}><span>El resultado general se calcula con los estados de las selecciones.</span><button class="button button--danger" type="button" data-delete-parlay>Mover a Papelera</button></footer>
@@ -2647,15 +2694,20 @@ function parlayTotalOdds(legs, key) {
 
 function renderTrashParlays() {
   const trashed = state.savedParlays.filter((parlay) => parlay.trashed && !parlay.deletedPermanently);
-  if (!trashed.length) {
-    elements.trashParlaysList.innerHTML = '<div class="saved-empty"><h3>No hay parlays eliminados.</h3><p>Los parlays enviados a Papelera podrán recuperarse desde aquí.</p></div>';
+  const removedPicks = state.savedParlays.flatMap((parlay) => (parlay.removedLegs || [])
+    .filter((leg) => !leg.deletedPermanently)
+    .map((leg) => ({ parlay, leg })));
+  if (!trashed.length && !removedPicks.length) {
+    elements.trashParlaysList.innerHTML = '<div class="saved-empty"><h3>La Papelera está vacía.</h3><p>Los parlays y picks retirados podrán recuperarse desde aquí.</p></div>';
     return;
   }
-  elements.trashParlaysList.innerHTML = trashed.map((parlay) => {
+  const parlayRows = trashed.map((parlay) => {
     const originalTotal = parlayTotalOdds(parlay.legs, "originalOdds");
     const updatedTotal = parlayTotalOdds(parlay.legs, "updatedOdds");
     return `<article class="trash-parlay" data-trash-parlay-id="${escapeHtml(parlay.id)}"><header><div><span>Papelera · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><small>Creado ${escapeHtml(formatUpdatedAt(parlay.createdAt))} · Eliminado ${escapeHtml(formatUpdatedAt(parlay.deletedAt))}</small></div><div><strong>Cuota ${displayValue(originalTotal)}</strong><small>Actualizada ${displayValue(updatedTotal)}</small></div></header><details><summary>Ver detalles</summary><div class="trash-parlay__legs">${parlay.legs.map((leg) => `<div><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)} · ${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)}</span><small>${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))} · ${escapeHtml(resultLabels[leg.result] || "Pendiente")}</small></div>`).join("")}</div></details><footer><button class="button button--primary button--compact" type="button" data-restore-parlay>Recuperar</button><button class="button button--danger button--compact" type="button" data-delete-parlay-forever>Eliminar definitivamente</button></footer></article>`;
   }).join("");
+  const removedRows = removedPicks.map(({ parlay, leg }) => `<article class="trash-parlay trash-pick" data-removed-parlay-id="${escapeHtml(parlay.id)}" data-removed-leg-id="${escapeHtml(leg.id)}"><header><div><span>Pick retirado · ${escapeHtml(parlay.name)}</span><h3>${escapeHtml(leg.selection)}</h3><small>${escapeHtml(leg.market)} · ${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)}</small></div><div><strong>${escapeHtml(resultLabels[leg.result] || "Pendiente")}</strong><small>Retirado ${escapeHtml(formatUpdatedAt(leg.removedFromParlayAt))}</small></div></header><footer><button class="button button--primary button--compact" type="button" data-restore-removed-leg>Recuperar pick</button><button class="button button--danger button--compact" type="button" data-delete-removed-leg-forever>Eliminar definitivamente</button></footer></article>`).join("");
+  elements.trashParlaysList.innerHTML = `${removedRows ? `<div class="trash-section-heading"><h3>Picks retirados</h3><span>${removedPicks.length}</span></div>${removedRows}` : ""}${parlayRows ? `<div class="trash-section-heading"><h3>Parlays eliminados</h3><span>${trashed.length}</span></div>${parlayRows}` : ""}`;
 }
 
 async function updateSavedParlayResults() {
@@ -2769,6 +2821,7 @@ async function updateSavedParlayResults() {
     persistSavedPicks();
     renderSavedPicks();
     renderSavedParlays();
+    refreshActivePickIndicators();
     const summary = [];
     if (updated) summary.push(`${updated} resultado(s) corregidos`);
     if (verified) summary.push(`${verified} verificados a 90 minutos`);
@@ -4580,9 +4633,11 @@ elements.analysisContent.addEventListener("click", (event) => {
   if (addButton) addMarketToParlay(analysis, Number(addButton.dataset.addMarket));
   if (saveButton) saveAnalysisMarket(analysis, Number(saveButton.dataset.saveMarket));
 });
-elements.parlayDraftList.addEventListener("click", (event) => {
+elements.parlayDraftList.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-remove-draft]");
   if (!button) return;
+  const leg = state.parlayDraft.find((item) => item.id === button.dataset.removeDraft);
+  if (!await confirmDeletion(`El pick "${leg?.selection || "seleccionado"}" se quitará del cupón en preparación.`, "¿Quitar pick del cupón?")) return;
   state.parlayDraft = state.parlayDraft.filter((leg) => leg.id !== button.dataset.removeDraft);
   persistParlayDraft();
   renderParlayDraft();
@@ -4644,6 +4699,7 @@ elements.savedParlaysList.addEventListener("change", (event) => {
   parlay.updatedAt = leg.updatedAt;
   persistSavedParlays();
   renderSavedParlays();
+  refreshActivePickIndicators();
 });
 elements.savedPicksList.addEventListener("change", (event) => {
   const select = event.target.closest("[data-pick-result]");
@@ -4667,6 +4723,7 @@ elements.savedPicksList.addEventListener("change", (event) => {
   persistSavedPicks();
   renderSavedPicks();
   renderOriginPerformance();
+  refreshActivePickIndicators();
   showNotice(`Resultado manual guardado como ${resultLabels[pick.result].toLowerCase()}.`);
 });
 elements.savedParlaysList.addEventListener("input", (event) => {
@@ -4680,10 +4737,11 @@ elements.savedParlaysList.addEventListener("input", (event) => {
     persistSavedParlays();
   }
 });
-elements.savedParlaysList.addEventListener("click", (event) => {
+elements.savedParlaysList.addEventListener("click", async (event) => {
   const toggleButton = event.target.closest("[data-toggle-parlay]");
   const deleteButton = event.target.closest("[data-delete-parlay]");
   const removeLegButton = event.target.closest("[data-remove-parlay-leg]");
+  const saveLegButton = event.target.closest("[data-save-parlay-leg]");
   const card = event.target.closest("[data-parlay-id]");
   if (toggleButton && card) {
     if (state.expandedParlays.has(card.dataset.parlayId)) state.expandedParlays.delete(card.dataset.parlayId);
@@ -4691,55 +4749,90 @@ elements.savedParlaysList.addEventListener("click", (event) => {
     renderSavedParlays();
     return;
   }
+  if (saveLegButton && card) {
+    const legRow = saveLegButton.closest("[data-leg-id]");
+    const parlay = state.savedParlays.find((item) => item.id === card.dataset.parlayId);
+    const leg = parlay?.legs?.find((item) => String(item.id) === String(legRow?.dataset.legId));
+    if (!leg) return;
+    leg.updatedAt = new Date().toISOString();
+    parlay.updatedAt = leg.updatedAt;
+    persistSavedParlays();
+    renderOriginPerformance();
+    showNotice(`Pick "${leg.selection}" guardado.`);
+    return;
+  }
   if (removeLegButton && card) {
     const legRow = removeLegButton.closest("[data-leg-id]");
     const parlay = state.savedParlays.find((item) => item.id === card.dataset.parlayId);
     if (!parlay || !legRow) return;
-    if (calculateParlayResult(parlay.legs) !== "pending") {
-      showNotice("Los parlays ya resueltos no se editan para conservar el historial.");
-      return;
-    }
     if ((parlay.legs || []).length <= 1) {
       showNotice("El parlay debe conservar al menos una selección. Puedes mover el cupón completo a Papelera.");
       return;
     }
+    const leg = parlay.legs.find((item) => String(item.id) === String(legRow.dataset.legId));
+    if (!await confirmDeletion(`El pick "${leg?.selection || "seleccionado"}" se moverá a Papelera y dejará de contar en resultados por origen, competición, tipos y mejores picks.`, "¿Quitar pick del parlay?")) return;
     state.savedParlays = state.savedParlays.map((item) => item.id === parlay.id ? removeParlayLeg(item, legRow.dataset.legId) : item);
     persistSavedParlays();
     renderSavedParlays();
-    showNotice("Pick retirado del parlay. Si ya estaba resuelto, su resultado permanece en los conteos históricos.");
+    refreshActivePickIndicators();
+    showNotice("Pick enviado a Papelera y excluido de todos los resúmenes de rendimiento.");
     return;
   }
   if (!deleteButton || !card) return;
+  if (!await confirmDeletion("El parlay se moverá a Papelera y podrá recuperarse después.", "¿Mover parlay a Papelera?")) return;
   state.savedParlays = state.savedParlays.map((item) => item.id === card.dataset.parlayId ? moveParlayToTrash(item) : item);
   state.expandedParlays.delete(card.dataset.parlayId);
   persistSavedParlays();
   renderSavedParlays();
+  refreshActivePickIndicators();
   showNotice("Parlay enviado a Papelera. Puedes recuperarlo desde Mis apuestas.");
 });
-elements.trashParlaysList.addEventListener("click", (event) => {
+elements.trashParlaysList.addEventListener("click", async (event) => {
+  const removedCard = event.target.closest("[data-removed-parlay-id][data-removed-leg-id]");
+  if (removedCard) {
+    const parlayId = removedCard.dataset.removedParlayId;
+    const legId = removedCard.dataset.removedLegId;
+    if (event.target.closest("[data-restore-removed-leg]")) {
+      state.savedParlays = state.savedParlays.map((parlay) => parlay.id === parlayId ? restoreRemovedParlayLeg(parlay, legId) : parlay);
+      persistSavedParlays();
+      renderSavedParlays();
+      refreshActivePickIndicators();
+      showNotice("Pick recuperado en su parlay y reincorporado a los resúmenes.");
+      return;
+    }
+    if (!event.target.closest("[data-delete-removed-leg-forever]")) return;
+    if (!await confirmDeletion("El pick se eliminará definitivamente de la Papelera. No podrá recuperarse.", "¿Eliminar pick definitivamente?")) return;
+    state.savedParlays = state.savedParlays.map((parlay) => parlay.id === parlayId ? permanentlyDeleteRemovedParlayLeg(parlay, legId) : parlay);
+    persistSavedParlays();
+    renderSavedParlays();
+    showNotice("Pick eliminado definitivamente.");
+    return;
+  }
   const card = event.target.closest("[data-trash-parlay-id]");
   if (!card) return;
   const id = card.dataset.trashParlayId;
   if (event.target.closest("[data-restore-parlay]")) {
     state.savedParlays = state.savedParlays.map((parlay) => parlay.id === id ? restoreParlayFromTrash(parlay) : parlay);
-    persistSavedParlays(); renderSavedParlays(); showNotice("Parlay recuperado y devuelto a Parlays guardados."); return;
+    persistSavedParlays(); renderSavedParlays(); refreshActivePickIndicators(); showNotice("Parlay recuperado y devuelto a Parlays guardados."); return;
   }
   if (!event.target.closest("[data-delete-parlay-forever]")) return;
-  if (!window.confirm("¿Eliminar definitivamente este parlay? Esta acción no se puede deshacer.")) return;
+  if (!await confirmDeletion("El parlay se eliminará definitivamente. Esta acción no se puede deshacer.", "¿Eliminar parlay definitivamente?")) return;
   state.savedParlays = state.savedParlays.map((parlay) => parlay.id === id
     ? { ...parlay, trashed: true, deletedPermanently: true, purgedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
     : parlay);
-  persistSavedParlays(); renderSavedParlays(); showNotice("Parlay retirado de la vista. Sus resultados concluidos se conservan en el conteo por origen.");
+  persistSavedParlays(); renderSavedParlays(); refreshActivePickIndicators(); showNotice("Parlay retirado de la vista. Sus resultados concluidos se conservan en el conteo por origen.");
 });
-elements.savedPicksList.addEventListener("click", (event) => {
+elements.savedPicksList.addEventListener("click", async (event) => {
   const card = event.target.closest("[data-pick-id]");
   if (!card || !event.target.closest("[data-delete-pick]")) return;
+  if (!await confirmDeletion("El pick individual se retirará de la vista y se conservará su resultado histórico cuando corresponda.", "¿Eliminar pick individual?")) return;
   state.savedPicks = state.savedPicks.map((pick) => pick.id === card.dataset.pickId
     ? { ...pick, trashed: true, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
     : pick);
   persistSavedPicks();
   renderSavedPicks();
   renderOriginPerformance();
+  refreshActivePickIndicators();
   showNotice("Pick retirado de la vista. Si está concluido, permanece en el conteo por origen.");
 });
 document.addEventListener("click", (event) => {

@@ -35,6 +35,24 @@ test("combina cambios del mismo parlay y conserva selecciones de ambos dispositi
   assert.deepEqual(merged.savedParlays[0].legs.map((leg) => leg.id), ["leg-1", "leg-2"]);
 });
 
+test("un pick retirado del parlay no reaparece desde otro dispositivo", () => {
+  const merged = mergeCloudState(
+    { savedParlays: [{ id: "shared", updatedAt: "2026-07-23T12:00:00Z", legs: [{ id: "keep" }], removedLegs: [{ id: "removed", result: "won", removedFromParlayAt: "2026-07-23T12:00:00Z" }] }] },
+    { saved_parlays: [{ id: "shared", updatedAt: "2026-07-23T11:00:00Z", legs: [{ id: "keep" }, { id: "removed", result: "won" }] }] }
+  );
+  assert.deepEqual(merged.savedParlays[0].legs.map((leg) => leg.id), ["keep"]);
+  assert.deepEqual(merged.savedParlays[0].removedLegs.map((leg) => leg.id), ["removed"]);
+});
+
+test("un pick recuperado vuelve al parlay si la restauración es posterior", () => {
+  const merged = mergeCloudState(
+    { savedParlays: [{ id: "shared", updatedAt: "2026-07-23T12:05:00Z", legs: [{ id: "restored", restoredToParlayAt: "2026-07-23T12:05:00Z" }], removedLegs: [] }] },
+    { saved_parlays: [{ id: "shared", updatedAt: "2026-07-23T12:00:00Z", legs: [], removedLegs: [{ id: "restored", removedFromParlayAt: "2026-07-23T12:00:00Z" }] }] }
+  );
+  assert.deepEqual(merged.savedParlays[0].legs.map((leg) => leg.id), ["restored"]);
+  assert.deepEqual(merged.savedParlays[0].removedLegs, []);
+});
+
 test("sincroniza auditorias de evidencias sin perder resultados de otro dispositivo", () => {
   const merged = mergeCloudState(
     { preferences: { evidenceAudits: { "ev-local": { auditedAt: "2026-07-18T10:00:00Z", auditSummary: { completed: true } } } } },

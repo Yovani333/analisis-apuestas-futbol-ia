@@ -59,7 +59,8 @@ function normalizeSession(payload) {
 function rowTimestamp(row = {}) {
   return Math.max(0, ...[
     row.updatedAt, row.lastCheckedAt, row.deletedAt, row.resolvedAt, row.auditedAt,
-    row.savedAt, row.createdAt, row.addedAt, row.capturedAt
+    row.savedAt, row.createdAt, row.addedAt, row.capturedAt,
+    row.removedFromParlayAt, row.restoredToParlayAt, row.purgedAt
   ].map((value) => Date.parse(value || "") || 0));
 }
 
@@ -75,6 +76,20 @@ function mergeRow(localRow, remoteRow) {
   const merged = { ...older, ...newer };
   if (Array.isArray(localRow.legs) || Array.isArray(remoteRow.legs)) {
     merged.legs = mergeById(localRow.legs, remoteRow.legs);
+  }
+  if (Array.isArray(localRow.removedLegs) || Array.isArray(remoteRow.removedLegs)) {
+    merged.removedLegs = mergeById(localRow.removedLegs, remoteRow.removedLegs);
+    const activeById = new Map(merged.legs?.map((leg) => [String(leg.id), leg]) || []);
+    const removedById = new Map(merged.removedLegs.map((leg) => [String(leg.id), leg]));
+    for (const [id, removed] of removedById) {
+      const active = activeById.get(id);
+      const restoredAt = timestamp(active?.restoredToParlayAt);
+      const removedAt = Math.max(timestamp(removed.removedFromParlayAt), timestamp(removed.purgedAt));
+      if (restoredAt > removedAt) removedById.delete(id);
+      else activeById.delete(id);
+    }
+    merged.legs = [...activeById.values()];
+    merged.removedLegs = [...removedById.values()];
   }
   return merged;
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de análisis responsable de apuestas de fútbol con datos, API-Football y modelos internos." />
     <title>Análisis de Apuestas de Fútbol con Datos</title>
-  <link rel="stylesheet" href="styles.css?v=20260722-live-score-v1" />
+  <link rel="stylesheet" href="styles.css?v=20260724-parlay-trash-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -586,6 +586,18 @@
       </div>
     </dialog>
 
+    <dialog id="delete-confirmation-dialog" class="confirmation-dialog" aria-labelledby="delete-confirmation-title">
+      <div class="confirmation-dialog__panel">
+        <p class="eyebrow">Confirmar acción</p>
+        <h2 id="delete-confirmation-title">¿Deseas eliminar este elemento?</h2>
+        <p id="delete-confirmation-message">El elemento se enviará a Papelera.</p>
+        <div class="confirmation-dialog__actions">
+          <button id="delete-confirmation-cancel" class="button button--secondary" type="button">Cancelar</button>
+          <button id="delete-confirmation-confirm" class="button button--danger" type="button">Confirmar</button>
+        </div>
+      </div>
+    </dialog>
+
     <aside id="parlay-slip" class="parlay-slip" aria-labelledby="parlay-slip-title" hidden>
       <div class="parlay-slip__header">
         <div>
@@ -610,6 +622,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260722-picks-quality-v2"></script>
+    <script type="module" src="app.js?v=20260724-parlay-trash-v1"></script>
   </body>
 </html>

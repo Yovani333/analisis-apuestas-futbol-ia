@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -97,12 +97,27 @@ test("clasifica y cuenta tipos de selecciones liquidadas dentro de parlays", () 
   ]);
 });
 
-test("quitar un pick del parlay conserva su historial resuelto", () => {
-  const parlay = { id: "p", legs: [{ id: "a", result: "won" }, { id: "b", result: "pending" }] };
+test("quitar un pick del parlay lo mueve a papelera y lo excluye de todos los resúmenes", () => {
+  const parlay = { id: "p", legs: [
+    { id: "a", result: "won", sourceModule: "corners", league: "MLS", market: "Corners", selection: "Más de 8.5 corners" },
+    { id: "b", result: "pending", sourceModule: "poisson", league: "MLS", market: "Total", selection: "Más de 1.5 goles" }
+  ] };
   const updated = removeParlayLeg(parlay, "a", new Date("2026-07-23T12:00:00Z"));
   assert.deepEqual(updated.legs.map((leg) => leg.id), ["b"]);
   assert.equal(updated.removedLegs[0].id, "a");
   assert.equal(parlay.legs.length, 2);
+  assert.deepEqual(calculateOriginPerformance([], [updated]), []);
+  assert.deepEqual(calculateCompetitionPerformance([], [updated]), []);
+  assert.deepEqual(calculateParlayPickTypePerformance([updated]), []);
+  assert.deepEqual(calculateOriginRecommendations(calculateOriginPerformance([], [updated])).recommended, []);
+
+  const restored = restoreRemovedParlayLeg(updated, "a", new Date("2026-07-23T12:05:00Z"));
+  assert.deepEqual(restored.legs.map((leg) => leg.id), ["b", "a"]);
+  assert.equal(calculateOriginPerformance([], [restored])[0].won, 1);
+
+  const removedAgain = removeParlayLeg(restored, "a", new Date("2026-07-23T12:10:00Z"));
+  const deleted = permanentlyDeleteRemovedParlayLeg(removedAgain, "a", new Date("2026-07-23T12:15:00Z"));
+  assert.equal(deleted.removedLegs.find((leg) => leg.id === "a").deletedPermanently, true);
 });
 
 test("filtra picks y parlays por la fecha del partido", () => {
