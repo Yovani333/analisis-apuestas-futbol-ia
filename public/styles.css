@@ -1050,7 +1050,18 @@ tr.pick-signal--fail > td { background-color: color-mix(in srgb, var(--danger-so
 .pick-dot { width: 9px; height: 9px; border-radius: 50%; }
 .pick-dot--green { background: #15803d; }
 .pick-dot--orange { background: #d97706; }
+.pick-dot--blue { background: #2563eb; }
 .pick-dot--red { background: #dc2626; }
+.performance-odds-badge { display: inline-flex; min-width: 112px; justify-content: center; padding: 5px 7px; border: 1px solid transparent; border-radius: 5px; font-size: .62rem; font-weight: 900; }
+.performance-odds-badge--green { color: #166534; background: #dcfce7; border-color: #86efac; }
+.performance-odds-badge--orange { color: #9a4d05; background: #ffedd5; border-color: #fdba74; }
+.performance-odds-badge--blue { color: #1d4ed8; background: #dbeafe; border-color: #93c5fd; }
+tr.performance-odds-row--green > td { background: color-mix(in srgb, var(--success-soft) 45%, var(--surface)); }
+tr.performance-odds-row--orange > td { background: color-mix(in srgb, #ffedd5 42%, var(--surface)); }
+tr.performance-odds-row--blue > td { background: color-mix(in srgb, #dbeafe 42%, var(--surface)); }
+tr.performance-odds-row--green > td:first-child { border-left: 4px solid #16a34a; }
+tr.performance-odds-row--orange > td:first-child { border-left: 4px solid #f59e0b; }
+tr.performance-odds-row--blue > td:first-child { border-left: 4px solid #3b82f6; }
 .pick-highlight {
   display: inline-flex;
   min-width: 70px;

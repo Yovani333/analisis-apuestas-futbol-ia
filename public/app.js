@@ -18,6 +18,7 @@ import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from ".
 import { filterValidEvidenceSnapshots, isValidEvidenceSnapshot } from "./evidence-validity.js?v=20260719-remove-invalid-v1";
 import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2h-suggestion-v1";
 import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.js?v=20260722-recent-form-v1";
+import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -1611,28 +1612,26 @@ function renderResearchModuleDetail(moduleKey, research) {
     const analysis = evaluateH2HRecommendation({ matches: module.matches || [], currentHomeTeam: research.homeTeam, currentAwayTeam: research.awayTeam, currentFixtureDate: research.dateTime, neutralVenue: research.venue?.neutral, source: module.source });
     content = `<div class="research-kpis"><span>Victorias ${escapeHtml(research.homeTeam.name)} <strong>${displayValue(module.homeWins)}</strong></span><span>Empates <strong>${displayValue(module.draws)}</strong></span><span>Victorias ${escapeHtml(research.awayTeam.name)} <strong>${displayValue(module.awayWins)}</strong></span></div>${rows.length ? detailTable(["Fecha", "Local", "Marcador", "Visitante"], rows) : emptyDetail("No hay enfrentamientos disponibles.")}${renderH2HSuggestion(analysis, research.homeTeam.name, research.awayTeam.name)}`;
   } else if (moduleKey === "odds") {
-    const decision = research.pickDecision || {};
-    const roleFor = (market) => market.selectionKey === decision.recommendedPick?.selectionKey ? "Mejor pick"
-      : market.selectionKey === decision.conservativeAlternative?.selectionKey ? "Conservador"
-        : market.selectionKey === decision.valueAlternative?.selectionKey ? "Valor"
-          : market.highlightColor === "red" ? "Evitar" : "Evaluado";
-    const rows = (module.markets || []).map((market) => [
-      `<span class="pick-highlight pick-highlight--${escapeHtml(market.highlightColor || "orange")}">${escapeHtml(market.colorMeaning || "Riesgo")}</span>`,
+    const performanceRows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
+    const bestPicks = calculateOriginRecommendations(performanceRows).recommended;
+    const performanceMarkets = buildPerformanceOddsView(module.markets || [], performanceRows, bestPicks);
+    const performanceLabel = { green: "Mayor desempeño", orange: "Desempeño medio", blue: "Desempeño menor" };
+    const rows = performanceMarkets.map((market) => [
+      `<span class="performance-odds-badge performance-odds-badge--${escapeHtml(market.performanceColor)}">${escapeHtml(performanceLabel[market.performanceColor])}</span>`,
       labelWithTooltip(market.market),
-      `<div class="selection-add"><div><strong>${displayValue(market.selection)}</strong><small class="pick-role">${escapeHtml(roleFor(market))}</small></div><button class="selection-add__button" type="button" data-add-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!["green", "orange"].includes(market.highlightColor) || !market.selectionKey ? "disabled" : ""} aria-label="Agregar ${escapeHtml(market.selection || "selección")} al parlay" title="Agregar al parlay">+</button></div>`,
+      `<div class="selection-add"><div><strong>${displayValue(market.selection)}</strong><small class="pick-role">${escapeHtml(market.performance.origins.map(pickOriginLabel).join(" · "))}</small></div><button class="selection-add__button" type="button" data-add-odds-pick="${escapeHtml(market.selectionKey || "")}" ${!market.selectionKey ? "disabled" : ""} aria-label="Agregar ${escapeHtml(market.selection || "selección")} al parlay" title="Agregar al parlay">+</button></div>`,
       displayValue(market.decimalOdds),
-      `${displayValue(market.impliedProbabilityPct)}%`,
-      `${displayValue(market.estimatedProbabilityPct)}%`,
-      `${displayValue(market.expectedValuePct)}%`,
-      `<strong>${escapeHtml(market.confidenceLevel || "Baja")}</strong><small>${displayValue(market.finalPickScore, 0)}/100</small>`,
-      `<span title="${escapeHtml(market.explanation || "Sin explicación adicional")}">${escapeHtml(market.explanation || (market.requiresReview ? "Requiere revisión" : "Verificado"))}</span>`
+      `<strong>${market.performance.won}</strong>`,
+      `<strong>${market.performance.lost}</strong>`,
+      `<strong>${displayValue(market.performance.winRate)}%</strong>`,
+      displayValue(market.bookmaker)
     ]);
-    const legend = `<div class="pick-color-legend" aria-label="Leyenda de colores"><strong>Leyenda</strong><span><i class="pick-dot pick-dot--green"></i>Confiable</span><span><i class="pick-dot pick-dot--orange"></i>Riesgo</span><span><i class="pick-dot pick-dot--red"></i>Evitar</span></div>`;
-    const summary = decision.matchProfile ? `<div class="pick-decision-summary"><div><span>Favorito real</span><strong>${escapeHtml(decision.favoriteTeam || "No identificado")}</strong><small>${escapeHtml(decision.favoriteStrength || "none")}</small></div><div><span>Perfil</span><strong>${escapeHtml(decision.matchProfile)}</strong></div><div><span>Mejor pick</span><strong>${escapeHtml(decision.recommendedPick?.selection || "Sin pick")}</strong></div><div><span>Alternativa conservadora</span><strong>${escapeHtml(decision.conservativeAlternative?.selection || "Sin alternativa")}</strong></div></div>` : "";
-    const rowClasses = (module.markets || []).map(pickSignalClass);
+    const legend = `<div class="pick-color-legend" aria-label="Rendimiento histórico"><strong>Rendimiento histórico</strong><span><i class="pick-dot pick-dot--green"></i>Más picks ganados</span><span><i class="pick-dot pick-dot--orange"></i>Nivel medio</span><span><i class="pick-dot pick-dot--blue"></i>Nivel menor</span></div>`;
+    const note = `<div class="detail-note detail-note--info"><strong>Cuotas según Mejores picks</strong><span>Solo se muestran selecciones con historial favorable y cuota vigente de API-Football, ordenadas de mayor a menor. Corners está excluido. El color resume resultados anteriores y no garantiza el siguiente resultado.</span></div>`;
+    const rowClasses = performanceMarkets.map((market) => `performance-odds-row--${market.performanceColor}`);
     const modeLabel = module.oddsMode === "live" ? "Cuotas en vivo" : ["pre_match_fallback", "pre_match_league_date_fallback"].includes(module.oddsMode) ? "Última cuota prepartido disponible" : "Cuotas prepartido";
     const freshness = `<div class="detail-note ${module.isFallbackSnapshot ? "detail-note--warning" : "detail-note--info"}"><strong>${escapeHtml(modeLabel)}</strong><span>${escapeHtml(module.refreshPolicy || "")}${module.isFallbackSnapshot ? " API-Football no publicó una cuota live para este fixture; no se presenta el respaldo como dato nuevo." : ""}</span></div>`;
-    content = rows.length ? `${freshness}${renderOddsMonitor(selectedFixture()?.confirmedData?.odds || [])}${summary}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Implícita", "Modelo", "EV", "Confianza", "Explicación"], rows, rowClasses)}` : `${freshness}${emptyDetail("No hay cuotas principales verificables.")}`;
+    content = rows.length ? `${freshness}${note}${legend}${detailTable(["Nivel", "Mercado", "Selección", "Cuota", "Ganados", "Perdidos", "Acierto", "Casa"], rows, rowClasses)}` : `${freshness}${note}${emptyDetail("API-Football no tiene cuotas vigentes que coincidan con los Mejores picks actuales. Los mercados de corners no se muestran.")}`;
   } else if (moduleKey === "contextCalendar") {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
   } else if (moduleKey === "statsForm") {

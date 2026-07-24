@@ -45,6 +45,15 @@ test("Mis apuestas actualiza estados al entrar y conserva el control manual", ()
   assert.match(styles, /\.saved-pick \.final-score \{ color: var\(--success\); font-weight: 800; \}/);
 });
 
+test("Transparencia filtra cuotas por Mejores picks sin incluir corners", () => {
+  assert.match(app, /buildPerformanceOddsView\(module\.markets \|\| \[\], performanceRows, bestPicks\)/);
+  assert.match(app, /ordenadas de mayor a menor\. Corners está excluido/);
+  assert.match(app, /performance-odds-row--\$\{market\.performanceColor\}/);
+  assert.match(styles, /performance-odds-badge--green/);
+  assert.match(styles, /performance-odds-badge--orange/);
+  assert.match(styles, /performance-odds-badge--blue/);
+});
+
 test("Auditoria aprovecha el ancho y permite continuar el scroll de pagina", () => {
   assert.match(html, /class="utility-view audit-view" data-view-panel="audit"/);
   assert.match(styles, /\.audit-view \{ width: min\(1500px, 100%\); \}/);
@@ -166,7 +175,7 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260724-saved-auto-refresh-v1/);
+  assert.match(html, /styles\.css\?v=20260724-performance-odds-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
 });
