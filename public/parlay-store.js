@@ -298,7 +298,10 @@ export function createSavedPick(leg, now = new Date()) {
 
 export function calculateOriginPerformance(picks = [], parlays = []) {
   const groups = new Map();
-  const parlayLegs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
+  const parlayLegs = parlays.flatMap((parlay) => [
+    ...(Array.isArray(parlay?.legs) ? parlay.legs : []),
+    ...(Array.isArray(parlay?.removedLegs) ? parlay.removedLegs : [])
+  ]);
   const rows = [...picks.map((pick) => ({ pick, kind: "individual" })), ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))];
   const leadLabel = (pick) => {
     const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || "");
@@ -362,31 +365,111 @@ export function calculateOriginPerformance(picks = [], parlays = []) {
 
 export function calculateCompetitionPerformance(picks = [], parlays = []) {
   const groups = new Map();
-  const parlayLegs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
-  const rows = [
-    ...picks.map((pick) => ({ pick, kind: "individual" })),
-    ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))
+  const normalizeCompetition = (value) => String(value || "Competición no disponible").trim()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/\b(uefa|conmebol|clasificacion|qualification|qualifying)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+  const allRows = [
+    ...picks.map((pick) => ({ pick, kind: "individual", activeEligible: !pick?.trashed })),
+    ...parlays.flatMap((parlay) => [
+      ...(Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay", activeEligible: !parlay?.trashed })) : []),
+      ...(Array.isArray(parlay?.removedLegs) ? parlay.removedLegs.map((pick) => ({ pick, kind: "parlay", activeEligible: false })) : [])
+    ])
   ];
-
-  for (const { pick, kind } of rows) {
-    if (!['won', 'lost'].includes(pick?.result)) continue;
+  const identityToLeagueId = new Map();
+  for (const { pick } of allRows) {
+    const leagueId = pick?.leagueId ?? pick?.league_id ?? null;
+    if (leagueId !== null && leagueId !== undefined && leagueId !== "") {
+      identityToLeagueId.set(normalizeCompetition(pick.league || pick.competition), String(leagueId));
+    }
+  }
+  const isActive = (pick) => {
+    if (pick?.result !== "pending") return false;
+    const status = String(pick.fixtureStatus || pick.status || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (/(final|finished|ft|aet|pen|cancel|postpon|suspend|abandon)/.test(status)) return false;
+    if (/(program|scheduled|not started|\bns\b|en vivo|live|\b1h\b|\b2h\b|half)/.test(status)) return true;
+    const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || pick.date || "");
+    return Number.isFinite(kickoff) && kickoff > Date.now();
+  };
+  for (const { pick, kind, activeEligible } of allRows) {
+    const settled = ['won', 'lost'].includes(pick?.result);
+    const active = activeEligible && isActive(pick);
+    if (!settled && !active) continue;
     const competition = String(pick.league || pick.competition || "Competición no disponible").trim();
     const leagueId = pick.leagueId ?? pick.league_id ?? null;
-    const key = leagueId === null || leagueId === undefined || leagueId === ""
-      ? `name:${competition.toLowerCase()}`
-      : `id:${leagueId}`;
+    const identity = normalizeCompetition(competition);
+    const resolvedLeagueId = leagueId ?? identityToLeagueId.get(identity) ?? null;
+    const key = resolvedLeagueId === null || resolvedLeagueId === undefined || resolvedLeagueId === ""
+      ? `name:${identity}` : `id:${resolvedLeagueId}`;
     const current = groups.get(key) || {
-      key, competition, leagueId, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0
+      key, competition, leagueId: resolvedLeagueId, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, active: 0, winRate: null
     };
+    if (leagueId !== null && leagueId !== undefined && leagueId !== "") {
+      current.leagueId = leagueId;
+      current.competition = competition;
+    }
+    if (active) current.active += 1;
+    if (!settled) {
+      groups.set(key, current);
+      continue;
+    }
     current.evaluated += 1;
     current[pick.result] += 1;
     if (kind === "parlay") current.parlayLegs += 1;
     else current.individual += 1;
-    current.winRate = Number((current.won / current.evaluated * 100).toFixed(1));
+    current.winRate = current.evaluated ? Number((current.won / current.evaluated * 100).toFixed(1)) : null;
     groups.set(key, current);
   }
 
-  return [...groups.values()].sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.competition.localeCompare(b.competition));
+  return [...groups.values()].sort((a, b) => (b.winRate ?? -1) - (a.winRate ?? -1) || b.evaluated - a.evaluated || a.competition.localeCompare(b.competition));
+}
+
+export function classifyParlayPickType(pick = {}) {
+  const raw = `${pick.market || ""} ${pick.selection || ""} ${pick.selectionCode || ""}`
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/,/g, ".");
+  const home = String(pick.home || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const away = String(pick.away || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/corner/.test(raw)) return "Corners";
+  if (/(ambos.*anotan|btts)/.test(raw)) return /\b(no|btts_no)\b/.test(raw) ? "Ambos equipos anotan - No" : "Ambos equipos anotan - Sí";
+  if (/(doble oportunidad|double chance|\b1x\b)/.test(raw)) return /\b(x2|away)\b/.test(raw) ? "Doble oportunidad - visitante" : "Doble oportunidad - local";
+  if (/(doble oportunidad|double chance|\bx2\b)/.test(raw)) return "Doble oportunidad - visitante";
+  if (/(mas|over).*0\.5/.test(raw)) {
+    if (/home_over|local/.test(raw) || (home && raw.includes(home))) return "Más de 0.5 - equipo local";
+    if (/away_over|visitante/.test(raw) || (away && raw.includes(away))) return "Más de 0.5 - equipo visitante";
+    return "Más de 0.5 - total";
+  }
+  if (/(mas|over).*1\.5/.test(raw)) return "Más de 1.5 - total";
+  if (/(menos|under).*1\.5/.test(raw)) return "Menos de 1.5 - total";
+  if (/(menos|under).*3\.5/.test(raw)) return "Menos de 3.5 - total";
+  return null;
+}
+
+export function calculateParlayPickTypePerformance(parlays = []) {
+  const groups = new Map();
+  for (const parlay of parlays) {
+    const legs = [...(Array.isArray(parlay?.legs) ? parlay.legs : []), ...(Array.isArray(parlay?.removedLegs) ? parlay.removedLegs : [])];
+    for (const leg of legs) {
+      if (!['won', 'lost'].includes(leg?.result)) continue;
+      const type = classifyParlayPickType(leg);
+      if (!type) continue;
+      const current = groups.get(type) || { type, won: 0, lost: 0, total: 0 };
+      current[leg.result] += 1;
+      current.total += 1;
+      groups.set(type, current);
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.total - a.total || a.type.localeCompare(b.type, "es"));
+}
+
+export function removeParlayLeg(parlay, legId, now = new Date()) {
+  const leg = parlay?.legs?.find((item) => String(item.id) === String(legId));
+  if (!leg) return parlay;
+  return {
+    ...parlay,
+    legs: parlay.legs.filter((item) => String(item.id) !== String(legId)),
+    removedLegs: [...(Array.isArray(parlay.removedLegs) ? parlay.removedLegs : []), { ...leg, removedFromParlayAt: now.toISOString() }],
+    updatedAt: now.toISOString()
+  };
 }
 
 export function calculateOriginRecommendations(performanceRows = []) {

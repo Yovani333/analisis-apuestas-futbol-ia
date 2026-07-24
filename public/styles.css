@@ -632,6 +632,13 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .origin-performance__table th { color: var(--muted); font-size: .65rem; text-transform: uppercase; }
 .origin-performance__table tbody tr:last-child td { border-bottom: 0; }
 .origin-performance__table td:last-child strong { color: var(--success); }
+.competition-result-name { display: grid; justify-items: start; gap: 5px; }
+.active-pick-badge { display: inline-flex; align-items: center; padding: 3px 7px; color: #fff; background: #c72f45; border: 1px solid #ef6376; border-radius: 4px; font-size: .58rem; font-weight: 800; text-transform: uppercase; }
+.pick-type-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; }
+.pick-type-summary__item { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-left: 4px solid var(--success); border-radius: 7px; }
+.pick-type-summary__item--lost { border-left-color: var(--danger); }
+.pick-type-summary__item span { color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.pick-type-summary__item strong { font-size: 1.15rem; }
 .origin-pick-detail { display: grid; gap: 10px; padding: 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 7px; }
 .origin-pick-detail > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .origin-pick-detail h4 { margin: 2px 0 0; }
@@ -683,6 +690,7 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .result-badge--lost { color: var(--danger); background: var(--danger-soft); }
 .result-badge--void { color: #536174; background: var(--neutral-soft); }
 .saved-parlay__legs { display: grid; gap: 8px; padding: 12px 18px; background: var(--surface-subtle); }
+.saved-leg [data-remove-parlay-leg] { align-self: center; }
 .saved-leg { display: grid; grid-template-columns: 28px minmax(0, 1fr) 135px; gap: 12px; align-items: center; padding: 12px; background: white; border: 1px solid var(--border); border-radius: 10px; }
 .saved-leg--won { border-left: 4px solid var(--success); }
 .saved-leg--lost { border-left: 4px solid var(--danger); }

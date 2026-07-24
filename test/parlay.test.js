@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayResult, canAutomaticallySettlePick, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, pickIdentity, resolveSelectionCode, restoreParlayFromTrash, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
@@ -65,6 +65,44 @@ test("resultados por competición se ordenan por porcentaje descendente", () => 
   ]);
   assert.deepEqual(rows.map((row) => row.competition), ["Liga B", "Liga A", "Liga C"]);
   assert.deepEqual(rows.map((row) => row.winRate), [100, 50, 0]);
+});
+
+test("resultados por competición unifica nombre e ID y señala picks activos", () => {
+  const rows = calculateCompetitionPerformance([
+    { league: "Clasificación Conference League", leagueId: 848, result: "won" },
+    { league: "UEFA Conference League Qualification", result: "lost" },
+    { league: "Clasificación Conference League", result: "pending", fixtureStatus: "Programado" }
+  ]);
+  assert.equal(rows.length, 1);
+  assert.deepEqual({ evaluated: rows[0].evaluated, active: rows[0].active, won: rows[0].won, lost: rows[0].lost }, { evaluated: 2, active: 1, won: 1, lost: 1 });
+});
+
+test("un encuentro finalizado nunca aparece como pick activo", () => {
+  const [row] = calculateCompetitionPerformance([{ league: "MLS", result: "pending", fixtureStatus: "Finalizado", date: "2099-01-01" }]);
+  assert.equal(row, undefined);
+});
+
+test("clasifica y cuenta tipos de selecciones liquidadas dentro de parlays", () => {
+  assert.equal(classifyParlayPickType({ market: "Total de goles", selection: "Más de 1.5 goles" }), "Más de 1.5 - total");
+  assert.equal(classifyParlayPickType({ market: "Goles de Local", selection: "Local más de 0.5", home: "Local", away: "Visita" }), "Más de 0.5 - equipo local");
+  assert.equal(classifyParlayPickType({ market: "Doble oportunidad", selection: "X2" }), "Doble oportunidad - visitante");
+  assert.deepEqual(calculateParlayPickTypePerformance([{ legs: [
+    { market: "Total", selection: "Más de 1.5 goles", result: "won" },
+    { market: "Total", selection: "Más de 1.5 goles", result: "lost" },
+    { market: "Corners", selection: "Más de 8.5 corners", result: "won" },
+    { market: "BTTS", selection: "No", result: "pending" }
+  ] }]), [
+    { type: "Más de 1.5 - total", won: 1, lost: 1, total: 2 },
+    { type: "Corners", won: 1, lost: 0, total: 1 }
+  ]);
+});
+
+test("quitar un pick del parlay conserva su historial resuelto", () => {
+  const parlay = { id: "p", legs: [{ id: "a", result: "won" }, { id: "b", result: "pending" }] };
+  const updated = removeParlayLeg(parlay, "a", new Date("2026-07-23T12:00:00Z"));
+  assert.deepEqual(updated.legs.map((leg) => leg.id), ["b"]);
+  assert.equal(updated.removedLegs[0].id, "a");
+  assert.equal(parlay.legs.length, 2);
 });
 
 test("filtra picks y parlays por la fecha del partido", () => {

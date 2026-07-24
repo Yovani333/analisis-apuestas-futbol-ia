@@ -6,7 +6,7 @@ function snapshot(index, { leagueId = 1, leagueName = "Copa Mundial FIFA", audit
   return {
     id: `evidence-${index}`,
     capturedAt: capturedAt || `2026-07-01T${String(index % 24).padStart(2, "0")}:00:00Z`,
-    fixture: { id: String(index), leagueId, leagueName, utcDateTime: "2026-08-01T18:00:00Z" },
+    fixture: { id: String(index), leagueId, leagueName, home: "Local", away: "Visitante", utcDateTime: "2026-08-01T18:00:00Z" },
     currentFixtureStatisticsUsed: false,
     auditMetadata: audited ? { auditedAt: "2026-08-02T10:00:00Z" } : {},
     auditSummary: audited ? { completed: true, evaluablePicks: 2, decisivePicks: 1, discardedPicks: 3, counterfactualAssessable: 2 } : null
@@ -66,6 +66,19 @@ test("selecciona solo pendientes finalizadas de la competicion solicitada", () =
   const pending = pendingEvidenceForCompetition(rows, "league:1", new Date("2026-07-18T12:00:00Z"));
   assert.deepEqual(pending.ready.map((row) => row.fixture.id), ["1"]);
   assert.deepEqual(pending.waiting.map((row) => row.fixture.id), ["2"]);
+});
+
+test("resume la calidad congelada y distingue versiones de evidencia", () => {
+  const legacy = snapshot(1);
+  legacy.version = 2;
+  legacy.dataQuality = { score: 40 };
+  const current = snapshot(2);
+  current.version = 3;
+  current.captureManifest = { schemaVersion: "pre-match-evidence-v3", qualityScore: 80 };
+  const [row] = summarizeEvidenceByCompetition([legacy, current]);
+  assert.equal(row.averageQualityScore, 60);
+  assert.match(row.schemaVersionSummary, /legacy-v2: 1/);
+  assert.match(row.schemaVersionSummary, /pre-match-evidence-v3: 1/);
 });
 
 test("aplaza temporalmente una evidencia cuyo resultado oficial aun no esta disponible", () => {

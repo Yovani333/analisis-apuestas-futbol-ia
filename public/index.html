@@ -463,7 +463,7 @@
         </div>
         <div class="saved-view__actions"><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></div>
       </section>
-      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-won">Resultados por origen Ganados</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-lost">Resultados por origen Perdidos</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="competitions">Resultados por competición</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origin-recommendations">Mejores picks</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
+      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-won">Resultados por origen Ganados</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-lost">Resultados por origen Perdidos</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="competitions">Resultados por competición</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="types-won">Tipos ganados</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="types-lost">Tipos perdidos</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origin-recommendations">Mejores picks</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
       <section id="saved-date-filter-panel" class="saved-date-filter" aria-label="Buscar apuestas por fecha">
         <div><label for="saved-date-filter">Fecha del partido</label><input id="saved-date-filter" type="date" /></div>
         <button id="apply-saved-date-filter" class="button button--primary" type="button">Buscar</button>
@@ -486,6 +486,14 @@
         <div class="saved-section-toolbar"><div><h3>Resultados por competición</h3><p>Conteo de picks ganados y perdidos, incluyendo picks individuales y selecciones de parlays concluidos.</p></div><button id="update-competition-results" class="button button--primary" type="button">Actualizar datos</button></div>
         <section id="competition-performance" class="origin-performance" aria-label="Resultados ganados y perdidos por competición"></section>
       </section>
+      <section id="pick-types-won-section" class="saved-bets-section" hidden>
+        <div class="saved-section-toolbar"><div><h3>Tipos de picks ganados en parlays</h3><p>Conteo de selecciones acertadas por tipo de mercado. No muestra picks individuales.</p></div></div>
+        <section id="pick-types-won" class="pick-type-summary" aria-label="Conteo de tipos de picks ganados"></section>
+      </section>
+      <section id="pick-types-lost-section" class="saved-bets-section" hidden>
+        <div class="saved-section-toolbar"><div><h3>Tipos de picks perdidos en parlays</h3><p>Conteo de selecciones falladas por tipo de mercado. No muestra picks individuales.</p></div></div>
+        <section id="pick-types-lost" class="pick-type-summary" aria-label="Conteo de tipos de picks perdidos"></section>
+      </section>
       <section id="origin-recommendations-section" class="saved-bets-section" hidden>
         <div class="saved-section-toolbar"><div><h3>Mejores picks por resultados</h3><p>Comparación retrospectiva de ganados y perdidos por selección y origen. No garantiza resultados futuros.</p></div><button id="update-origin-recommendations" class="button button--primary" type="button">Actualizar datos</button></div>
         <section id="origin-recommendations" class="origin-recommendations" aria-label="Mejores picks y picks no recomendados"></section>
@@ -507,7 +515,7 @@
         <div class="panel-heading"><div><p class="eyebrow">Madurez por competición</p><h2 id="evidence-readiness-title">Semáforo de evidencias</h2><p>Indica cuándo existe volumen evaluado suficiente para estudiar mejoras sin recalibrar prematuramente.</p></div><span id="evidence-readiness-total" class="status-badge status-badge--unavailable">0 evidencias</span></div>
         <div class="evidence-readiness-legend"><span><i class="evidence-light evidence-light--red"></i>Baja: 0–29 evaluadas</span><span><i class="evidence-light evidence-light--orange"></i>Media: 30–99</span><span><i class="evidence-light evidence-light--green"></i>Suficiente: 100 o más</span></div>
         <div id="evidence-readiness-list" class="evidence-readiness-grid"><div class="research-empty">Cargando evidencias por competición…</div></div>
-        <p class="market-disclaimer">El verde permite estudiar ajustes con pruebas por mercado y versión; nunca modifica fórmulas automáticamente. Las capturas sin auditoría final permanecen pendientes y no elevan el semáforo.</p>
+        <p class="market-disclaimer">El verde permite estudiar ajustes con pruebas por mercado y versión; nunca modifica fórmulas automáticamente. “Descartados prepartido” son candidatos que el motor marcó NO BET o EVITAR. “Descartes con resultado comprobable” indica que después fue posible comprobar qué habría ocurrido, pero ese dato contrafactual no cuenta como apuesta, acierto, fallo ni ROI.</p>
       </section>
       <section class="panel audit-controls">
         <label for="audit-fixture">Partido finalizado</label>

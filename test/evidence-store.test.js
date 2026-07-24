@@ -13,7 +13,8 @@ test("crea evidencia compacta prepartido sin proveedor externo ni estadísticas 
   assert.equal(snapshot.fixture.id, 12);
   assert.equal(snapshot.openAiUsed, false);
   assert.equal(snapshot.currentFixtureStatisticsUsed, false);
-  assert.equal(snapshot.version, 2);
+  assert.equal(snapshot.version, 3);
+  assert.equal(snapshot.captureManifest.schemaVersion, "pre-match-evidence-v3");
   assert.equal("confirmedData" in snapshot.fixture, false);
 });
 

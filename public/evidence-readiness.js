@@ -65,6 +65,8 @@ export function summarizeEvidenceByCompetition(snapshots = [], now = new Date())
       counterfactualAssessable: 0,
       pendingEvaluation: 0,
       readyToEvaluate: 0,
+      qualityScores: [],
+      schemaVersions: {},
       fixtures: []
     };
     const evaluated = isEvaluated(snapshot);
@@ -76,6 +78,11 @@ export function summarizeEvidenceByCompetition(snapshots = [], now = new Date())
     group.counterfactualAssessable += evaluated ? Number(snapshot.auditSummary?.counterfactualAssessable ?? 0) : 0;
     group.pendingEvaluation += evaluated ? 0 : 1;
     group.readyToEvaluate += readyToEvaluate ? 1 : 0;
+    const rawQualityScore = snapshot.captureManifest?.qualityScore ?? snapshot.dataQuality?.score;
+    const qualityScore = rawQualityScore === null || rawQualityScore === undefined || rawQualityScore === "" ? null : Number(rawQualityScore);
+    if (Number.isFinite(qualityScore)) group.qualityScores.push(qualityScore);
+    const schemaVersion = snapshot.captureManifest?.schemaVersion || `legacy-v${snapshot.version || 1}`;
+    group.schemaVersions[schemaVersion] = (group.schemaVersions[schemaVersion] || 0) + 1;
     group.fixtures.push(String(fixture.id));
     groups.set(key, group);
   }
@@ -85,6 +92,8 @@ export function summarizeEvidenceByCompetition(snapshots = [], now = new Date())
       ...group,
       competitionKey: group.key,
       ...level,
+      averageQualityScore: group.qualityScores.length ? Number((group.qualityScores.reduce((sum, value) => sum + value, 0) / group.qualityScores.length).toFixed(1)) : null,
+      schemaVersionSummary: Object.entries(group.schemaVersions).map(([version, count]) => `${version}: ${count}`).join(" · "),
       remaining: level.nextTarget === null ? 0 : Math.max(0, level.nextTarget - group.evaluated),
       progressPct: Math.min(100, Number((group.evaluated / SUFFICIENT_MINIMUM * 100).toFixed(1)))
     };

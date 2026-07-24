@@ -15,6 +15,35 @@ import { isInvalidEvidenceFixtureStatus, isValidEvidenceSnapshot } from "../../p
 const fallback = (warning) => ({ status: "not_available", warning, picks: [], suggestedMarkets: [] });
 let activeCycle = null;
 
+function moduleItemCount(module, keys) {
+  for (const key of keys) if (Array.isArray(module?.[key])) return module[key].length;
+  return 0;
+}
+
+export function buildEvidenceCaptureManifest(dataset, modules) {
+  const quality = dataset?.dataQuality || dataset?.fixture?.dataQuality || {};
+  const coverage = Array.isArray(dataset?.researchData?.sourceCoverage) ? dataset.researchData.sourceCoverage : [];
+  return {
+    schemaVersion: "pre-match-evidence-v3",
+    qualityScore: Number.isFinite(Number(quality?.score)) ? Number(quality.score) : null,
+    qualityLevel: quality?.level || null,
+    missingFields: Array.isArray(quality?.missing) ? [...quality.missing] : [],
+    modules: {
+      dataPicks: { status: modules.dataPicks?.status || "not_available", itemCount: moduleItemCount(modules.dataPicks, ["picks"]) },
+      poisson: { status: modules.poisson?.status || "not_available", itemCount: moduleItemCount(modules.poisson, ["suggestedMarkets", "likelyScores"]) },
+      teamGoals: { status: modules.teamGoals?.status || "not_available", itemCount: moduleItemCount(modules.teamGoals, ["picks", "suggestedMarkets"]) },
+      corners: { status: modules.corners?.status || "not_available", itemCount: moduleItemCount(modules.corners, ["picks", "suggestedMarkets"]) }
+    },
+    sources: coverage.map((row) => ({
+      module: row?.module || row?.label || row?.moduleKey || "unknown",
+      status: row?.status || "unknown",
+      source: row?.source || row?.provider || null,
+      updatedAt: row?.updatedAt || null
+    })),
+    datasetFetchedAt: dataset?.fetchedAt || null
+  };
+}
+
 export function createServerEvidenceSnapshot(dataset, now = new Date(), { captureMode = "automatic_one_hour", targetLeadMinutes = 60 } = {}) {
   const fixture = dataset?.fixture;
   if (!fixture?.id) throw new TypeError("La evidencia automatica requiere fixtureId.");
@@ -24,8 +53,9 @@ export function createServerEvidenceSnapshot(dataset, now = new Date(), { captur
   try { poisson = dataset.poissonModel || calculatePoissonModel(dataset); } catch { poisson = fallback("Poisson no disponible al capturar."); }
   try { teamGoals = dataset.teamGoalProbability || calculateTeamGoalProbability(dataset); } catch { teamGoals = fallback("Gol por equipo no disponible al capturar."); }
   try { corners = dataset.cornersModel || calculateCornersModel(dataset); } catch { corners = fallback("Corners no disponibles al capturar."); }
+  const modules = { dataPicks, poisson, teamGoals, corners };
   const snapshot = structuredClone({
-    version: 2,
+    version: 3,
     id: `${fixture.id}:${now.getTime()}`,
     capturedAt: now.toISOString(),
     timezone: "America/Tijuana",
@@ -57,7 +87,8 @@ export function createServerEvidenceSnapshot(dataset, now = new Date(), { captur
     preMatch: dataset.preMatch || fixture.preMatch || null,
     marketAnalysis: dataset.marketAnalysis || fixture.marketAnalysis || [],
     researchData: dataset.researchData || fixture.researchData || null,
-    modules: { dataPicks, poisson, teamGoals, corners },
+    modules,
+    captureManifest: buildEvidenceCaptureManifest(dataset, modules),
     auditMetadata: {
       captureMode,
       targetLeadMinutes,

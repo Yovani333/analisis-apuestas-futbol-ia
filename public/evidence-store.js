@@ -28,8 +28,15 @@ export function latestEvidenceForFixture(snapshots, fixtureId) {
 export function createEvidenceSnapshot({ fixture, dataPicks, poisson, teamGoals, corners }, now = new Date()) {
   if (!fixture?.id) throw new TypeError("La evidencia requiere fixtureId.");
   if (fixture.status !== "scheduled") throw new TypeError("Solo se permite guardar evidencia antes del inicio.");
+  const modules = {
+    dataPicks: dataPicks || { status: "not_available", picks: [] },
+    poisson: poisson || { status: "not_available", suggestedMarkets: [] },
+    teamGoals: teamGoals || { status: "not_available", picks: [] },
+    corners: corners || { status: "not_available", picks: [] }
+  };
+  const quality = fixture.dataQuality || {};
   const snapshot = structuredClone({
-    version: 2,
+    version: 3,
     id: `${fixture.id}:${now.getTime()}`,
     capturedAt: now.toISOString(),
     timezone: "America/Tijuana",
@@ -48,11 +55,18 @@ export function createEvidenceSnapshot({ fixture, dataPicks, poisson, teamGoals,
     preMatch: fixture.preMatch || null,
     marketAnalysis: fixture.marketAnalysis || [],
     researchData: fixture.researchData || null,
-    modules: {
-      dataPicks: dataPicks || { status: "not_available", picks: [] },
-      poisson: poisson || { status: "not_available", suggestedMarkets: [] },
-      teamGoals: teamGoals || { status: "not_available", picks: [] },
-      corners: corners || { status: "not_available", picks: [] }
+    modules,
+    captureManifest: {
+      schemaVersion: "pre-match-evidence-v3",
+      qualityScore: Number.isFinite(Number(quality.score)) ? Number(quality.score) : null,
+      qualityLevel: quality.level || null,
+      missingFields: Array.isArray(quality.missing) ? [...quality.missing] : [],
+      modules: Object.fromEntries(Object.entries(modules).map(([key, value]) => [key, {
+        status: value?.status || "not_available",
+        itemCount: [value?.picks, value?.suggestedMarkets, value?.likelyScores].find(Array.isArray)?.length || 0
+      }])),
+      sources: [],
+      datasetFetchedAt: fixture.fetchedAt || null
     },
     auditMetadata: {
       captureMode: "manual_local_legacy",
@@ -93,11 +107,14 @@ export function evidenceSnapshotToText(snapshot, { includeRejected = true } = {}
     `Home team ID: ${textValue(fixture.homeTeamId)}`, `Away team ID: ${textValue(fixture.awayTeamId)}`,
     `Estado: ${textValue(fixture.statusLabel || fixture.status)}`, "Fuente principal: API-Football + modelos internos", "",
     `Modo de captura: ${textValue(snapshot.auditMetadata?.captureMode)}`,
+    `Versión de evidencia: ${textValue(snapshot.captureManifest?.schemaVersion || `legacy-v${snapshot.version || 1}`)}`,
     `Dataset obtenido: ${textValue(snapshot.auditMetadata?.datasetFetchedAt || snapshot.capturedAt)}`,
     `Estadio: ${textValue(fixture.stadium)} | Ciudad: ${textValue(fixture.city)}`,
     "COBERTURA Y FUENTES", `Fuente declarada: ${textValue(fixture.source)}`,
     `Módulos consultados: ${textValue(snapshot.researchData?.sourceCoverage?.map((row) => row.module || row.label || row.moduleKey).filter(Boolean).join(", "))}`,
     `Calidad: ${textValue(snapshot.dataQuality?.score)}/100 (${textValue(snapshot.dataQuality?.level)})`,
+    `Calidad congelada en captura: ${textValue(snapshot.captureManifest?.qualityScore)}/100 (${textValue(snapshot.captureManifest?.qualityLevel)})`,
+    `Cobertura por módulo: ${textValue(Object.entries(snapshot.captureManifest?.modules || {}).map(([key, value]) => `${key}=${value.status}:${value.itemCount}`).join(", "))}`,
     `Datos faltantes: ${textValue(snapshot.dataQuality?.missing?.join(", "))}`, `Última actualización: ${textValue(snapshot.researchData?.updatedAt || snapshot.capturedAt)}`, "",
     "PROBABILIDAD DE GOL POR EQUIPO",
     `Local anota: ${textValue(goals.homeGoalProbability)}%`, `Visitante anota: ${textValue(goals.awayGoalProbability)}%`,

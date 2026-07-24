@@ -51,6 +51,10 @@ test("crea evidencia automatica auditable sin proveedor externo ni datos actuale
   assert.equal(snapshot.currentFixtureStatisticsUsed, false);
   assert.equal(snapshot.openAiUsed, false);
   assert.ok(snapshot.modules.dataPicks);
+  assert.equal(snapshot.version, 3);
+  assert.equal(snapshot.captureManifest.schemaVersion, "pre-match-evidence-v3");
+  assert.equal(snapshot.captureManifest.qualityScore, 70);
+  assert.equal(snapshot.captureManifest.modules.dataPicks.itemCount, snapshot.modules.dataPicks.picks.length);
 });
 
 test("evidencia manual y automatica comparten el mismo constructor y datos deportivos", () => {
