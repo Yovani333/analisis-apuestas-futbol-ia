@@ -1,6 +1,50 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { applyFixtureStatusUpdate, buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+
+test("actualiza el estado de fixtures activos aunque el mercado no pueda liquidarse", () => {
+  assert.equal(needsFixtureStatusRefresh({ fixtureId: 10, fixtureStatus: "En vivo", result: "won" }), true);
+  assert.equal(needsFixtureStatusRefresh({ fixtureId: 10, fixtureStatus: "Programado", result: "pending" }), true);
+  assert.equal(needsFixtureStatusRefresh({ fixtureId: 10, fixtureStatus: "Finalizado", result: "won" }), true);
+  assert.equal(needsFixtureStatusRefresh({ fixtureId: 10, fixtureStatus: "Finalizado", finalScore: "2-1", result: "pending" }), false);
+});
+
+test("convierte un fixture en vivo a finalizado usando el marcador reglamentario", () => {
+  const original = { fixtureId: 20, fixtureStatus: "En vivo", liveScore: { home: 1, away: 1 }, liveElapsed: 88 };
+  const now = new Date("2026-07-24T12:00:00.000Z");
+  const updated = applyFixtureStatusUpdate(original, {
+    finished: true,
+    statusLabel: "Finalizado",
+    regulationGoals: { home: 1, away: 1 },
+    goals: { home: 2, away: 1 }
+  }, now);
+  assert.equal(updated.fixtureStatus, "Finalizado");
+  assert.equal(updated.finalScore, "1-1");
+  assert.equal(updated.liveScore, undefined);
+  assert.equal(updated.liveElapsed, undefined);
+  assert.equal(updated.lastUpdatedAt, now.toISOString());
+  assert.deepEqual(original.liveScore, { home: 1, away: 1 });
+});
+
+test("mantiene marcador y minuto mientras el fixture siga en vivo", () => {
+  const updated = applyFixtureStatusUpdate({ fixtureId: 30 }, {
+    statusLabel: "En vivo",
+    goals: { home: 2, away: 0 },
+    elapsed: 67
+  }, new Date("2026-07-24T12:00:00.000Z"));
+  assert.deepEqual(updated.liveScore, { home: 2, away: 0 });
+  assert.equal(updated.liveElapsed, 67);
+  assert.equal(updated.finalScore, undefined);
+});
+
+test("no convierte un marcador ausente en cero a cero", () => {
+  const updated = applyFixtureStatusUpdate({ fixtureId: 40, fixtureStatus: "En vivo" }, {
+    finished: true,
+    statusLabel: "Finalizado",
+    goals: { home: null, away: null }
+  }, new Date("2026-07-24T12:00:00.000Z"));
+  assert.equal(updated.finalScore, undefined);
+});
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");

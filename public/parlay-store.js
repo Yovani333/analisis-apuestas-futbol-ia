@@ -181,6 +181,52 @@ export function needsSettlementRefresh(leg = {}, version = SETTLEMENT_VERIFICATI
   return leg.result === "pending" || leg.settlementVerificationVersion !== version;
 }
 
+function normalizedFixtureState(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+export function needsFixtureStatusRefresh(leg = {}) {
+  if (!leg.fixtureId) return false;
+  const status = normalizedFixtureState(leg.fixtureStatus || leg.status);
+  const finished = ["finished", "finalizado", "final", "ft", "aet", "pen", "completo"].includes(status);
+  if (finished) return !leg.finalScore;
+  return leg.result === "pending" || ["live", "en vivo", "1h", "ht", "2h", "et", "p", "int", "scheduled", "programado", "ns", "tbd"].includes(status);
+}
+
+function validFixtureScore(score) {
+  if (score?.home === null || score?.home === undefined || score?.home === ""
+    || score?.away === null || score?.away === undefined || score?.away === "") return null;
+  const home = Number(score.home);
+  const away = Number(score.away);
+  return Number.isFinite(home) && Number.isFinite(away) ? { home, away } : null;
+}
+
+export function applyFixtureStatusUpdate(leg = {}, fixtureResult = {}, now = new Date()) {
+  const next = { ...leg };
+  next.fixtureStatus = fixtureResult.statusLabel || fixtureResult.appStatus || fixtureResult.status || next.fixtureStatus;
+  const normalized = normalizedFixtureState(next.fixtureStatus);
+  const finished = fixtureResult.finished === true
+    || ["finished", "finalizado", "final", "ft", "aet", "pen", "completo"].includes(normalized);
+  const regulation = validFixtureScore(fixtureResult.regulationGoals)
+    || validFixtureScore(fixtureResult.fulltimeScore)
+    || validFixtureScore(fixtureResult.score?.fulltime)
+    || validFixtureScore(fixtureResult.goals);
+  if (finished) {
+    next.fixtureStatus = fixtureResult.statusLabel || "Finalizado";
+    if (regulation) next.finalScore = `${regulation.home}-${regulation.away}`;
+    delete next.liveScore;
+    delete next.liveElapsed;
+  } else if (["live", "en vivo", "1h", "ht", "2h", "et", "p", "int"].includes(normalized)) {
+    const liveScore = validFixtureScore(fixtureResult.goals);
+    if (liveScore) next.liveScore = liveScore;
+    const elapsed = Number(fixtureResult.elapsed);
+    if (Number.isFinite(elapsed)) next.liveElapsed = elapsed;
+  }
+  next.lastUpdatedAt = now.toISOString();
+  next.updatedAt = next.lastUpdatedAt;
+  return next;
+}
+
 export function settlePickResult(leg, fixtureResult) {
   const selectionCode = resolveSelectionCode(leg);
   if (!selectionCode || !fixtureResult?.finished) return "pending";

@@ -36,6 +36,15 @@ test("el menu lateral es fijo en escritorio y funciona como cajon accesible en m
   assert.match(app, /themeToggle\.querySelector\("\.nav-label"\)\.textContent/);
 });
 
+test("Mis apuestas actualiza estados al entrar y conserva el control manual", () => {
+  assert.match(app, /if \(view === "saved"\)[\s\S]*updateSavedParlayResults\(\{ automatic: true \}\)/);
+  assert.match(app, /needsFixtureStatusRefresh\(leg\) \|\| needsSettlementRefresh\(leg\)/);
+  assert.match(html, /id="update-individual-results"[\s\S]*Actualizar datos/);
+  assert.match(html, /id="update-parlay-results"[\s\S]*Actualizar datos/);
+  assert.match(app, /class="final-score">Final/);
+  assert.match(styles, /\.saved-pick \.final-score \{ color: var\(--success\); font-weight: 800; \}/);
+});
+
 test("Auditoria aprovecha el ancho y permite continuar el scroll de pagina", () => {
   assert.match(html, /class="utility-view audit-view" data-view-panel="audit"/);
   assert.match(styles, /\.audit-view \{ width: min\(1500px, 100%\); \}/);
@@ -136,8 +145,8 @@ test("forma reciente permite agregar su recomendación al parlay", () => {
 
 test("parlays muestran marcador y minuto cuando el encuentro está en vivo", () => {
   assert.match(app, /function savedLegScoreHtml\(leg\)/);
-  assert.match(app, /leg\.liveScore = \{ home, away \}/);
-  assert.match(app, /leg\.liveElapsed = Number\(fixtureResult\.elapsed\)/);
+  assert.match(app, /applyFixtureStatusUpdate\(leg/);
+  assert.match(app, /statusLabel: fixtureResult\?\.statusLabel/);
   assert.match(app, /savedLegScoreHtml\(leg\)/);
 });
 
@@ -157,7 +166,7 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260724-historical-validator-v1/);
+  assert.match(html, /styles\.css\?v=20260724-saved-auto-refresh-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
 });

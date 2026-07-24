@@ -742,6 +742,8 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .saved-leg__content strong { font-size: .8rem; }
 .saved-leg__content span, .saved-leg__content small { color: var(--muted); font-size: .7rem; }
 .saved-leg__content .live-score { color: var(--success); font-weight: 800; }
+.saved-leg__content .final-score,
+.saved-pick .final-score { color: var(--success); font-weight: 800; }
 .saved-leg label, .saved-parlay__notes label { color: var(--muted); font-size: .68rem; font-weight: 800; }
 .saved-leg select { width: 100%; min-height: 36px; margin-top: 4px; color: var(--text); background: white; border: 1px solid var(--border); border-radius: 8px; }
 .saved-leg__controls { display: grid; align-self: stretch; gap: 6px; }

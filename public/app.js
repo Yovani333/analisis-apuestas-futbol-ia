@@ -3,9 +3,9 @@ import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1"
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, createSavedParlay, createSavedPick,
-  filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg,
+  applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260724-historical-validator-v1";
+} from "./parlay-store.js?v=20260724-saved-auto-refresh-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -68,6 +68,7 @@ const state = {
   isLoadingOutcome: false,
   isLoadingPoisson: false,
   isLoadingTeamGoals: false,
+  isUpdatingSavedResults: false,
   isLoadingCorners: false,
   isLoadingSpecificMarkets: false,
   isLoadingSimulation: false,
@@ -2285,8 +2286,8 @@ function refreshActivePickIndicators() {
 
 function normalizedSavedStatus(value) {
   const status = String(value || "").toLowerCase();
-  if (["live", "1h", "ht", "2h", "et", "p", "int"].includes(status)) return "En vivo";
-  if (["finished", "ft", "aet", "pen", "completo"].includes(status)) return "Finalizado";
+  if (["live", "en vivo", "1h", "ht", "2h", "et", "p", "int"].includes(status)) return "En vivo";
+  if (["finished", "finalizado", "final", "ft", "aet", "pen", "completo"].includes(status)) return "Finalizado";
   if (["scheduled", "ns", "tbd", "programado"].includes(status)) return "Programado";
   if (["susp", "suspended", "suspendido"].includes(status)) return "Suspendido";
   if (["pst", "postponed", "postergado"].includes(status)) return "Postergado";
@@ -2303,7 +2304,7 @@ function savedLegScoreHtml(leg) {
       return ` · <span class="live-score">En vivo ${home}-${away}${Number.isFinite(elapsed) ? ` · ${elapsed}'` : ""}</span>`;
     }
   }
-  return leg.finalScore ? ` · Final ${escapeHtml(leg.finalScore)}` : "";
+  return leg.finalScore ? ` · <span class="final-score">Final ${escapeHtml(leg.finalScore)}</span>` : "";
 }
 
 function saveIndividualLeg(leg) {
@@ -2550,10 +2551,10 @@ function renderSavedPicks() {
     return;
   }
   elements.savedPicksList.innerHTML = visiblePicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}" data-pick-id="${escapeHtml(pick.id)}">
-    <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}</small></div>
+    <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}${savedLegScoreHtml(pick)}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.finalScore ? `<small>Marcador final: ${escapeHtml(pick.finalScore)}</small>` : ""}${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
+    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`; }).join("");
 }
@@ -2749,34 +2750,37 @@ function renderTrashParlays() {
   elements.trashParlaysList.innerHTML = `${removedRows ? `<div class="trash-section-heading"><h3>Picks retirados</h3><span>${removedPicks.length}</span></div>${removedRows}` : ""}${parlayRows ? `<div class="trash-section-heading"><h3>Parlays eliminados</h3><span>${trashed.length}</span></div>${parlayRows}` : ""}`;
 }
 
-async function updateSavedParlayResults() {
-  const allSavedLegs = [...state.savedPicks, ...state.savedParlays.flatMap((parlay) => parlay.legs || [])];
-  const legsToUpdate = allSavedLegs.filter((leg) => needsSettlementRefresh(leg));
-  const fixtureIds = [...new Set(legsToUpdate.map((leg) => leg.fixtureId))];
-  if (!fixtureIds.length) {
-    showNotice("No hay picks pendientes. Los resultados resueltos compatibles ya fueron verificados con el marcador reglamentario.");
+async function updateSavedParlayResults({ automatic = false } = {}) {
+  if (state.isUpdatingSavedResults) {
+    if (!automatic) showNotice("La actualizacion de Mis apuestas ya esta en curso.");
     return;
   }
+  const allSavedLegs = [...activeSavedPicks(), ...activeSavedParlays().flatMap((parlay) => parlay.legs || [])];
+  const legsToUpdate = allSavedLegs.filter((leg) => needsFixtureStatusRefresh(leg) || needsSettlementRefresh(leg));
+  const fixtureIds = [...new Set(legsToUpdate.map((leg) => leg.fixtureId))];
+  if (!fixtureIds.length) {
+    if (!automatic) showNotice("No hay picks pendientes. Los resultados resueltos compatibles ya fueron verificados con el marcador reglamentario.");
+    return;
+  }
+  state.isUpdatingSavedResults = true;
   state.preferences.performancePreviousRanks = currentPerformanceRankings();
   writeLocalJson(PREFERENCES_KEY, state.preferences);
   const updateButtons = [elements.updateIndividualResults, elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateCompetitionResults, elements.updateParlayResults];
   updateButtons.forEach((button) => { button.disabled = true; button.textContent = "Consultando resultados…"; });
   try {
     const fixtureIdsNeedingDetails = new Set(legsToUpdate
-      .filter((leg) => leg.result === "pending" || /corners/.test(resolveSelectionCode(leg) || ""))
+      .filter((leg) => /corners/.test(resolveSelectionCode(leg) || "") || (!automatic && leg.result === "pending"))
       .map((leg) => String(leg.fixtureId)));
     const updates = await Promise.all(fixtureIds.map(async (fixtureId) => {
       const fixture = { id: fixtureId };
-      const [result, details] = await Promise.all([
-        footballDataService.getFixtureResult(fixtureId).catch(() => null),
-        fixtureIdsNeedingDetails.has(String(fixtureId))
-          ? footballDataService.getFixtureData(fixture, true).catch(() => null)
-          : Promise.resolve(null)
-      ]);
+      const result = await footballDataService.getFixtureResult(fixtureId).catch(() => null);
+      const needsDetails = fixtureIdsNeedingDetails.has(String(fixtureId)) && (!automatic || result?.finished);
+      const details = needsDetails ? await footballDataService.getFixtureData(fixture, true).catch(() => null) : null;
       return { fixtureId: String(fixtureId), result, details };
     }));
     const byFixture = new Map(updates.map((item) => [item.fixtureId, item]));
     let updated = 0;
+    let statusUpdated = 0;
     let verified = 0;
     let unverifiable = 0;
     const fixtureCorners = (details, fixtureResult) => {
@@ -2792,20 +2796,23 @@ async function updateSavedParlayResults() {
       return { home: read(homeRow), away: read(awayRow) };
     };
     const updateLeg = (leg) => {
-      if (!needsSettlementRefresh(leg)) return;
+      const shouldRefreshStatus = needsFixtureStatusRefresh(leg);
+      const shouldSettle = needsSettlementRefresh(leg);
+      if (!shouldRefreshStatus && !shouldSettle) return;
       const update = byFixture.get(String(leg.fixtureId));
       if (!update) return;
       const fixtureResult = update.result;
+      if (!fixtureResult && !update.details) return;
       const selectionCode = resolveSelectionCode(leg);
       if (selectionCode && !leg.selectionCode) leg.selectionCode = selectionCode;
       leg.originalOdds ??= leg.decimalOdds ?? null;
-      leg.fixtureStatus = fixtureResult?.statusLabel || update.details?.statusLabel || fixtureResult?.appStatus || leg.fixtureStatus;
-      if (normalizedSavedStatus(leg.fixtureStatus) === "En vivo") {
-        const home = Number(fixtureResult?.goals?.home);
-        const away = Number(fixtureResult?.goals?.away);
-        if (Number.isFinite(home) && Number.isFinite(away)) leg.liveScore = { home, away };
-        if (Number.isFinite(Number(fixtureResult?.elapsed))) leg.liveElapsed = Number(fixtureResult.elapsed);
-      }
+      const previousStatus = normalizedSavedStatus(leg.fixtureStatus);
+      const previousScore = leg.finalScore;
+      Object.assign(leg, applyFixtureStatusUpdate(leg, {
+        ...(fixtureResult || {}),
+        statusLabel: fixtureResult?.statusLabel || update.details?.statusLabel || fixtureResult?.appStatus || leg.fixtureStatus
+      }));
+      if (previousStatus !== normalizedSavedStatus(leg.fixtureStatus) || previousScore !== leg.finalScore) statusUpdated += 1;
       const currentMarket = [...(update.details?.marketAnalysis || []), ...(update.details?.researchData?.odds?.markets || [])]
         .find((market) => market.selectionKey === selectionCode && (!leg.marketCode || market.marketKey === leg.marketCode));
       const hasNumber = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
@@ -2822,6 +2829,7 @@ async function updateSavedParlayResults() {
         home: resultCorners.home ?? detailCorners.home,
         away: resultCorners.away ?? detailCorners.away
       };
+      if (!shouldSettle) return;
       const nextResult = settlePickResult(leg, { ...fixtureResult, corners });
       if (nextResult !== "pending") {
         const regulation = fixtureResult?.regulationGoals || fixtureResult?.fulltimeScore || fixtureResult?.goals;
@@ -2849,8 +2857,8 @@ async function updateSavedParlayResults() {
         unverifiable += 1;
       }
     };
-    state.savedPicks.forEach(updateLeg);
-    state.savedParlays.forEach((parlay) => {
+    activeSavedPicks().forEach(updateLeg);
+    activeSavedParlays().forEach((parlay) => {
       parlay.legs.forEach(updateLeg);
       parlay.result = calculateParlayResult(parlay.legs);
       parlay.lastCheckedAt = new Date().toISOString();
@@ -2862,11 +2870,13 @@ async function updateSavedParlayResults() {
     renderSavedParlays();
     refreshActivePickIndicators();
     const summary = [];
+    if (statusUpdated) summary.push(`${statusUpdated} estado(s) o marcador(es) actualizados`);
     if (updated) summary.push(`${updated} resultado(s) corregidos`);
     if (verified) summary.push(`${verified} verificados a 90 minutos`);
     if (unverifiable) summary.push(`${unverifiable} conservados sin datos suficientes para verificarlos`);
     showNotice(summary.length ? `${summary.join(" · ")}.` : "Los picks pendientes todavía no tienen un resultado final evaluable.");
   } finally {
+    state.isUpdatingSavedResults = false;
     elements.updateIndividualResults.disabled = state.savedPicks.length === 0;
     elements.updateOriginResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
     elements.updateOriginLostResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
@@ -2899,7 +2909,11 @@ function switchView(view) {
     button.classList.toggle("main-nav__item--active", active);
     if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
-  if (view === "saved") { renderSavedPicks(); renderSavedParlays(); }
+  if (view === "saved") {
+    renderSavedPicks();
+    renderSavedParlays();
+    void updateSavedParlayResults({ automatic: true });
+  }
   if (view === "favorite-teams") renderFavoriteTeams();
   if (view === "audit") { renderAuditFixtureOptions(); void loadEvidenceLibrary(); }
   if (view === "simulation") refreshSimulationPickers();
