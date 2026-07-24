@@ -505,6 +505,134 @@ export function calculateOriginRecommendations(performanceRows = []) {
   return { recommended, notRecommended, observing };
 }
 
+function normalizedHistoricalText(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/,/g, ".").trim();
+}
+
+function historicalMarketCategory(pick = {}) {
+  const classified = classifyParlayPickType(pick);
+  if (classified) return classified;
+  const raw = normalizedHistoricalText(`${pick.market || ""} ${pick.selection || ""} ${pick.selectionCode || ""}`);
+  const total = raw.match(/(mas|menos|over|under)\s*(?:de\s*)?(\d+(?:\.\d+)?)/);
+  if (total) return `${["mas", "over"].includes(total[1]) ? "Más" : "Menos"} de ${total[2]} - total`;
+  if (/draw no bet|empate no apuesta|\bdnb\b/.test(raw)) return "Draw No Bet";
+  if (/resultado 1x2|match winner|gana|ganador/.test(raw)) return "Resultado 1X2";
+  return String(pick.market || pick.selection || "Mercado no identificado").trim();
+}
+
+function historicalCompetitionKey(pick = {}) {
+  const id = pick.leagueId ?? pick.league_id;
+  if (id !== null && id !== undefined && id !== "") return `id:${id}`;
+  return `name:${normalizedHistoricalText(pick.league || pick.competition || "sin competicion")}`;
+}
+
+function historicalSample(values = []) {
+  const settled = values.filter((pick) => ["won", "lost"].includes(pick?.result));
+  const won = settled.filter((pick) => pick.result === "won").length;
+  const lost = settled.length - won;
+  return {
+    evaluated: settled.length,
+    won,
+    lost,
+    winRate: settled.length ? Number((won / settled.length * 100).toFixed(1)) : null,
+    maturity: settled.length >= 10 ? "sufficient" : settled.length >= 5 ? "provisional" : "insufficient"
+  };
+}
+
+function isPendingActivePick(pick = {}) {
+  if (pick.result !== "pending") return false;
+  const status = normalizedHistoricalText(pick.fixtureStatus || pick.status);
+  return !/(final|finished|\bft\b|aet|pen|cancel|postpon|suspend|abandon)/.test(status);
+}
+
+function historicalValidationForPick(pick, settled, context = {}) {
+  const origin = pick.sourceModule || pick.origin || "odds";
+  const market = historicalMarketCategory(pick);
+  const competitionKey = historicalCompetitionKey(pick);
+  const dimensions = {
+    origin: historicalSample(settled.filter((row) => (row.sourceModule || row.origin || "odds") === origin)),
+    market: historicalSample(settled.filter((row) => historicalMarketCategory(row) === market)),
+    competition: historicalSample(settled.filter((row) => historicalCompetitionKey(row) === competitionKey)),
+    exact: historicalSample(settled.filter((row) => (row.sourceModule || row.origin || "odds") === origin
+      && historicalMarketCategory(row) === market && historicalCompetitionKey(row) === competitionKey))
+  };
+  const comparable = Object.entries(dimensions).filter(([, sample]) => sample.evaluated >= 3);
+  const weakest = comparable.sort((a, b) => a[1].winRate - b[1].winRate || b[1].evaluated - a[1].evaluated)[0] || null;
+  const warnings = [];
+  if (dimensions.exact.evaluated < 5) warnings.push("La combinación exacta de origen, mercado y competición todavía tiene muestra insuficiente.");
+  if (weakest && weakest[1].winRate < 50) warnings.push(`El respaldo más débil registra ${weakest[1].winRate}% en ${weakest[1].evaluated} picks.`);
+  if (context.parlaySize >= 4) warnings.push(`Los parlays de ${context.parlaySize} selecciones mostraron mayor fragilidad en el historial.`);
+  if (context.sameFixtureLegs > 1) warnings.push("Hay selecciones del mismo encuentro; sus resultados pueden estar correlacionados.");
+
+  const robustWeak = Object.values(dimensions).some((sample) => sample.evaluated >= 10 && sample.winRate < 45);
+  const exactWeak = dimensions.exact.evaluated >= 5 && dimensions.exact.winRate < 45;
+  const favorable = [dimensions.origin, dimensions.market, dimensions.competition]
+    .filter((sample) => sample.evaluated >= 10);
+  let decision = "review";
+  if (robustWeak || exactWeak) decision = "avoid";
+  else if (context.parlaySize >= 4 || context.sameFixtureLegs > 1 || (weakest && weakest[1].evaluated >= 5 && weakest[1].winRate < 55)) decision = "individual";
+  else if (favorable.length >= 2 && favorable.every((sample) => sample.winRate >= 60)) decision = "favorable";
+
+  return {
+    id: pick.id,
+    fixtureId: pick.fixtureId,
+    selection: pick.selection || "Pick sin selección",
+    market,
+    competition: pick.league || pick.competition || "Competición no disponible",
+    match: [pick.home, pick.away].filter(Boolean).join(" vs "),
+    origin,
+    kind: context.kind || "individual",
+    parlayId: context.parlayId || null,
+    parlayName: context.parlayName || null,
+    parlaySize: context.parlaySize || 1,
+    sameFixtureLegs: context.sameFixtureLegs || 1,
+    dimensions,
+    weakestDimension: weakest?.[0] || null,
+    decision,
+    warnings
+  };
+}
+
+export function buildHistoricalPickValidator(picks = [], parlays = []) {
+  const activePicks = picks.filter((pick) => !pick?.trashed && !pick?.deletedPermanently);
+  const activeParlays = parlays.filter((parlay) => !parlay?.trashed && !parlay?.deletedPermanently);
+  const settled = [
+    ...activePicks.filter((pick) => ["won", "lost"].includes(pick?.result)),
+    ...activeParlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []).filter((pick) => ["won", "lost"].includes(pick?.result))
+  ];
+  const validations = activePicks.filter(isPendingActivePick).map((pick) => historicalValidationForPick(pick, settled));
+  for (const parlay of activeParlays) {
+    const pendingLegs = (parlay.legs || []).filter(isPendingActivePick);
+    const fixtureCounts = pendingLegs.reduce((counts, leg) => counts.set(String(leg.fixtureId), (counts.get(String(leg.fixtureId)) || 0) + 1), new Map());
+    for (const leg of pendingLegs) validations.push(historicalValidationForPick(leg, settled, {
+      kind: "parlay",
+      parlayId: parlay.id,
+      parlayName: parlay.name,
+      parlaySize: parlay.legs?.length || 0,
+      sameFixtureLegs: fixtureCounts.get(String(leg.fixtureId)) || 1
+    }));
+  }
+  const sizeGroups = new Map();
+  for (const parlay of activeParlays.filter((row) => ["won", "lost"].includes(calculateParlayResult(row?.legs || [])))) {
+    const size = rowSize(parlay.legs?.length || 0);
+    const current = sizeGroups.get(size.key) || { ...size, won: 0, lost: 0, evaluated: 0, winRate: null };
+    const result = calculateParlayResult(parlay.legs || []);
+    current[result] += 1;
+    current.evaluated += 1;
+    current.winRate = Number((current.won / current.evaluated * 100).toFixed(1));
+    sizeGroups.set(size.key, current);
+  }
+  return {
+    historical: historicalSample(settled),
+    activeValidations: validations,
+    parlaySizePerformance: [...sizeGroups.values()].sort((a, b) => a.order - b.order)
+  };
+}
+
+function rowSize(size) {
+  return size >= 5 ? { key: "5+", label: "5 o más", order: 5 } : { key: String(size), label: String(size), order: size };
+}
+
 export function moveParlayToTrash(parlay, now = new Date()) {
   return { ...parlay, trashed: true, deletedAt: now.toISOString(), updatedAt: now.toISOString() };
 }

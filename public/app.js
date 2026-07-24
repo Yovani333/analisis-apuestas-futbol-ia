@@ -2,10 +2,10 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, createSavedParlay, createSavedPick,
+  buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, createSavedParlay, createSavedPick,
   filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260724-parlay-trash-v1";
+} from "./parlay-store.js?v=20260724-historical-validator-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -174,6 +174,7 @@ const elements = {
   competitionPerformance: document.querySelector("#competition-performance"),
   pickTypesWon: document.querySelector("#pick-types-won"),
   pickTypesLost: document.querySelector("#pick-types-lost"),
+  historicalValidator: document.querySelector("#historical-validator"),
   updateParlayResults: document.querySelector("#update-parlay-results"),
   updateIndividualResults: document.querySelector("#update-individual-results"),
   updateOriginResults: document.querySelector("#update-origin-results"),
@@ -197,6 +198,7 @@ const elements = {
   competitionResultsSection: document.querySelector("#competition-results-section"),
   pickTypesWonSection: document.querySelector("#pick-types-won-section"),
   pickTypesLostSection: document.querySelector("#pick-types-lost-section"),
+  historicalValidatorSection: document.querySelector("#historical-validator-section"),
   savedParlaysSection: document.querySelector("#saved-parlays-section"),
   trashResultsSection: document.querySelector("#trash-results-section")
 };
@@ -2591,8 +2593,45 @@ function showOriginPicksDialog(origin, result) {
   if (!elements.originPicksDialog.open) elements.originPicksDialog.showModal();
 }
 
+function renderHistoricalValidator() {
+  if (!elements.historicalValidator) return;
+  const report = buildHistoricalPickValidator(state.savedPicks, state.savedParlays);
+  const maturityLabel = { sufficient: "Suficiente", provisional: "Provisional", insufficient: "Insuficiente" };
+  const decisionData = {
+    favorable: { label: "Respaldo histórico favorable", tone: "positive" },
+    individual: { label: "Preferible como individual", tone: "warning" },
+    avoid: { label: "Evitar según historial", tone: "negative" },
+    review: { label: "Revisar muestra", tone: "neutral" }
+  };
+  const dimensionLabels = { origin: "Origen", market: "Mercado", competition: "Competición", exact: "Coincidencia exacta" };
+  const dimensionHtml = (dimensions) => Object.entries(dimensions).map(([key, sample]) => `<div class="historical-validator__dimension">
+    <span>${dimensionLabels[key]}</span>
+    <strong>${sample.winRate === null ? "—" : `${displayValue(sample.winRate)}%`}</strong>
+    <small>${sample.won} G · ${sample.lost} P · n=${sample.evaluated}</small>
+    <em class="sample-maturity sample-maturity--${sample.maturity}">${maturityLabel[sample.maturity]}</em>
+  </div>`).join("");
+  const activeHtml = report.activeValidations.length ? report.activeValidations.map((item) => {
+    const decision = decisionData[item.decision];
+    const context = item.kind === "parlay" ? `${item.parlayName || "Parlay"} · ${item.parlaySize} selecciones` : "Pick individual";
+    const weakest = item.weakestDimension ? dimensionLabels[item.weakestDimension] : "Sin muestra comparable";
+    return `<article class="historical-validation-card historical-validation-card--${decision.tone}">
+      <header><div><span>${escapeHtml(context)}</span><h4>${escapeHtml(item.selection)}</h4><small>${escapeHtml(item.match || "Partido no disponible")} · ${escapeHtml(item.competition)}</small></div><strong>${decision.label}</strong></header>
+      <div class="historical-validator__dimensions">${dimensionHtml(item.dimensions)}</div>
+      <div class="historical-validator__reading"><span><b>Origen:</b> ${escapeHtml(pickOriginLabel(item.origin))}</span><span><b>Mercado:</b> ${escapeHtml(item.market)}</span><span><b>Punto más débil:</b> ${escapeHtml(weakest)}</span></div>
+      ${item.warnings.length ? `<ul>${item.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>` : '<p class="historical-validator__clear">No se detectaron alertas relevantes en la muestra disponible.</p>'}
+    </article>`;
+  }).join("") : '<div class="saved-empty"><h3>Sin picks pendientes para validar</h3><p>El análisis aparecerá cuando exista un pick individual o una selección activa dentro de un parlay.</p></div>';
+  const sizeHtml = report.parlaySizePerformance.length ? report.parlaySizePerformance.map((row) => `<div><span>${escapeHtml(row.label)} selecciones</span><strong>${displayValue(row.winRate)}%</strong><small>${row.won} ganados · ${row.lost} perdidos · n=${row.evaluated}</small></div>`).join("") : '<p class="muted-text">Todavía no hay parlays concluidos para comparar por tamaño.</p>';
+  elements.historicalValidator.innerHTML = `
+    <div class="historical-validator__notice"><strong>Apoyo histórico, no garantía</strong><p>Compara resultados guardados sin alterar picks ni fórmulas. Un porcentaje alto con muestra pequeña no representa una probabilidad real del próximo partido.</p></div>
+    <div class="historical-validator__summary"><div><span>Picks evaluados</span><strong>${report.historical.evaluated}</strong></div><div><span>Ganados</span><strong class="value-positive">${report.historical.won}</strong></div><div><span>Perdidos</span><strong class="value-negative">${report.historical.lost}</strong></div><div><span>Acierto histórico</span><strong>${report.historical.winRate === null ? "—" : `${displayValue(report.historical.winRate)}%`}</strong></div><div><span>Picks activos analizados</span><strong>${report.activeValidations.length}</strong></div></div>
+    <section class="historical-validator__sizes"><header><h4>Rendimiento de parlays por tamaño</h4><small>Ayuda a detectar cuándo agregar selecciones reduce el rendimiento observado.</small></header><div>${sizeHtml}</div></section>
+    <section class="historical-validator__active"><header><h4>Validación de picks activos</h4><small>La coincidencia exacta exige el mismo origen, mercado y competición.</small></header><div class="historical-validator__list">${activeHtml}</div></section>`;
+}
+
 function renderOriginPerformance() {
   if (!elements.originPerformance || !elements.originLostPerformance || !elements.originRecommendations || !elements.competitionPerformance) return;
+  renderHistoricalValidator();
   const rows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
   const competitionRows = calculateCompetitionPerformance(state.savedPicks, state.savedParlays);
   const pickTypeRows = calculateParlayPickTypePerformance(state.savedParlays);
@@ -4847,6 +4886,7 @@ document.addEventListener("click", (event) => {
     elements.pickTypesWonSection.hidden = state.savedTab !== "types-won";
     elements.pickTypesLostSection.hidden = state.savedTab !== "types-lost";
     elements.originRecommendationsSection.hidden = state.savedTab !== "origin-recommendations";
+    elements.historicalValidatorSection.hidden = state.savedTab !== "historical-validator";
     elements.savedParlaysSection.hidden = state.savedTab !== "parlays";
     elements.trashResultsSection.hidden = state.savedTab !== "trash";
     elements.savedDateFilterPanel.hidden = !["individual", "parlays"].includes(state.savedTab);

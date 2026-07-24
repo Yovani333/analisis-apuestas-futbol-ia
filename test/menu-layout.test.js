@@ -101,11 +101,13 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(html, /data-saved-tab="origins-lost"[^>]*>Resultados por origen Perdidos/);
   assert.match(html, /data-saved-tab="competitions"[^>]*>Resultados por competición/);
   assert.match(html, /data-saved-tab="origin-recommendations"[^>]*>Mejores picks/);
+  assert.match(html, /data-saved-tab="historical-validator"[^>]*>Validador histórico/);
   assert.match(html, /id="saved-individual-section"[\s\S]*id="update-individual-results"/);
   assert.match(html, /id="origin-results-section"[\s\S]*id="update-origin-results"/);
   assert.match(html, /id="origin-lost-results-section"[\s\S]*id="update-origin-lost-results"/);
   assert.match(html, /id="competition-results-section"[\s\S]*id="update-competition-results"/);
   assert.match(html, /id="origin-recommendations-section"[\s\S]*id="update-origin-recommendations"/);
+  assert.match(html, /id="historical-validator-section"[\s\S]*id="historical-validator"/);
   assert.match(html, /id="saved-parlays-section"[\s\S]*id="update-parlay-results"/);
   assert.match(app, /calculateOriginPerformance\(state\.savedPicks, state\.savedParlays\)/);
   assert.match(app, /calculateCompetitionPerformance\(state\.savedPicks, state\.savedParlays\)/);
@@ -118,6 +120,8 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(app, /Picks perdidos/);
   assert.match(app, /deletedPermanently: true/);
   assert.match(app, /calculateOriginRecommendations\(rows\)/);
+  assert.match(app, /buildHistoricalPickValidator\(state\.savedPicks, state\.savedParlays\)/);
+  assert.match(app, /historicalValidatorSection\.hidden = state\.savedTab !== "historical-validator"/);
   assert.match(html, /id="competition-main"><option value="all" selected>Todas las competiciones/);
   assert.match(html, /id="origin-picks-dialog"/);
   assert.match(app, /showOriginPicksDialog\(open\.dataset\.viewOriginPicks/);
@@ -153,7 +157,7 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260722-live-score-v1/);
+  assert.match(html, /styles\.css\?v=20260724-historical-validator-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
 });

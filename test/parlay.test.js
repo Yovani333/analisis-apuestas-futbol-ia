@@ -1,9 +1,83 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("mantiene el parlay pendiente mientras falte un resultado", () => {
   assert.equal(calculateParlayResult([{ result: "won" }, { result: "pending" }]), "pending");
+});
+
+test("validador histórico separa muestras suficientes, provisionales e insuficientes", () => {
+  const history = Array.from({ length: 10 }, (_, index) => ({
+    id: `history-${index}`,
+    fixtureId: index,
+    sourceModule: "recent_form",
+    market: "Total de goles",
+    selection: "Más de 1.5 goles",
+    leagueId: 253,
+    league: "MLS",
+    result: index < 8 ? "won" : "lost"
+  }));
+  const active = {
+    id: "active", fixtureId: 100, sourceModule: "recent_form", market: "Total de goles",
+    selection: "Más de 1.5 goles", leagueId: 253, league: "MLS", result: "pending", fixtureStatus: "Programado"
+  };
+  const report = buildHistoricalPickValidator([...history, active], []);
+  assert.deepEqual(report.historical, { evaluated: 10, won: 8, lost: 2, winRate: 80, maturity: "sufficient" });
+  assert.equal(report.activeValidations.length, 1);
+  assert.equal(report.activeValidations[0].dimensions.origin.maturity, "sufficient");
+  assert.equal(report.activeValidations[0].dimensions.exact.winRate, 80);
+  assert.equal(report.activeValidations[0].decision, "favorable");
+});
+
+test("validador histórico marca evitar cuando una dimensión robusta es desfavorable", () => {
+  const history = Array.from({ length: 10 }, (_, index) => ({
+    id: `weak-${index}`, fixtureId: index, sourceModule: "poisson", market: "Ambos anotan",
+    selection: "Ambos equipos anotan: Sí", league: "Liga MX", result: index < 4 ? "won" : "lost"
+  }));
+  const active = { id: "weak-active", fixtureId: 50, sourceModule: "poisson", market: "Ambos anotan", selection: "Ambos equipos anotan: Sí", league: "Liga MX", result: "pending", fixtureStatus: "NS" };
+  const validation = buildHistoricalPickValidator([...history, active], []).activeValidations[0];
+  assert.equal(validation.decision, "avoid");
+  assert.equal(validation.dimensions.market.winRate, 40);
+});
+
+test("validador advierte parlays largos y selecciones correlacionadas", () => {
+  const legs = [
+    { id: "a", fixtureId: 90, result: "pending", fixtureStatus: "Programado", sourceModule: "h2h", market: "Goles", selection: "Más de 1.5 goles" },
+    { id: "b", fixtureId: 90, result: "pending", fixtureStatus: "Programado", sourceModule: "h2h", market: "BTTS", selection: "Ambos equipos anotan: Sí" },
+    { id: "c", fixtureId: 91, result: "pending", fixtureStatus: "Programado", sourceModule: "poisson", market: "Goles", selection: "Menos de 3.5 goles" },
+    { id: "d", fixtureId: 92, result: "pending", fixtureStatus: "Programado", sourceModule: "data_picks", market: "Doble oportunidad", selection: "Local o empate" }
+  ];
+  const report = buildHistoricalPickValidator([], [{ id: "parlay", name: "Prueba", legs }]);
+  assert.equal(report.activeValidations.length, 4);
+  assert.equal(report.activeValidations[0].decision, "individual");
+  assert.ok(report.activeValidations[0].warnings.some((warning) => warning.includes("correlacionados")));
+  assert.ok(report.activeValidations[0].warnings.some((warning) => warning.includes("4 selecciones")));
+});
+
+test("validador resume parlays concluidos por tamaño y excluye papelera", () => {
+  const leg = (result) => ({ result });
+  const report = buildHistoricalPickValidator([], [
+    { id: "two-won", legs: [leg("won"), leg("won")] },
+    { id: "two-lost", legs: [leg("won"), leg("lost")] },
+    { id: "five-won", legs: Array.from({ length: 5 }, () => leg("won")) },
+    { id: "trash", trashed: true, legs: [leg("won"), leg("won")] }
+  ]);
+  assert.deepEqual(report.parlaySizePerformance.map((row) => ({ label: row.label, won: row.won, lost: row.lost })), [
+    { label: "2", won: 1, lost: 1 }, { label: "5 o más", won: 1, lost: 0 }
+  ]);
+  assert.equal(report.historical.evaluated, 9);
+});
+
+test("validador es determinista y no usa picks retirados", () => {
+  const picks = [
+    { id: "visible", fixtureId: 1, sourceModule: "corners", market: "Corners", selection: "Más de 8 corners", league: "MLS", result: "won" },
+    { id: "trash", fixtureId: 2, sourceModule: "corners", market: "Corners", selection: "Más de 8 corners", league: "MLS", result: "lost", trashed: true },
+    { id: "active", fixtureId: 3, sourceModule: "corners", market: "Corners", selection: "Más de 8 corners", league: "MLS", result: "pending", fixtureStatus: "Programado" }
+  ];
+  const first = buildHistoricalPickValidator(picks, []);
+  const second = buildHistoricalPickValidator(picks, []);
+  assert.deepEqual(first, second);
+  assert.equal(first.historical.evaluated, 1);
 });
 
 test("ordena el rendimiento de picks concluidos por origen", () => {
