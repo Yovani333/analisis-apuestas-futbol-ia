@@ -1581,7 +1581,7 @@ function renderXgBttsSuggestion(analysis, homeName, awayName) {
   return `<section class="xg-btts-suggestion xg-btts-suggestion--${recommended ? confidenceClass : "unavailable"}">
     <header><div><p class="eyebrow">Análisis contextual determinístico</p><h3>Pick BTTS por xG / xGA</h3></div><span class="status-badge status-badge--${confidenceClass}">${escapeHtml(recommended ? analysis.confidence : "Sin pick")}</span></header>
     <div class="xg-btts-suggestion__summary">
-      <div><span>Selección</span><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick recomendado por xG / xGA")}</strong><small>${escapeHtml(analysis?.status || "INSUFFICIENT_DATA")}</small></div>
+      <div><span>Selección</span><div class="h2h-suggestion__pick-line"><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick recomendado por xG / xGA")}</strong>${recommended ? `<button class="pick-add-icon" type="button" data-add-xg-btts-pick data-xg-btts-selection="${escapeHtml(analysis.recommendedSelection)}" data-xg-btts-confidence="${escapeHtml(analysis.confidence)}" data-xg-btts-score="${escapeHtml(analysis.selectedScore)}" data-xg-btts-estimated="${escapeHtml(analysis.estimatedBttsYes)}" data-xg-btts-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>` : ""}</div><small>${recommended ? "Recomendación disponible" : "No se fuerza una recomendación"}</small></div>
       <div><span>Confianza del análisis</span><strong>${escapeHtml(analysis?.confidence || "Baja")}</strong><small>Calidad ${escapeHtml(analysis?.dataQuality || "Baja")}</small></div>
       <div><span>Muestra</span><strong>${escapeHtml(homeName)}: ${displayValue(analysis?.homeSampleSize, 0)} · ${escapeHtml(awayName)}: ${displayValue(analysis?.awaySampleSize, 0)}</strong><small>Máximo 8 partidos por equipo</small></div>
       <div><span>Fuerza esperada</span><strong>${displayValue(analysis?.expectedGoalStrengthHome)} / ${displayValue(analysis?.expectedGoalStrengthAway)}</strong><small>Local / visitante</small></div>
@@ -1598,6 +1598,53 @@ function renderXgBttsSuggestion(analysis, homeName, awayName) {
       ${warnings.length ? `<div class="xg-btts-warnings"><h4>Alertas de calidad</h4><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
     </details>
   </section>`;
+}
+
+function xgBttsRecommendationLeg(dataset = {}) {
+  const fixture = selectedFixture();
+  const selection = dataset.xgBttsSelection;
+  const selectionCode = /sí/i.test(selection || "") ? "btts_yes" : /no/i.test(selection || "") ? "btts_no" : "";
+  if (!fixture || !selection || !selectionCode) return null;
+  const score = Number(dataset.xgBttsScore);
+  const estimatedBttsYes = Number(dataset.xgBttsEstimated);
+  return {
+    id: `${fixture.id}:xg-btts:${selectionCode}`,
+    fixtureId: fixture.id,
+    leagueId: fixture.leagueId ?? fixture.league?.id ?? null,
+    league: fixture.leagueName,
+    home: fixture.home,
+    away: fixture.away,
+    date: fixture.date,
+    market: "Ambos equipos anotan",
+    selection,
+    marketCode: "both_teams_to_score",
+    selectionCode,
+    decimalOdds: null,
+    originalOdds: null,
+    updatedOdds: null,
+    impliedProbability: null,
+    modelProbability: null,
+    expectedValue: null,
+    fixtureStatus: fixture.statusLabel || fixture.status,
+    kickoffAt: fixture.utcDateTime || null,
+    lastUpdatedAt: new Date().toISOString(),
+    confidence: `Análisis xG/xGA ${dataset.xgBttsConfidence || "Media"}`,
+    risk: dataset.xgBttsConfidence === "Alta" ? "contextual" : "review",
+    reasoning: dataset.xgBttsExplanation || "Sugerencia contextual basada en xG y xGA estimados.",
+    requiresReview: true,
+    sourceModule: "xg_btts",
+    source: "API-Football + análisis BTTS determinístico por xG/xGA",
+    supportingData: [
+      Number.isFinite(score) ? `Índice de respaldo: ${score}/100` : "",
+      Number.isFinite(estimatedBttsYes) ? `Estimación matemática auxiliar BTTS Sí: ${estimatedBttsYes}%` : ""
+    ].filter(Boolean),
+    missingData: ["Cuota no disponible"]
+  };
+}
+
+function addXgBttsRecommendationToParlay(dataset) {
+  const leg = xgBttsRecommendationLeg(dataset);
+  if (leg) appendPickToParlay(leg, "Pick BTTS por xG/xGA agregado a Mi parlay. Se guardará únicamente cuando nombres y guardes el parlay.");
 }
 
 function recentFormRecommendationLeg(dataset = {}) {
@@ -4726,10 +4773,12 @@ elements.dataDialogContent.addEventListener("click", (event) => {
   const saveButton = event.target.closest("[data-save-odds-pick]");
   const addH2HButton = event.target.closest("[data-add-h2h-pick]");
   const addRecentFormButton = event.target.closest("[data-add-recent-form-pick]");
+  const addXgBttsButton = event.target.closest("[data-add-xg-btts-pick]");
   if (addButton) addOddsPickToParlay(addButton.dataset.addOddsPick);
   if (saveButton) saveOddsPick(saveButton.dataset.saveOddsPick);
   if (addH2HButton) addH2HRecommendationToParlay(addH2HButton.dataset);
   if (addRecentFormButton) addRecentFormRecommendationToParlay(addRecentFormButton.dataset);
+  if (addXgBttsButton) addXgBttsRecommendationToParlay(addXgBttsButton.dataset);
 });
 elements.dataDialog.addEventListener("click", (event) => {
   if (event.target === elements.dataDialog) closeDataDialog();
