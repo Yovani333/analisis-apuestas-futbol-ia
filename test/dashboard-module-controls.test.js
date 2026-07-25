@@ -72,6 +72,7 @@ test("Sugerencia H2H ofrece un boton para agregar el pick al cupon", () => {
   assert.match(app, /data-add-h2h-pick/);
   assert.match(app, /data-add-xg-btts-pick/);
   assert.match(app, /addXgBttsRecommendationToParlay/);
+  assert.match(app, /sourceLabel: "xG \/ xGA"/);
   assert.match(app, /function h2hRecommendationLeg/);
   assert.match(app, /Pick H2H agregado a Mi parlay/);
   assert.match(app, /sourceModule: "h2h"/);

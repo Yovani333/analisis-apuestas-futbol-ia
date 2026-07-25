@@ -6,6 +6,7 @@ export const PICK_ORIGINS = Object.freeze({
   h2h: { label: "Head to head", module: "Transparencia de datos / Head to head", status: "active" },
   recent_form: { label: "Forma reciente", module: "Transparencia de datos / Estadísticas y forma", status: "active" },
   xg_btts: { label: "xG / xGA", module: "Transparencia de datos / xG / xGA", status: "active" },
+  "xG / xGA": { label: "xG / xGA", module: "Transparencia de datos / xG / xGA", status: "legacy_alias" },
   poisson: { label: "Modelo Poisson", module: "Modelo Poisson", status: "active" },
   corners: { label: "Corners", module: "Modelo de Corners", status: "active" },
   team_goal_probability: { label: "Probabilidad de gol", module: "Probabilidad de Gol por Equipo", status: "active" },

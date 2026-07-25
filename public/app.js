@@ -9,7 +9,7 @@ import {
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginLabel } from "./pick-origins.js?v=20260722-recent-form-v1";
+import { pickOriginLabel } from "./pick-origins.js?v=20260724-xg-btts-origin-v2";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260724-parlay-trash-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260722-corners-v2";
@@ -1633,6 +1633,7 @@ function xgBttsRecommendationLeg(dataset = {}) {
     reasoning: dataset.xgBttsExplanation || "Sugerencia contextual basada en xG y xGA estimados.",
     requiresReview: true,
     sourceModule: "xg_btts",
+    sourceLabel: "xG / xGA",
     source: "API-Football + análisis BTTS determinístico por xG/xGA",
     supportingData: [
       Number.isFinite(score) ? `Índice de respaldo: ${score}/100` : "",

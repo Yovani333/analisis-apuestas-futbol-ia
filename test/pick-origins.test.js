@@ -9,6 +9,7 @@ test("convierte orígenes técnicos activos en etiquetas amigables", () => {
   assert.equal(pickOriginLabel("team_average_performance"), "Rendimiento promedio por equipo");
   assert.equal(pickOriginLabel("player_goal_candidate"), "Jugador con posible gol");
   assert.equal(pickOriginLabel("xg_btts"), "xG / xGA");
+  assert.equal(pickOriginLabel("xG / xGA"), "xG / xGA");
 });
 
 test("conserva compatibilidad con el origen textual legado", () => {
