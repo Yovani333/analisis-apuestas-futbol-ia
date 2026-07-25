@@ -18,6 +18,7 @@ import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from ".
 import { filterValidEvidenceSnapshots, isValidEvidenceSnapshot } from "./evidence-validity.js?v=20260719-remove-invalid-v1";
 import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2h-suggestion-v1";
 import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.js?v=20260722-recent-form-v1";
+import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=20260724-xg-btts-v1";
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
@@ -1547,6 +1548,58 @@ function renderRecentFormSuggestion(analysis, homeName, awayName) {
   </section>`;
 }
 
+function renderXgBttsSuggestion(analysis, homeName, awayName) {
+  const recommended = analysis?.status === "RECOMMENDED";
+  const confidenceClass = analysis?.confidence === "Alta" ? "available" : analysis?.confidence === "Media" ? "partial" : "unavailable";
+  const home = analysis?.calculationDetails?.home || {};
+  const away = analysis?.calculationDetails?.away || {};
+  const candidates = analysis?.rejectedCandidates || [];
+  const warnings = analysis?.warnings || [];
+  const discarded = analysis?.calculationDetails?.discarded || { home: [], away: [] };
+  const teamRows = (team, metrics, contextualLabel) => [
+    [team, "Muestra válida", displayValue(metrics.sampleSize, 0)],
+    [team, "xG simple / ponderado", `${displayValue(metrics.simpleXg)} / ${displayValue(metrics.weightedXg)}`],
+    [team, "Mediana xG", displayValue(metrics.medianXg)],
+    [team, "xGA simple / ponderado", `${displayValue(metrics.simpleXga)} / ${displayValue(metrics.weightedXga)}`],
+    [team, "Mediana xGA", displayValue(metrics.medianXga)],
+    [team, "Dispersión xG / xGA", `${displayValue(metrics.xgDeviation)} / ${displayValue(metrics.xgaDeviation)}`],
+    [team, "xG ≥ 0.5 / 0.75 / 1.0", `${displayValue(metrics.xgAtLeast05Pct, 0)}% / ${displayValue(metrics.xgAtLeast075Pct, 0)}% / ${displayValue(metrics.xgAtLeast10Pct, 0)}%`],
+    [team, "xGA ≥ 0.5 / 0.75 / 1.0", `${displayValue(metrics.xgaAtLeast05Pct, 0)}% / ${displayValue(metrics.xgaAtLeast075Pct, 0)}% / ${displayValue(metrics.xgaAtLeast10Pct, 0)}%`],
+    [team, contextualLabel, displayValue(metrics.contextualMatches, 0)],
+    [team, "Tendencia reciente", `${displayValue(metrics.trend)} (${metrics.trendDelta > 0 ? "+" : ""}${displayValue(metrics.trendDelta)})`],
+    [team, "Valores extremos", displayValue(metrics.outliers, 0)]
+  ];
+  const candidateRows = candidates.map((candidate) => [
+    escapeHtml(candidate.selection), `${displayValue(candidate.score, 0)}/100`,
+    candidate.status === "Seleccionado" ? '<span class="status-badge status-badge--available">Seleccionado</span>' : '<span class="status-badge status-badge--unavailable">Descartado</span>',
+    escapeHtml((candidate.reasons || []).join(" ") || "Sin observaciones adicionales.")
+  ]);
+  const discardedRows = [
+    ...(discarded.home || []).map((row) => [escapeHtml(homeName), escapeHtml(row.fixtureId), escapeHtml(row.reason)]),
+    ...(discarded.away || []).map((row) => [escapeHtml(awayName), escapeHtml(row.fixtureId), escapeHtml(row.reason)])
+  ];
+  return `<section class="xg-btts-suggestion xg-btts-suggestion--${recommended ? confidenceClass : "unavailable"}">
+    <header><div><p class="eyebrow">Análisis contextual determinístico</p><h3>Pick BTTS por xG / xGA</h3></div><span class="status-badge status-badge--${confidenceClass}">${escapeHtml(recommended ? analysis.confidence : "Sin pick")}</span></header>
+    <div class="xg-btts-suggestion__summary">
+      <div><span>Selección</span><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick recomendado por xG / xGA")}</strong><small>${escapeHtml(analysis?.status || "INSUFFICIENT_DATA")}</small></div>
+      <div><span>Confianza del análisis</span><strong>${escapeHtml(analysis?.confidence || "Baja")}</strong><small>Calidad ${escapeHtml(analysis?.dataQuality || "Baja")}</small></div>
+      <div><span>Muestra</span><strong>${escapeHtml(homeName)}: ${displayValue(analysis?.homeSampleSize, 0)} · ${escapeHtml(awayName)}: ${displayValue(analysis?.awaySampleSize, 0)}</strong><small>Máximo 8 partidos por equipo</small></div>
+      <div><span>Fuerza esperada</span><strong>${displayValue(analysis?.expectedGoalStrengthHome)} / ${displayValue(analysis?.expectedGoalStrengthAway)}</strong><small>Local / visitante</small></div>
+      <div><span>Índice de respaldo</span><strong>${analysis?.selectedScore === null || analysis?.selectedScore === undefined ? "—" : `${displayValue(analysis.selectedScore)}/100`}</strong><small>Diferencia ${displayValue(analysis?.scoreDifference, 0)} puntos</small></div>
+      <div><span>Estimación matemática auxiliar</span><strong>${analysis?.estimatedBttsYes === null || analysis?.estimatedBttsYes === undefined ? "—" : `BTTS Sí ${displayValue(analysis.estimatedBttsYes)}%`}</strong><small>No es una probabilidad calibrada</small></div>
+    </div>
+    <p class="xg-btts-suggestion__explanation">${escapeHtml(analysis?.explanation || "Sin información suficiente para evaluar BTTS.")}</p>
+    <div class="detail-note detail-note--warning"><strong>Uso responsable</strong><span>Esta selección utiliza estimaciones de xG y xGA como evidencia contextual. No garantiza que ambos equipos anoten y debe contrastarse con alineaciones, bajas, forma reciente, cuotas y calidad de los datos.</span></div>
+    <details class="xg-btts-calculation"><summary>Ver cálculo</summary>
+      <div class="detail-note detail-note--info"><strong>Fórmula contextual</strong><span>${escapeHtml(analysis?.calculationDetails?.formula || "Sin fórmula disponible.")}</span></div>
+      ${detailTable(["Equipo", "Indicador", "Valor"], [...teamRows(homeName, home, "Partidos usados en casa"), ...teamRows(awayName, away, "Partidos usados fuera")])}
+      <section class="detail-section"><h4>Comparación de candidatos</h4>${candidateRows.length ? detailTable(["Selección", "Puntuación", "Estado", "Motivo"], candidateRows) : emptyDetail("No fue posible construir candidatos evaluables.")}</section>
+      ${discardedRows.length ? `<section class="detail-section"><h4>Datos descartados</h4>${detailTable(["Equipo", "Fixture", "Motivo"], discardedRows)}</section>` : ""}
+      ${warnings.length ? `<div class="xg-btts-warnings"><h4>Alertas de calidad</h4><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
+    </details>
+  </section>`;
+}
+
 function recentFormRecommendationLeg(dataset = {}) {
   const fixture = selectedFixture();
   const codes = {
@@ -1743,7 +1796,17 @@ function renderResearchModuleDetail(moduleKey, research) {
     const fixtures = fixtureRows.length
       ? `<section class="detail-section"><h3>Partidos usados</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "xG estimado", "xGA estimado"], fixtureRows)}</section>`
       : "";
-    content = `${metadata}${teams}${diagnostics}${rawStats}${fixtures}`;
+    const bttsAnalysis = historicalAttempted ? evaluateXgBttsRecommendation({
+      homeFixtures: module.fixturesUsed?.home || module.fixturesUsedHome || [],
+      awayFixtures: module.fixturesUsed?.away || module.fixturesUsedAway || [],
+      homeTeam: research.homeTeam,
+      awayTeam: research.awayTeam,
+      currentFixtureId: research.matchId,
+      currentFixtureDate: research.dateTime,
+      sourceQualityScore: module.confidenceScore
+    }) : null;
+    const bttsSuggestion = bttsAnalysis ? renderXgBttsSuggestion(bttsAnalysis, research.homeTeam.name, research.awayTeam.name) : "";
+    content = `${metadata}${teams}${diagnostics}${rawStats}${fixtures}${bttsSuggestion}`;
   } else if (moduleKey === "weatherPitch") {
     const precision = module.locationPrecision === "stadium_coordinates" ? "Coordenadas del estadio"
       : module.locationPrecision === "stadium_geocoding" ? "Estadio geocodificado"
