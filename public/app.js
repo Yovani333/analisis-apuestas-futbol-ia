@@ -2,10 +2,10 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, createSavedParlay, createSavedPick,
-  applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
+  buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, createSavedParlay, createSavedPick,
+  applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260724-saved-auto-refresh-v1";
+} from "./parlay-store.js?v=20260724-bet-insights-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -58,6 +58,7 @@ const state = {
   evidenceEvaluationByCompetition: new Map(),
   savedTab: "individual",
   savedDateFilter: pacificToday(),
+  performanceMonthFilter: "",
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
@@ -194,6 +195,13 @@ const elements = {
   applySavedDateFilter: document.querySelector("#apply-saved-date-filter"),
   clearSavedDateFilter: document.querySelector("#clear-saved-date-filter"),
   savedDateFilterStatus: document.querySelector("#saved-date-filter-status"),
+  performanceMonthFilterPanel: document.querySelector("#performance-month-filter-panel"),
+  performanceMonthFilter: document.querySelector("#performance-month-filter"),
+  applyPerformanceMonthFilter: document.querySelector("#apply-performance-month-filter"),
+  clearPerformanceMonthFilter: document.querySelector("#clear-performance-month-filter"),
+  performanceMonthFilterStatus: document.querySelector("#performance-month-filter-status"),
+  teamGoalInsightsContent: document.querySelector("#team-goal-insights-content"),
+  refreshTeamGoalInsights: document.querySelector("#refresh-team-goal-insights"),
   savedIndividualSection: document.querySelector("#saved-individual-section"),
   originResultsSection: document.querySelector("#origin-results-section"),
   originLostResultsSection: document.querySelector("#origin-lost-results-section"),
@@ -1039,6 +1047,19 @@ function activePickCountForFixture(fixture) {
   return individual + parlayLegs;
 }
 
+function normalizedCompetitionName(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/\b(uefa|conmebol|clasificacion|qualification|qualifying)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function positiveCompetitionForFixtures(league, fixtures, rows) {
+  const leagueIds = new Set(fixtures.map((fixture) => fixture.leagueId ?? fixture.league?.id).filter((value) => value !== null && value !== undefined && value !== "").map(String));
+  const names = new Set([league.name, ...fixtures.map((fixture) => fixture.leagueName)].map(normalizedCompetitionName));
+  return rows.find((row) => row.evaluated >= 3 && row.winRate >= 60
+    && ((row.leagueId !== null && row.leagueId !== undefined && leagueIds.has(String(row.leagueId))) || names.has(normalizedCompetitionName(row.competition))));
+}
+
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
@@ -1053,13 +1074,15 @@ function renderMatches() {
     league,
     fixtures: state.fixtures.filter((fixture) => fixture.leagueSlug === league.slug)
   })).filter((group) => group.fixtures.length);
+  const competitionHistory = calculateCompetitionPerformance(state.savedPicks, state.savedParlays);
 
   elements.matchesList.innerHTML = groups.map(({ league, fixtures }) => {
     const expanded = state.expandedMatchGroups.has(league.slug);
+    const positiveHistory = positiveCompetitionForFixtures(league, fixtures, competitionHistory);
     return `
     <section class="league-group" aria-labelledby="league-${escapeHtml(league.slug)}">
       <header class="league-group__header">
-        <h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span><small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>
+        <h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span>${positiveHistory ? `<span class="league-performance-badge" title="${escapeHtml(`${positiveHistory.winRate}% de acierto en ${positiveHistory.evaluated} picks evaluados`)}">⚽ Mejor historial</span>` : ""}<small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>
         <button class="league-group__toggle" type="button" data-toggle-league="${escapeHtml(league.slug)}" aria-expanded="${expanded}" aria-controls="league-matches-${escapeHtml(league.slug)}" aria-label="${expanded ? "Ocultar" : "Mostrar"} encuentros de ${escapeHtml(league.name)}" title="${expanded ? "Ocultar encuentros" : "Mostrar encuentros"}">${expanded ? "−" : "+"}</button>
       </header>
       <div id="league-matches-${escapeHtml(league.slug)}" class="league-group__matches" ${expanded ? "" : "hidden"}>
@@ -2692,16 +2715,86 @@ function rankingMovementHtml(key, currentPosition) {
   return `<small class="rank-movement rank-movement--${delta > 0 ? "up" : "down"}">${delta > 0 ? "↑" : "↓"}${Math.abs(delta)}</small>`;
 }
 
+function performanceHistoryData() {
+  return {
+    picks: filterPicksByFixtureMonth(state.savedPicks, state.performanceMonthFilter),
+    parlays: filterParlaysByFixtureMonth(state.savedParlays, state.performanceMonthFilter)
+  };
+}
+
+function performanceMonthLabel(month = state.performanceMonthFilter) {
+  if (!month) return "todo el historial";
+  const parsed = new Date(`${month}-01T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? month : new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" }).format(parsed);
+}
+
+function updatePerformanceMonthStatus() {
+  if (!elements.performanceMonthFilterStatus) return;
+  elements.performanceMonthFilterStatus.textContent = state.performanceMonthFilter
+    ? `Mostrando únicamente ${performanceMonthLabel()}.`
+    : "Mostrando todo el historial.";
+}
+
+function performanceSignalBadge(winRate, evaluated) {
+  if (Number(evaluated) < 3 || !Number.isFinite(Number(winRate))) return "";
+  if (Number(winRate) >= 60) return '<span class="performance-signal performance-signal--best" title="Mejor desempeño observado" aria-label="Mejor desempeño observado">⚽</span>';
+  if (Number(winRate) < 50) return '<span class="performance-signal performance-signal--worst" title="Desempeño desfavorable observado" aria-label="Desempeño desfavorable observado">🟥</span>';
+  return "";
+}
+
+function showPerformancePicksDialog({ title, subtitle, picks = [] }) {
+  if (!elements.originPicksDialog) return;
+  elements.originPicksTitle.textContent = title;
+  elements.originPicksSubtitle.textContent = subtitle;
+  elements.originPicksContent.innerHTML = picks.length
+    ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Tipo</th><th>Pick</th><th>Partido</th><th>Competición</th><th>Fecha</th><th>Cuota</th></tr></thead><tbody>${picks.map((pick) => `<tr><td>${escapeHtml(pick.kind === "parlay" ? "Parlay" : "Individual")}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league || "No disponible")}</td><td>${escapeHtml(pick.date || "No disponible")}</td><td>${displayValue(pick.odds)}</td></tr>`).join("")}</tbody></table></div>`
+    : '<div class="saved-empty"><h3>Sin picks para mostrar</h3><p>No existen selecciones evaluadas dentro del filtro actual.</p></div>';
+  if (!elements.originPicksDialog.open) elements.originPicksDialog.showModal();
+}
+
 function showOriginPicksDialog(origin, result) {
-  const row = calculateOriginPerformance(state.savedPicks, state.savedParlays).find((item) => item.origin === origin);
+  const history = performanceHistoryData();
+  const row = calculateOriginPerformance(history.picks, history.parlays).find((item) => item.origin === origin);
   if (!row || !elements.originPicksDialog) return;
   const isWon = result === "won";
   const picks = row[isWon ? "wonPicks" : "lostPicks"] || [];
   const categories = row[isWon ? "wonCategories" : "lostCategories"] || [];
   elements.originPicksTitle.textContent = pickOriginLabel(origin);
-  elements.originPicksSubtitle.textContent = `${isWon ? "Picks ganados" : "Picks perdidos"} · ${picks.length} evaluados`;
+  elements.originPicksSubtitle.textContent = `${isWon ? "Picks ganados" : "Picks perdidos"} · ${picks.length} evaluados · ${performanceMonthLabel()}`;
   elements.originPicksContent.innerHTML = `<div class="origin-category-list">${categories.map((item) => `<span><strong>${escapeHtml(item.category)}</strong>${item.count} ${item.count === 1 ? "pick" : "picks"}</span>`).join("")}</div><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Clasificación</th><th>Pick</th><th>Partido</th><th>Liga</th><th>Cuota</th></tr></thead><tbody>${picks.map((pick) => `<tr><td>${escapeHtml(pick.category)}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league)}</td><td>${displayValue(pick.odds)}</td></tr>`).join("")}</tbody></table></div>`;
   if (!elements.originPicksDialog.open) elements.originPicksDialog.showModal();
+}
+
+function showCompetitionPicksDialog(key, result) {
+  const history = performanceHistoryData();
+  const row = calculateCompetitionPerformance(history.picks, history.parlays).find((item) => item.key === key);
+  if (!row) return;
+  const isWon = result === "won";
+  const picks = row[isWon ? "wonPicks" : "lostPicks"] || [];
+  showPerformancePicksDialog({
+    title: row.competition,
+    subtitle: `${isWon ? "Picks ganados" : "Picks perdidos"} · ${picks.length} · ${performanceMonthLabel()}`,
+    picks
+  });
+}
+
+function renderTeamGoalInsights() {
+  if (!elements.teamGoalInsightsContent) return;
+  const report = calculateParlayTeamGoalLeaders(state.savedParlays, { limit: 5 });
+  elements.refreshTeamGoalInsights.disabled = state.savedParlays.length === 0;
+  if (!report.fixturesUsed) {
+    elements.teamGoalInsightsContent.innerHTML = '<div class="saved-empty"><h3>Sin marcadores reglamentarios disponibles</h3><p>Guarda y actualiza parlays finalizados para construir este resumen. No se inventan resultados ausentes.</p></div>';
+    return;
+  }
+  const ranking = (title, rows, metric, tone) => `<section class="team-goal-ranking team-goal-ranking--${tone}"><header><div><span>${escapeHtml(rows[0]?.side || "Condición")}</span><h3>${escapeHtml(title)}</h3></div><small>Promedio por encuentro</small></header><div class="team-goal-ranking__list">${rows.map((row, index) => `<article><b>${index + 1}</b><div><strong>${escapeHtml(row.team)}</strong><small>${escapeHtml(row.side)} · ${row.matches} ${row.matches === 1 ? "partido" : "partidos"}</small></div><span><strong>${displayValue(row.average)}</strong><small>${row[metric]} goles</small></span></article>`).join("")}</div></section>`;
+  elements.teamGoalInsightsContent.innerHTML = `
+    <div class="team-goal-insights-summary"><span>Encuentros únicos analizados</span><strong>${report.fixturesUsed}</strong><small>Los picks repetidos del mismo fixture cuentan una sola vez.</small></div>
+    <div class="team-goal-insights-grid">
+      ${ranking("Más goleadores como local", report.scorers.home, "goalsFor", "positive")}
+      ${ranking("Más goleadores como visitante", report.scorers.away, "goalsFor", "positive")}
+      ${ranking("Más goleados como local", report.conceded.home, "goalsAgainst", "negative")}
+      ${ranking("Más goleados como visitante", report.conceded.away, "goalsAgainst", "negative")}
+    </div>`;
 }
 
 function renderHistoricalValidator() {
@@ -2743,29 +2836,25 @@ function renderHistoricalValidator() {
 function renderOriginPerformance() {
   if (!elements.originPerformance || !elements.originLostPerformance || !elements.originRecommendations || !elements.competitionPerformance) return;
   renderHistoricalValidator();
-  const rows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
-  const competitionRows = calculateCompetitionPerformance(state.savedPicks, state.savedParlays);
-  const pickTypeRows = calculateParlayPickTypePerformance(state.savedParlays);
+  const history = performanceHistoryData();
+  const rows = calculateOriginPerformance(history.picks, history.parlays);
+  const allRows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
+  const competitionRows = calculateCompetitionPerformance(history.picks, history.parlays);
+  const pickTypeRows = calculateParlayPickTypePerformance(history.parlays);
+  updatePerformanceMonthStatus();
   const noStoredPicks = state.savedPicks.length === 0 && state.savedParlays.length === 0;
   [elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateCompetitionResults].forEach((button) => { button.disabled = noStoredPicks; });
   elements.competitionPerformance.innerHTML = competitionRows.length
-    ? `<header><div><span>Balance por torneo</span><h3>Resultados por competición</h3></div><small>Ordenado de mayor a menor porcentaje de acierto.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Competición</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th></tr></thead><tbody>${competitionRows.map((row, index) => `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`competition:${row.key}`, index + 1)}</td><td data-label="Competición"><div class="competition-result-name"><strong>${escapeHtml(row.competition)}</strong>${row.active ? '<span class="active-pick-badge">Pick Activo</span>' : ""}</div></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive">${row.won}</td><td data-label="Perdidos" class="value-negative">${row.lost}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${row.winRate === null ? "—" : `${displayValue(row.winRate)}%`}</strong></td></tr>`).join("")}</tbody></table></div>`
+    ? `<header><div><span>Balance por torneo · ${escapeHtml(performanceMonthLabel())}</span><h3>Resultados por competición</h3></div><small>Selecciona un número para consultar sus picks.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Competición</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th></tr></thead><tbody>${competitionRows.map((row, index) => `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`competition:${row.key}`, index + 1)}</td><td data-label="Competición"><div class="competition-result-name"><span><strong>${escapeHtml(row.competition)}</strong>${performanceSignalBadge(row.winRate, row.evaluated)}</span>${row.active ? '<span class="active-pick-badge">Pick Activo</span>' : ""}</div></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive"><button class="performance-count-link" type="button" data-view-competition-picks="${escapeHtml(row.key)}" data-competition-result="won" aria-label="Ver ${row.won} picks ganados de ${escapeHtml(row.competition)}">${row.won}</button></td><td data-label="Perdidos" class="value-negative"><button class="performance-count-link" type="button" data-view-competition-picks="${escapeHtml(row.key)}" data-competition-result="lost" aria-label="Ver ${row.lost} picks perdidos de ${escapeHtml(row.competition)}">${row.lost}</button></td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${row.winRate === null ? "—" : `${displayValue(row.winRate)}%`}</strong></td></tr>`).join("")}</tbody></table></div>`
     : '<div class="saved-empty"><h3>Sin resultados por competición</h3><p>El conteo aparecerá cuando existan picks concluidos como ganados o perdidos.</p></div>';
   const renderPickTypes = (result) => {
     const filtered = pickTypeRows.filter((row) => row[result] > 0)
       .sort((a, b) => b[result] - a[result] || a.type.localeCompare(b.type, "es"));
     if (!filtered.length) return `<div class="saved-empty"><h3>Sin tipos ${result === "won" ? "ganados" : "perdidos"}</h3><p>El conteo aparecerá cuando se liquiden selecciones dentro de parlays.</p></div>`;
-    return filtered.map((row) => `<article class="pick-type-summary__item pick-type-summary__item--${result}"><span>${escapeHtml(row.type)}</span><strong>${row[result]}</strong></article>`).join("");
+    return filtered.map((row) => { const rate = row.total ? row.won / row.total * 100 : null; return `<article class="pick-type-summary__item pick-type-summary__item--${result}"><span>${escapeHtml(row.type)}${performanceSignalBadge(rate, row.total)}</span><strong>${row[result]}</strong></article>`; }).join("");
   };
   elements.pickTypesWon.innerHTML = renderPickTypes("won");
   elements.pickTypesLost.innerHTML = renderPickTypes("lost");
-  if (!rows.length) {
-    elements.originPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen Ganados</h3><p>El conteo aparecerá cuando existan picks concluidos como ganados.</p></div>';
-    elements.originLostPerformance.innerHTML = '<div class="saved-empty"><h3>Resultados por origen Perdidos</h3><p>El conteo aparecerá cuando existan picks concluidos como perdidos.</p></div>';
-    elements.originRecommendations.innerHTML = '<div class="saved-empty"><h3>Sin muestra evaluada</h3><p>Se necesitan picks ganados o perdidos para comparar resultados por selección y origen.</p></div>';
-    return;
-  }
-
   const renderResult = (result) => {
     const isWon = result === "won";
     const countKey = isWon ? "won" : "lost";
@@ -2779,14 +2868,14 @@ function renderOriginPerformance() {
     const title = isWon ? "Resultados por origen Ganados" : "Resultados por origen Perdidos";
     const rateLabel = isWon ? "Acierto" : "Tasa de pérdida";
     if (!filteredRows.length) return `<div class="saved-empty"><h3>${title}</h3><p>Todavía no hay picks ${isWon ? "ganados" : "perdidos"} para mostrar.</p></div>`;
-    return `<header><div><span>Seguimiento automático</span><h3>${title}</h3></div><small>Ordenado de mayor a menor porcentaje.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Origen</th><th>Individuales</th><th>En parlays</th><th>${isWon ? "Ganados" : "Perdidos"}</th><th>Evaluados</th><th>${rateLabel}</th><th>Detalle</th></tr></thead><tbody>${filteredRows.map((row, index) => { const rate = isWon ? row.winRate : Number((row.lost / row.evaluated * 100).toFixed(1)); return `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`origin:${result}:${row.origin}`, index + 1)}</td><td data-label="Origen"><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="${isWon ? "Ganados" : "Perdidos"}" class="${isWon ? "value-positive" : "value-negative"}">${row[countKey]}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="${rateLabel}"><strong>${displayValue(rate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}" data-origin-result="${result}">Ver picks ${isWon ? "ganados" : "perdidos"}</button></td></tr>`; }).join("")}</tbody></table></div>`;
+    return `<header><div><span>Seguimiento automático · ${escapeHtml(performanceMonthLabel())}</span><h3>${title}</h3></div><small>Ordenado de mayor a menor porcentaje.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Origen</th><th>Individuales</th><th>En parlays</th><th>${isWon ? "Ganados" : "Perdidos"}</th><th>Evaluados</th><th>${rateLabel}</th><th>Detalle</th></tr></thead><tbody>${filteredRows.map((row, index) => { const rate = isWon ? row.winRate : Number((row.lost / row.evaluated * 100).toFixed(1)); return `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`origin:${result}:${row.origin}`, index + 1)}</td><td data-label="Origen"><span><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong>${performanceSignalBadge(row.winRate, row.evaluated)}</span></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="${isWon ? "Ganados" : "Perdidos"}" class="${isWon ? "value-positive" : "value-negative"}">${row[countKey]}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="${rateLabel}"><strong>${displayValue(rate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}" data-origin-result="${result}">Ver picks ${isWon ? "ganados" : "perdidos"}</button></td></tr>`; }).join("")}</tbody></table></div>`;
   };
 
   elements.originPerformance.innerHTML = renderResult("won");
   elements.originLostPerformance.innerHTML = renderResult("lost");
 
-  const recommendations = calculateOriginRecommendations(rows);
-  const recommendationCards = (items, type) => items.map((item) => `<article class="origin-recommendation origin-recommendation--${type}"><span>${type === "recommended" ? "Mejor desempeño" : type === "avoid" ? "No recomendado" : "Muestra en observación"}</span><h4>${escapeHtml(item.category)}</h4><p><strong>Origen:</strong> ${escapeHtml(pickOriginLabel(item.origin))}</p><div><b>${item.won} ganados</b><b>${item.lost} perdidos</b><b>${displayValue(item.winRate)}% acierto</b></div><small>${type === "recommended" ? "Historial favorable con al menos 3 picks evaluados." : type === "avoid" ? "Balance desfavorable con al menos 3 picks evaluados." : "Aún no existe volumen o diferencia suficiente para recomendar o descartar."}</small></article>`).join("");
+  const recommendations = calculateOriginRecommendations(allRows);
+  const recommendationCards = (items, type) => items.map((item) => `<article class="origin-recommendation origin-recommendation--${type}"><span>${type === "recommended" ? "⚽ Mejor desempeño" : type === "avoid" ? "🟥 No recomendado" : "Muestra en observación"}</span><h4>${escapeHtml(item.category)}</h4><p><strong>Origen:</strong> ${escapeHtml(pickOriginLabel(item.origin))}</p><div><b>${item.won} ganados</b><b>${item.lost} perdidos</b><b>${displayValue(item.winRate)}% acierto</b></div><small>${type === "recommended" ? "Historial favorable con al menos 3 picks evaluados." : type === "avoid" ? "Balance desfavorable con al menos 3 picks evaluados." : "Aún no existe volumen o diferencia suficiente para recomendar o descartar."}</small></article>`).join("");
   elements.originRecommendations.innerHTML = `<div class="origin-recommendations__notice"><strong>Lectura responsable</strong><span>Esta clasificación resume resultados pasados; no modifica fórmulas ni garantiza el siguiente pick.</span></div><div class="origin-recommendations__columns"><section><header><h3>Mejores picks</h3><span>${recommendations.recommended.length}</span></header>${recommendationCards(recommendations.recommended, "recommended") || '<p class="muted-text">Todavía no hay picks con al menos 3 evaluados y 60% de acierto.</p>'}</section><section><header><h3>No recomendados</h3><span>${recommendations.notRecommended.length}</span></header>${recommendationCards(recommendations.notRecommended, "avoid") || '<p class="muted-text">No hay picks con balance claramente desfavorable.</p>'}</section></div>${recommendations.observing.length ? `<section class="origin-recommendations__observing"><header><h3>En observación</h3><span>${recommendations.observing.length}</span></header><div>${recommendationCards(recommendations.observing, "observing")}</div></section>` : ""}`;
 }
 
@@ -3024,6 +3113,7 @@ function switchView(view) {
     renderSavedParlays();
     void updateSavedParlayResults({ automatic: true });
   }
+  if (view === "team-goal-insights") renderTeamGoalInsights();
   if (view === "favorite-teams") renderFavoriteTeams();
   if (view === "audit") { renderAuditFixtureOptions(); void loadEvidenceLibrary(); }
   if (view === "simulation") refreshSimulationPickers();
@@ -4829,12 +4919,29 @@ elements.clearSavedDateFilter.addEventListener("click", () => {
   renderSavedPicks();
   renderSavedParlays();
 });
+elements.applyPerformanceMonthFilter.addEventListener("click", () => {
+  state.performanceMonthFilter = elements.performanceMonthFilter.value;
+  renderOriginPerformance();
+});
+elements.clearPerformanceMonthFilter.addEventListener("click", () => {
+  state.performanceMonthFilter = "";
+  elements.performanceMonthFilter.value = "";
+  renderOriginPerformance();
+});
+elements.refreshTeamGoalInsights.addEventListener("click", () => {
+  renderTeamGoalInsights();
+  showNotice("Análisis de equipos goleadores y goleados actualizado con los parlays guardados.");
+});
 const handleOriginDetailClick = (event) => {
   const open = event.target.closest("[data-view-origin-picks]");
   if (open) showOriginPicksDialog(open.dataset.viewOriginPicks, open.dataset.originResult || "won");
 };
 elements.originPerformance.addEventListener("click", handleOriginDetailClick);
 elements.originLostPerformance.addEventListener("click", handleOriginDetailClick);
+elements.competitionPerformance.addEventListener("click", (event) => {
+  const open = event.target.closest("[data-view-competition-picks]");
+  if (open) showCompetitionPicksDialog(open.dataset.viewCompetitionPicks, open.dataset.competitionResult || "won");
+});
 elements.originPicksClose.addEventListener("click", () => elements.originPicksDialog.close());
 elements.originPicksDialog.addEventListener("click", (event) => {
   if (event.target === elements.originPicksDialog) elements.originPicksDialog.close();
@@ -5016,6 +5123,7 @@ document.addEventListener("click", (event) => {
     elements.savedParlaysSection.hidden = state.savedTab !== "parlays";
     elements.trashResultsSection.hidden = state.savedTab !== "trash";
     elements.savedDateFilterPanel.hidden = !["individual", "parlays"].includes(state.savedTab);
+    elements.performanceMonthFilterPanel.hidden = !["origins-won", "origins-lost", "competitions", "types-won", "types-lost"].includes(state.savedTab);
   }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);

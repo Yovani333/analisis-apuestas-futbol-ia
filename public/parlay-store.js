@@ -448,7 +448,8 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
     const key = resolvedLeagueId === null || resolvedLeagueId === undefined || resolvedLeagueId === ""
       ? `name:${identity}` : `id:${resolvedLeagueId}`;
     const current = groups.get(key) || {
-      key, competition, leagueId: resolvedLeagueId, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, active: 0, winRate: null
+      key, competition, leagueId: resolvedLeagueId, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, active: 0, winRate: null,
+      wonPicks: [], lostPicks: []
     };
     if (leagueId !== null && leagueId !== undefined && leagueId !== "") {
       current.leagueId = leagueId;
@@ -463,11 +464,94 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
     current[pick.result] += 1;
     if (kind === "parlay") current.parlayLegs += 1;
     else current.individual += 1;
+    current[pick.result === "won" ? "wonPicks" : "lostPicks"].push({
+      id: pick.id || `${key}:${current.evaluated}`,
+      selection: pick.selection || "Pick",
+      market: pick.market || "Mercado no disponible",
+      home: pick.home || "",
+      away: pick.away || "",
+      match: [pick.home, pick.away].filter(Boolean).join(" vs "),
+      league: competition,
+      date: pick.date || pick.kickoffAt || "",
+      odds: pick.originalOdds ?? pick.decimalOdds ?? null,
+      kind
+    });
     current.winRate = current.evaluated ? Number((current.won / current.evaluated * 100).toFixed(1)) : null;
     groups.set(key, current);
   }
 
   return [...groups.values()].sort((a, b) => (b.winRate ?? -1) - (a.winRate ?? -1) || b.evaluated - a.evaluated || a.competition.localeCompare(b.competition));
+}
+
+function fixtureMonthValue(item = {}) {
+  const raw = String(item.date || item.kickoffAt || item.utcDateTime || "").trim();
+  const direct = raw.match(/^(\d{4}-\d{2})/);
+  if (direct) return direct[1];
+  const timestamp = Date.parse(raw);
+  if (!Number.isFinite(timestamp)) return "";
+  const date = new Date(timestamp);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export function filterPicksByFixtureMonth(picks = [], month = "") {
+  if (!month) return [...picks];
+  return picks.filter((pick) => fixtureMonthValue(pick) === month);
+}
+
+export function filterParlaysByFixtureMonth(parlays = [], month = "") {
+  if (!month) return parlays.map((parlay) => ({ ...parlay, legs: [...(Array.isArray(parlay?.legs) ? parlay.legs : [])] }));
+  return parlays.map((parlay) => ({
+    ...parlay,
+    legs: (Array.isArray(parlay?.legs) ? parlay.legs : []).filter((leg) => fixtureMonthValue(leg) === month)
+  })).filter((parlay) => parlay.legs.length);
+}
+
+function parseRegulationScore(value) {
+  const match = String(value || "").trim().match(/^(\d+)\s*[-–:]\s*(\d+)$/);
+  if (!match) return null;
+  return { home: Number(match[1]), away: Number(match[2]) };
+}
+
+function teamGoalRanking(records, goalKey, limit) {
+  return [...records.values()].map((row) => ({
+    ...row,
+    average: Number((row[goalKey] / row.matches).toFixed(2))
+  })).sort((a, b) => b.average - a.average || b[goalKey] - a[goalKey] || b.matches - a.matches || a.team.localeCompare(b.team, "es"))
+    .slice(0, limit);
+}
+
+export function calculateParlayTeamGoalLeaders(parlays = [], { limit = 5 } = {}) {
+  const uniqueFixtures = new Map();
+  for (const parlay of parlays) {
+    if (parlay?.trashed || parlay?.deletedPermanently) continue;
+    for (const leg of Array.isArray(parlay?.legs) ? parlay.legs : []) {
+      const score = parseRegulationScore(leg.finalScore);
+      if (!score || !leg.home || !leg.away) continue;
+      const key = leg.fixtureId !== null && leg.fixtureId !== undefined && leg.fixtureId !== ""
+        ? `fixture:${leg.fixtureId}`
+        : `match:${String(leg.home).toLowerCase()}::${String(leg.away).toLowerCase()}::${leg.date || leg.kickoffAt || ""}`;
+      if (!uniqueFixtures.has(key)) uniqueFixtures.set(key, { ...leg, score });
+    }
+  }
+  const home = new Map();
+  const away = new Map();
+  const add = (map, team, goalsFor, goalsAgainst, side) => {
+    const key = String(team).trim().toLowerCase();
+    const current = map.get(key) || { team: String(team).trim(), side, matches: 0, goalsFor: 0, goalsAgainst: 0 };
+    current.matches += 1;
+    current.goalsFor += goalsFor;
+    current.goalsAgainst += goalsAgainst;
+    map.set(key, current);
+  };
+  for (const fixture of uniqueFixtures.values()) {
+    add(home, fixture.home, fixture.score.home, fixture.score.away, "Local");
+    add(away, fixture.away, fixture.score.away, fixture.score.home, "Visitante");
+  }
+  return {
+    fixturesUsed: uniqueFixtures.size,
+    scorers: { home: teamGoalRanking(home, "goalsFor", limit), away: teamGoalRanking(away, "goalsFor", limit) },
+    conceded: { home: teamGoalRanking(home, "goalsAgainst", limit), away: teamGoalRanking(away, "goalsAgainst", limit) }
+  };
 }
 
 export function classifyParlayPickType(pick = {}) {

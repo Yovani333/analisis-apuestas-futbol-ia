@@ -137,7 +137,7 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(app, /Picks ganados/);
   assert.match(app, /Picks perdidos/);
   assert.match(app, /deletedPermanently: true/);
-  assert.match(app, /calculateOriginRecommendations\(rows\)/);
+  assert.match(app, /calculateOriginRecommendations\(allRows\)/);
   assert.match(app, /buildHistoricalPickValidator\(state\.savedPicks, state\.savedParlays\)/);
   assert.match(app, /historicalValidatorSection\.hidden = state\.savedTab !== "historical-validator"/);
   assert.match(html, /id="competition-main"><option value="all" selected>Todas las competiciones/);
@@ -175,7 +175,29 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260724-xg-btts-v2/);
+  assert.match(html, /styles\.css\?v=20260724-bet-insights-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
+});
+
+test("el menú incluye equipos goleadores y goleados con actualización local", () => {
+  assert.match(html, /data-view="team-goal-insights"[\s\S]*Equipos goleadores y goleados/);
+  assert.match(html, /data-view-panel="team-goal-insights"/);
+  assert.match(html, /id="refresh-team-goal-insights"/);
+  assert.match(app, /calculateParlayTeamGoalLeaders\(state\.savedParlays/);
+  assert.match(app, /if \(view === "team-goal-insights"\) renderTeamGoalInsights\(\)/);
+});
+
+test("resultados históricos permiten filtrar por mes y abrir picks por competición", () => {
+  assert.match(html, /id="performance-month-filter" type="month"/);
+  assert.match(app, /filterPicksByFixtureMonth\(state\.savedPicks, state\.performanceMonthFilter\)/);
+  assert.match(app, /filterParlaysByFixtureMonth\(state\.savedParlays, state\.performanceMonthFilter\)/);
+  assert.match(app, /data-view-competition-picks/);
+  assert.match(app, /showCompetitionPicksDialog/);
+});
+
+test("las señales históricas identifican mejores y peores resultados", () => {
+  assert.match(app, /performance-signal--best[\s\S]*⚽/);
+  assert.match(app, /performance-signal--worst[\s\S]*🟥/);
+  assert.match(app, /league-performance-badge[\s\S]*⚽ Mejor historial/);
 });

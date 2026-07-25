@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de análisis responsable de apuestas de fútbol con datos, API-Football y modelos internos." />
     <title>Análisis de Apuestas de Fútbol con Datos</title>
-  <link rel="stylesheet" href="styles.css?v=20260724-xg-btts-v2" />
+  <link rel="stylesheet" href="styles.css?v=20260724-bet-insights-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -41,6 +41,7 @@
         <section class="main-nav__group" aria-labelledby="nav-tracking-title">
           <h2 id="nav-tracking-title">Seguimiento</h2>
           <button class="main-nav__item" type="button" data-view="saved"><span class="nav-icon" aria-hidden="true">✓</span><span>Mis apuestas</span><span id="saved-parlay-count" class="nav-count">0</span></button>
+          <button class="main-nav__item" type="button" data-view="team-goal-insights"><span class="nav-icon" aria-hidden="true">⚽</span><span>Equipos goleadores y goleados</span></button>
           <button class="main-nav__item" type="button" data-view="favorite-teams"><span class="nav-icon" aria-hidden="true">★</span><span>Equipos favoritos</span><span id="favorite-team-count" class="nav-count">0</span></button>
           <button class="main-nav__item" type="button" data-view="audit"><span class="nav-icon" aria-hidden="true">▤</span><span>Auditoría</span></button>
         </section>
@@ -454,6 +455,15 @@
       <section id="favorite-teams-list" class="favorite-teams-grid" aria-live="polite"><div class="saved-empty"><h3>Sin equipos favoritos</h3><p>Marca la estrella junto a un equipo desde los encuentros del Dashboard.</p></div></section>
     </main>
 
+    <main id="team-goal-insights-view" class="utility-view team-goal-insights-view" data-view-panel="team-goal-insights" hidden>
+      <section class="utility-heading">
+        <div><p class="eyebrow">Historial de parlays</p><h2>Equipos goleadores y goleados</h2><p>Resume marcadores reglamentarios guardados sin duplicar encuentros que tengan varias selecciones.</p></div>
+        <div class="panel-actions"><button id="refresh-team-goal-insights" class="button button--primary" type="button">Actualizar análisis</button><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></div>
+      </section>
+      <section class="team-goal-insights-note"><strong>Lectura responsable</strong><span>El ranking describe únicamente los partidos con marcador final almacenado en tus parlays; no es un pronóstico del siguiente encuentro.</span></section>
+      <section id="team-goal-insights-content" class="team-goal-insights-content" aria-live="polite"><div class="saved-empty"><h3>Sin marcadores disponibles</h3><p>Los equipos aparecerán cuando existan parlays con encuentros finalizados y marcador reglamentario.</p></div></section>
+    </main>
+
     <main id="parlays-guardados" class="saved-view" data-view-panel="saved" hidden>
       <section class="saved-view__heading">
         <div>
@@ -469,6 +479,12 @@
         <button id="apply-saved-date-filter" class="button button--primary" type="button">Buscar</button>
         <button id="clear-saved-date-filter" class="button button--secondary" type="button">Mostrar todas</button>
         <span id="saved-date-filter-status">Mostrando los partidos de hoy.</span>
+      </section>
+      <section id="performance-month-filter-panel" class="performance-month-filter" aria-label="Filtrar resultados históricos por mes" hidden>
+        <div><label for="performance-month-filter">Mes y año</label><input id="performance-month-filter" type="month" /></div>
+        <button id="apply-performance-month-filter" class="button button--primary" type="button">Buscar mes</button>
+        <button id="clear-performance-month-filter" class="button button--secondary" type="button">Todo el historial</button>
+        <span id="performance-month-filter-status">Mostrando todo el historial.</span>
       </section>
       <section id="saved-individual-section" class="saved-bets-section">
         <div class="saved-section-toolbar"><div><h3>Picks individuales</h3><p>Solo selecciones guardadas individualmente, con su resultado ganado, perdido, anulado o pendiente.</p></div><button id="update-individual-results" class="button button--primary" type="button">Actualizar datos</button></div>
@@ -626,6 +642,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260724-xg-btts-v3"></script>
+    <script type="module" src="app.js?v=20260724-bet-insights-v1"></script>
   </body>
 </html>

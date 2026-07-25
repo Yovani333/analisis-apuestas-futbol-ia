@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFixtureStatusUpdate, buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterPicksByFixtureDate, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { applyFixtureStatusUpdate, buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("actualiza el estado de fixtures activos aunque el mercado no pueda liquidarse", () => {
   assert.equal(needsFixtureStatusRefresh({ fixtureId: 10, fixtureStatus: "En vivo", result: "won" }), true);
@@ -469,4 +469,40 @@ test("recupera un parlay sin duplicarlo ni cambiar su identificador", () => {
   assert.equal(restored.id, "p-1");
   assert.equal(restored.trashed, false);
   assert.equal("deletedAt" in restored, false);
+});
+
+test("filtra estadísticas guardadas por el mes real del encuentro", () => {
+  const picks = filterPicksByFixtureMonth([
+    { id: "julio", date: "2026-07-10", result: "won" },
+    { id: "agosto", kickoffAt: "2026-08-01T02:00:00Z", result: "lost" }
+  ], "2026-07");
+  const parlays = filterParlaysByFixtureMonth([{ id: "p", legs: [
+    { id: "julio", date: "2026-07-11", result: "won" },
+    { id: "agosto", date: "2026-08-11", result: "lost" }
+  ] }], "2026-07");
+  assert.deepEqual(picks.map((pick) => pick.id), ["julio"]);
+  assert.deepEqual(parlays[0].legs.map((leg) => leg.id), ["julio"]);
+});
+
+test("resultados por competición conserva el detalle ganado y perdido", () => {
+  const [row] = calculateCompetitionPerformance([
+    { id: "w", league: "MLS", result: "won", home: "A", away: "B", selection: "Más de 1.5", market: "Goles" },
+    { id: "l", league: "MLS", result: "lost", home: "C", away: "D", selection: "Local", market: "1X2" }
+  ]);
+  assert.equal(row.wonPicks[0].selection, "Más de 1.5");
+  assert.equal(row.lostPicks[0].match, "C vs D");
+});
+
+test("equipos goleadores y goleados deduplica fixtures y separa localía", () => {
+  const repeated = { fixtureId: 50, home: "Ataque FC", away: "Defensa FC", finalScore: "3-1", date: "2026-07-10" };
+  const result = calculateParlayTeamGoalLeaders([
+    { id: "p1", legs: [{ ...repeated, id: "a" }, { ...repeated, id: "b" }] },
+    { id: "p2", legs: [{ fixtureId: 51, home: "Otro", away: "Ataque FC", finalScore: "0-2", date: "2026-07-12" }] },
+    { id: "trash", trashed: true, legs: [{ fixtureId: 52, home: "Ruido", away: "Ataque FC", finalScore: "0-9" }] }
+  ]);
+  assert.equal(result.fixturesUsed, 2);
+  assert.deepEqual(result.scorers.home[0], { team: "Ataque FC", side: "Local", matches: 1, goalsFor: 3, goalsAgainst: 1, average: 3 });
+  assert.equal(result.scorers.away[0].team, "Ataque FC");
+  assert.equal(result.conceded.away[0].team, "Defensa FC");
+  assert.equal(result.conceded.away[0].average, 3);
 });
