@@ -5,11 +5,11 @@ import {
   buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, createSavedParlay, createSavedPick,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260724-bet-insights-v1";
+} from "./parlay-store.js?v=20260724-detailed-origins-v2";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginLabel } from "./pick-origins.js?v=20260724-xg-btts-origin-v2";
+import { pickOriginLabel } from "./pick-origins.js?v=20260724-detailed-origins-v3";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260724-parlay-trash-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260722-corners-v2";
@@ -2502,7 +2502,7 @@ function renderParlayDraft(open = false, minimized = true) {
         <small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}</small>
         <small>Confianza: ${escapeHtml(leg.confidence)} · Riesgo: ${escapeHtml(leg.risk)}</small>
         <small>Cuota ${displayValue(leg.decimalOdds)} · EV ${displayValue(leg.expectedValue)}%</small>
-        <small>Origen: ${escapeHtml(pickOriginLabel(leg.sourceModule))} ${infoTooltip("pick_origin")}</small>
+        <small>Origen: ${escapeHtml(pickOriginLabel(leg))} ${infoTooltip("pick_origin")}</small>
         <small class="timing-label">${escapeHtml(leg.analysisTiming.label)}${leg.analysisTiming.minutesToKickoff === null ? "" : ` · ${escapeHtml(leg.analysisTiming.minutesToKickoff)} min al inicio`}</small>
         ${leg.analysisTiming.warning ? `<em>${escapeHtml(leg.analysisTiming.warning)}</em>` : ""}
         ${leg.requiresReview ? '<em>Requiere revisión antes de considerar una apuesta</em>' : ""}
@@ -2567,6 +2567,7 @@ function addMarketToParlay(analysis, marketIndex) {
     analysisStatus: analysis.estado_analisis,
     sourceModule: market.sourceModule || (analysis.analysisMode === "rule_engine" ? "odds_rule_engine" : "odds"),
     source: analysis._source || "rule-engine",
+    ...(analysis.analysisMode === "rule_engine" ? { originModule: "odds_rule_engine", originMenu: "Dashboard", originSection: "Evaluación predictiva" } : {}),
     supportingData: market.datos_que_apoyan || [], contradictingData: market.datos_que_contradicen || []
   }, "Selección agregada a Mi parlay.");
 }
@@ -2625,7 +2626,8 @@ function saveAnalysisMarket(analysis, marketIndex) {
     expectedValue: market.valor_esperado ?? calculation?.expectedValuePct ?? null, fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: fixture.fetchedAt || null,
     confidence: market.confianza || "No disponible", result: "pending",
     sourceModule: market.sourceModule || (analysis.analysisMode === "rule_engine" ? "odds_rule_engine" : "odds"),
-    source: analysis._source || "rule-engine"
+    source: analysis._source || "rule-engine",
+    ...(analysis.analysisMode === "rule_engine" ? { originModule: "odds_rule_engine", originMenu: "Dashboard", originSection: "Evaluación predictiva" } : {})
   });
 }
 
@@ -2687,7 +2689,7 @@ function renderSavedPicks() {
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}${savedLegScoreHtml(pick)}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick.sourceModule))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
+    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`; }).join("");
 }
@@ -2759,7 +2761,7 @@ function showOriginPicksDialog(origin, result) {
   const isWon = result === "won";
   const picks = row[isWon ? "wonPicks" : "lostPicks"] || [];
   const categories = row[isWon ? "wonCategories" : "lostCategories"] || [];
-  elements.originPicksTitle.textContent = pickOriginLabel(origin);
+  elements.originPicksTitle.textContent = row.originLabel || pickOriginLabel(row.originModule || origin);
   elements.originPicksSubtitle.textContent = `${isWon ? "Picks ganados" : "Picks perdidos"} · ${picks.length} evaluados · ${performanceMonthLabel()}`;
   elements.originPicksContent.innerHTML = `<div class="origin-category-list">${categories.map((item) => `<span><strong>${escapeHtml(item.category)}</strong>${item.count} ${item.count === 1 ? "pick" : "picks"}</span>`).join("")}</div><div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Clasificación</th><th>Pick</th><th>Partido</th><th>Liga</th><th>Cuota</th></tr></thead><tbody>${picks.map((pick) => `<tr><td>${escapeHtml(pick.category)}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league)}</td><td>${displayValue(pick.odds)}</td></tr>`).join("")}</tbody></table></div>`;
   if (!elements.originPicksDialog.open) elements.originPicksDialog.showModal();
@@ -2868,14 +2870,14 @@ function renderOriginPerformance() {
     const title = isWon ? "Resultados por origen Ganados" : "Resultados por origen Perdidos";
     const rateLabel = isWon ? "Acierto" : "Tasa de pérdida";
     if (!filteredRows.length) return `<div class="saved-empty"><h3>${title}</h3><p>Todavía no hay picks ${isWon ? "ganados" : "perdidos"} para mostrar.</p></div>`;
-    return `<header><div><span>Seguimiento automático · ${escapeHtml(performanceMonthLabel())}</span><h3>${title}</h3></div><small>Ordenado de mayor a menor porcentaje.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Origen</th><th>Individuales</th><th>En parlays</th><th>${isWon ? "Ganados" : "Perdidos"}</th><th>Evaluados</th><th>${rateLabel}</th><th>Detalle</th></tr></thead><tbody>${filteredRows.map((row, index) => { const rate = isWon ? row.winRate : Number((row.lost / row.evaluated * 100).toFixed(1)); return `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`origin:${result}:${row.origin}`, index + 1)}</td><td data-label="Origen"><span><strong>${escapeHtml(pickOriginLabel(row.origin))}</strong>${performanceSignalBadge(row.winRate, row.evaluated)}</span></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="${isWon ? "Ganados" : "Perdidos"}" class="${isWon ? "value-positive" : "value-negative"}">${row[countKey]}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="${rateLabel}"><strong>${displayValue(rate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}" data-origin-result="${result}">Ver picks ${isWon ? "ganados" : "perdidos"}</button></td></tr>`; }).join("")}</tbody></table></div>`;
+    return `<header><div><span>Seguimiento automático · ${escapeHtml(performanceMonthLabel())}</span><h3>${title}</h3></div><small>Ordenado de mayor a menor porcentaje.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Origen</th><th>Individuales</th><th>En parlays</th><th>${isWon ? "Ganados" : "Perdidos"}</th><th>Evaluados</th><th>${rateLabel}</th><th>Detalle</th></tr></thead><tbody>${filteredRows.map((row, index) => { const rate = isWon ? row.winRate : Number((row.lost / row.evaluated * 100).toFixed(1)); return `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`origin:${result}:${row.origin}`, index + 1)}</td><td data-label="Origen"><span><strong>${escapeHtml(row.originLabel || pickOriginLabel(row.originModule || row.origin))}</strong>${performanceSignalBadge(row.winRate, row.evaluated)}</span></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="${isWon ? "Ganados" : "Perdidos"}" class="${isWon ? "value-positive" : "value-negative"}">${row[countKey]}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="${rateLabel}"><strong>${displayValue(rate)}%</strong></td><td data-label="Detalle"><button class="button button--secondary button--compact" type="button" data-view-origin-picks="${escapeHtml(row.origin)}" data-origin-result="${result}">Ver picks ${isWon ? "ganados" : "perdidos"}</button></td></tr>`; }).join("")}</tbody></table></div>`;
   };
 
   elements.originPerformance.innerHTML = renderResult("won");
   elements.originLostPerformance.innerHTML = renderResult("lost");
 
   const recommendations = calculateOriginRecommendations(allRows);
-  const recommendationCards = (items, type) => items.map((item) => `<article class="origin-recommendation origin-recommendation--${type}"><span>${type === "recommended" ? "⚽ Mejor desempeño" : type === "avoid" ? "🟥 No recomendado" : "Muestra en observación"}</span><h4>${escapeHtml(item.category)}</h4><p><strong>Origen:</strong> ${escapeHtml(pickOriginLabel(item.origin))}</p><div><b>${item.won} ganados</b><b>${item.lost} perdidos</b><b>${displayValue(item.winRate)}% acierto</b></div><small>${type === "recommended" ? "Historial favorable con al menos 3 picks evaluados." : type === "avoid" ? "Balance desfavorable con al menos 3 picks evaluados." : "Aún no existe volumen o diferencia suficiente para recomendar o descartar."}</small></article>`).join("");
+  const recommendationCards = (items, type) => items.map((item) => `<article class="origin-recommendation origin-recommendation--${type}"><span>${type === "recommended" ? "⚽ Mejor desempeño" : type === "avoid" ? "🟥 No recomendado" : "Muestra en observación"}</span><h4>${escapeHtml(item.category)}</h4><p><strong>Origen:</strong> ${escapeHtml(item.originLabel || pickOriginLabel(item.originModule || item.origin))}</p><div><b>${item.won} ganados</b><b>${item.lost} perdidos</b><b>${displayValue(item.winRate)}% acierto</b></div><small>${type === "recommended" ? "Historial favorable con al menos 3 picks evaluados." : type === "avoid" ? "Balance desfavorable con al menos 3 picks evaluados." : "Aún no existe volumen o diferencia suficiente para recomendar o descartar."}</small></article>`).join("");
   elements.originRecommendations.innerHTML = `<div class="origin-recommendations__notice"><strong>Lectura responsable</strong><span>Esta clasificación resume resultados pasados; no modifica fórmulas ni garantiza el siguiente pick.</span></div><div class="origin-recommendations__columns"><section><header><h3>Mejores picks</h3><span>${recommendations.recommended.length}</span></header>${recommendationCards(recommendations.recommended, "recommended") || '<p class="muted-text">Todavía no hay picks con al menos 3 evaluados y 60% de acierto.</p>'}</section><section><header><h3>No recomendados</h3><span>${recommendations.notRecommended.length}</span></header>${recommendationCards(recommendations.notRecommended, "avoid") || '<p class="muted-text">No hay picks con balance claramente desfavorable.</p>'}</section></div>${recommendations.observing.length ? `<section class="origin-recommendations__observing"><header><h3>En observación</h3><span>${recommendations.observing.length}</span></header><div>${recommendationCards(recommendations.observing, "observing")}</div></section>` : ""}`;
 }
 
@@ -2915,7 +2917,7 @@ function renderSavedParlays() {
       <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); return `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
-          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${savedLegScoreHtml(leg)}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)} · Origen ${escapeHtml(pickOriginLabel(leg.sourceModule))} ${infoTooltip("pick_origin")}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${savedLegScoreHtml(leg)}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)} · Origen ${escapeHtml(pickOriginLabel(leg))} ${infoTooltip("pick_origin")}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
           <div class="saved-leg__controls"><label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label><div><button class="button button--secondary button--compact" type="button" data-save-parlay-leg>Guardar</button><button class="button button--danger button--compact" type="button" data-remove-parlay-leg aria-label="Quitar ${escapeHtml(leg.selection)} del parlay">Quitar</button></div></div>
         </section>`; }).join("")}</div>
       <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>
@@ -3146,7 +3148,7 @@ function collectionModule({ name, result = "No disponible", probability = null, 
   return { name, result, probability, sampleSize, source, quality, confidence, warnings: warnings.filter(Boolean), status, updatedAt };
 }
 
-function collectionPickFromMarket(fixture, pick, sourceModule, sourceLabel, backingModels = []) {
+function collectionPickFromMarket(fixture, pick, sourceModule, sourceLabel, backingModels = [], originContext = {}) {
   if (!pick?.selection || !pick?.market) return null;
   const decimalOdds = Number(pick.decimalOdds ?? pick.odds);
   const modelProbability = Number(pick.modelProbabilityPct ?? pick.probabilityPct ?? pick.confidenceScore ?? pick.goalThreatScore);
@@ -3184,6 +3186,11 @@ function collectionPickFromMarket(fixture, pick, sourceModule, sourceLabel, back
     reasoning: pick.explanation || pick.reasoning || (pick.supportingData || []).join("; ") || "Incluido por consenso mínimo entre módulos existentes.",
     requiresReview: confidenceScore < 70,
     sourceModule: "pick_analysis_snapshot",
+    originModule: sourceModule,
+    originMenu: "Picks recomendados",
+    originSection: originContext.section || sourceLabel,
+    originCategory: originContext.category || "",
+    originSubcategory: originContext.subcategory || "",
     source: sourceLabel,
     sourceLabel: "Recopilación para Picks",
     backingModels,
@@ -3194,15 +3201,22 @@ function collectionPickFromMarket(fixture, pick, sourceModule, sourceLabel, back
 
 function collectCandidateMarkets(fixture, results) {
   const candidates = [];
-  const push = (pick, module, label, backingModels) => {
-    const candidate = collectionPickFromMarket(fixture, pick, module, label, backingModels);
+  const push = (pick, module, label, backingModels, originContext = {}) => {
+    const candidate = collectionPickFromMarket(fixture, pick, module, label, backingModels, originContext);
     if (candidate && !candidates.some((item) => item.market === candidate.market && item.selection === candidate.selection)) candidates.push(candidate);
   };
-  (results.dataPicks?.picks || []).forEach((pick) => pick.canAdd && push(pick, "data_picks", "Picks basados en datos", ["Motor de Decisión"]));
-  (results.poisson?.suggestedMarkets || []).forEach((pick) => push(pick, "poisson", "Modelo Poisson", ["Poisson"]));
-  (results.teamGoals?.picks || []).forEach((pick) => push(pick, "team_goals", "Probabilidad de gol por equipo", ["Ataque vs Defensa"]));
+  (results.dataPicks?.picks || []).forEach((pick) => pick.canAdd && push(pick, "data_picks", "Motor de Decisión", ["Motor de Decisión"]));
+  (results.poisson?.suggestedMarkets || []).forEach((pick) => push(pick, "poisson", "Motor Poisson", ["Motor Poisson"]));
+  (results.teamGoals?.picks || []).forEach((pick) => push(pick, "team_goals", "Ataque vs Defensa", ["Ataque vs Defensa"]));
   (results.corners?.picks || []).forEach((pick) => push(pick, "corners", "Corners", ["Corners"]));
-  (results.specificMarkets?.groups || []).forEach((group) => (group.picks || []).forEach((pick) => push(pick, "specific_markets", "Catálogo de mercados", [group.label || "Mercado específico"])));
+  (results.specificMarkets?.groups || []).forEach((group) => (group.picks || []).forEach((pick) => {
+    const intent = specificMarketIntent(group.key);
+    push(pick, "specific_markets", "Catálogo de mercados", [group.label || "Mercado específico"], {
+      section: "Catálogo de mercados",
+      category: intent,
+      subcategory: group.label || "Mercado específico"
+    });
+  }));
   ["home", "away"].forEach((side) => (results.teamPerformance?.picks?.[side] || []).forEach((pick) => pick.canAdd && push(pick, "team_average_performance", "Rendimiento promedio por equipo", ["Tiros + pases + disciplina"])));
   (results.playerGoals?.candidates || []).forEach((candidate) => push({
     ...candidate,
@@ -3886,7 +3900,9 @@ function addDataPickToParlay(selectionKey) {
     estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
     fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.decision, decision: pick.decision,
     reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
-    analysisStatus: pick.status, sourceModule: "data_picks", source: pick.sourceProvider, bookmaker: pick.bookmaker, dataQualityScore: pick.dataQualityScore, poissonSupportScore: pick.poissonSupportScore, teamGoalSupportScore: pick.teamGoalSupportScore, contradictionLevel: pick.contradictionLevel,
+    analysisStatus: pick.status, sourceModule: "data_picks", source: pick.sourceProvider,
+    originModule: "data_picks", originMenu: "Guía de análisis", originSection: "Motor de Decisión",
+    bookmaker: pick.bookmaker, dataQualityScore: pick.dataQualityScore, poissonSupportScore: pick.poissonSupportScore, teamGoalSupportScore: pick.teamGoalSupportScore, contradictionLevel: pick.contradictionLevel,
     supportingData: pick.supportingData, contradictingData: pick.contradictingData
   }, "Pick agregado a Mi parlay. Se guardará únicamente cuando nombres y guardes el parlay.");
 }
@@ -3905,7 +3921,9 @@ function saveDataPick(selectionKey) {
     estimatedProbability: pick.estimatedProbabilityPct, expectedValue: pick.expectedValuePct,
     fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.decision, decision: pick.decision,
     reasoning: pick.explanation, requiresReview: pick.highlightColor !== "green" && pick.highlightColor !== "blue",
-    result: "pending", sourceModule: "data_picks", source: pick.sourceProvider, bookmaker: pick.bookmaker, dataQualityScore: pick.dataQualityScore, poissonSupportScore: pick.poissonSupportScore, teamGoalSupportScore: pick.teamGoalSupportScore, contradictionLevel: pick.contradictionLevel,
+    result: "pending", sourceModule: "data_picks", source: pick.sourceProvider,
+    originModule: "data_picks", originMenu: "Guía de análisis", originSection: "Motor de Decisión",
+    bookmaker: pick.bookmaker, dataQualityScore: pick.dataQualityScore, poissonSupportScore: pick.poissonSupportScore, teamGoalSupportScore: pick.teamGoalSupportScore, contradictionLevel: pick.contradictionLevel,
     supportingData: pick.supportingData, contradictingData: pick.contradictingData
   });
 }
@@ -4069,7 +4087,9 @@ function poissonLeg(selectionKey) {
     lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore,
     risk: pick.level, reasoning: `Modelo Poisson: λ ${result.lambdaHome} y ${result.lambdaAway}.`,
     requiresReview: result.status !== "available" || pick.highlightColor === "orange", analysisStatus: result.status,
-    sourceModule: "poisson", source: result.source, supportingData: pick.supportingData,
+    sourceModule: "poisson", source: result.source,
+    originModule: "poisson", originMenu: "Guía de análisis", originSection: "Motor Poisson",
+    supportingData: pick.supportingData,
     contradictingData: [...(pick.contradictingData || []), ...(result.warnings || [])]
   };
 }
@@ -4115,7 +4135,7 @@ async function loadTeamGoals() {
 function teamGoalLeg(selectionKey) {
   const fixture = selectedFixture(); const result = state.teamGoalsByFixture.get(fixture?.id);
   const pick = result?.picks?.find((item) => item.selectionKey === selectionKey); if (!fixture || !pick) return null;
-  return { id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}:team-goals`, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date, market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey, decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null, impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct, estimatedProbability: pick.modelProbabilityPct, expectedValue: pick.expectedValuePct, fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.level, reasoning: pick.supportingData.join("; "), requiresReview: result.status !== "available" || pick.highlightColor === "orange", analysisStatus: result.status, sourceModule: "team_goal_probability", source: result.source, supportingData: pick.supportingData, contradictingData: pick.contradictingData };
+  return { id: `${fixture.id}:${pick.marketKey}:${pick.selectionKey}:team-goals`, fixtureId: fixture.id, league: fixture.leagueName, home: fixture.home, away: fixture.away, date: fixture.date, market: pick.market, selection: pick.selection, marketCode: pick.marketKey, selectionCode: pick.selectionKey, decimalOdds: pick.decimalOdds, originalOdds: pick.decimalOdds, updatedOdds: null, impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct, estimatedProbability: pick.modelProbabilityPct, expectedValue: pick.expectedValuePct, fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore, risk: pick.level, reasoning: pick.supportingData.join("; "), requiresReview: result.status !== "available" || pick.highlightColor === "orange", analysisStatus: result.status, sourceModule: "team_goal_probability", source: result.source, originModule: "team_goal_probability", originMenu: "Guía de análisis", originSection: "Ataque vs Defensa", supportingData: pick.supportingData, contradictingData: pick.contradictingData };
 }
 
 function addTeamGoalPick(selectionKey) { const leg = teamGoalLeg(selectionKey); if (leg) appendPickToParlay(leg, "Pick de gol por equipo agregado a Mi parlay."); }
@@ -4156,6 +4176,15 @@ const SPECIFIC_MARKET_TOOLTIPS = Object.freeze({
   double_chance_goals: "double_chance", conservative: "risk", medium_risk: "risk", high_value_risk: "ev"
 });
 
+function specificMarketIntent(groupKey = "") {
+  if (["player_goal", "btts", "team_scores_over"].includes(groupKey)) return "Mercados ofensivos";
+  if (["team_concedes_under"].includes(groupKey)) return "Mercados defensivos";
+  if (["asian_handicap", "result_goals", "double_chance_goals"].includes(groupKey)) return "Mercados de resultado";
+  if (groupKey === "corners") return "Mercados de volumen";
+  if (["conservative", "medium_risk", "high_value_risk"].includes(groupKey)) return "Mercados por nivel de riesgo";
+  return "Mercado específico";
+}
+
 function renderSpecificMarkets(result) {
   const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
   elements.specificMarketsStatus.className = `status-badge status-badge--${statusClass(status)}`;
@@ -4174,7 +4203,7 @@ function renderSpecificMarkets(result) {
   const renderGroup = (group) => {
     const groupStatus = group.status === "available" ? "Disponible" : group.status === "partial" ? "Parcial" : "No disponible";
     const picks = (group.picks || []).map((pick, index) => `<article class="specific-pick specific-pick--${escapeHtml(pick.highlightColor)}">
-      <div><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)} · Cuota ${displayValue(pick.decimalOdds)} · Modelo ${displayValue(pick.modelProbabilityPct)}% · EV ${displayValue(pick.expectedValuePct)}%</small><small>Confianza ${displayValue(pick.confidenceScore, 0)}/100 · Origen ${escapeHtml(pickOriginLabel(pick.sourceModule))}</small><small>${escapeHtml(pick.explanation || pick.decision)}</small></div>
+      <div><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)} · Cuota ${displayValue(pick.decimalOdds)} · Modelo ${displayValue(pick.modelProbabilityPct)}% · EV ${displayValue(pick.expectedValuePct)}%</small><small>Confianza ${displayValue(pick.confidenceScore, 0)}/100 · Origen ${escapeHtml(pickOriginLabel({ ...pick, originMenu: "Catálogo de mercados", originSection: specificMarketIntent(group.key), originCategory: group.label }))}</small><small>${escapeHtml(pick.explanation || pick.decision)}</small></div>
       <div class="pick-actions"><button class="button button--secondary button--compact" type="button" data-save-specific="${escapeHtml(group.key)}:${index}">Guardar individual</button><button class="button button--primary button--compact" type="button" data-add-specific="${escapeHtml(group.key)}:${index}">Agregar al parlay</button></div>
     </article>`).join("");
     const missing = group.missingData?.length ? `<div class="specific-market__missing"><strong>Datos faltantes</strong><span>${group.missingData.map(escapeHtml).join(" · ")}</span></div>` : "";
@@ -4226,7 +4255,8 @@ function specificMarketLeg(reference) {
   const [groupKey, indexText] = String(reference || "").split(":");
   const fixture = selectedFixture();
   const result = state.specificMarketsByFixture.get(fixture?.id);
-  const pick = result?.groups?.find((group) => group.key === groupKey)?.picks?.[Number(indexText)];
+  const group = result?.groups?.find((item) => item.key === groupKey);
+  const pick = group?.picks?.[Number(indexText)];
   if (!fixture || !pick) return null;
   return {
     id: `${fixture.id}:specific:${groupKey}:${pick.selectionKey}`, fixtureId: fixture.id,
@@ -4238,7 +4268,9 @@ function specificMarketLeg(reference) {
     fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null,
     lastUpdatedAt: result.generatedAt, confidence: `${pick.confidenceScore}%`, confidenceScore: pick.confidenceScore,
     risk: pick.decision, reasoning: pick.explanation, requiresReview: false,
-    sourceModule: pick.sourceModule || "data_picks", source: result.source
+    sourceModule: pick.sourceModule || "data_picks", source: result.source,
+    originModule: pick.sourceModule || "data_picks", originMenu: "Catálogo de mercados",
+    originSection: specificMarketIntent(groupKey), originCategory: group?.label || "Mercado específico"
   };
 }
 

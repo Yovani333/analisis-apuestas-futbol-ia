@@ -24,7 +24,16 @@ function canonicalKey(pick = {}) {
   return `${market}:${selection}`;
 }
 
-function candidateFromPick(fixture, pick, sourceModule, sourceLabel, sourceFamily = sourceModule) {
+function specificMarketIntent(groupKey = "") {
+  if (["player_goal", "btts", "team_scores_over"].includes(groupKey)) return "Mercados ofensivos";
+  if (groupKey === "team_concedes_under") return "Mercados defensivos";
+  if (["asian_handicap", "result_goals", "double_chance_goals"].includes(groupKey)) return "Mercados de resultado";
+  if (groupKey === "corners") return "Mercados de volumen";
+  if (["conservative", "medium_risk", "high_value_risk"].includes(groupKey)) return "Mercados por nivel de riesgo";
+  return "Mercado específico";
+}
+
+function candidateFromPick(fixture, pick, sourceModule, sourceLabel, sourceFamily = sourceModule, originContext = {}) {
   const confidenceScore = number(pick.confidenceScore ?? pick.goalThreatScore ?? pick.finalPickScore) ?? 0;
   const decimalOdds = number(pick.decimalOdds ?? pick.odds);
   const modelProbability = number(pick.modelProbabilityPct ?? pick.probabilityPct ?? pick.estimatedProbabilityPct ?? pick.conservativeGoalProbability);
@@ -63,6 +72,10 @@ function candidateFromPick(fixture, pick, sourceModule, sourceLabel, sourceFamil
     requiresReview: Boolean(pick.requiresReview) || confidenceScore < 70 || !decimalOdds,
     sourceModule: "pick_analysis_snapshot",
     originModule: sourceModule,
+    originMenu: "Picks recomendados",
+    originSection: originContext.section || sourceLabel,
+    originCategory: originContext.category || "",
+    originSubcategory: originContext.subcategory || "",
     source: sourceLabel,
     sourceLabel: "Picks recomendados",
     backingModels: [sourceLabel],
@@ -125,15 +138,19 @@ function candidateSources(fixture, results, oddsMarkets = []) {
       if (candidate) rows.push(candidate);
     }
   };
-  add(results.dataPicks?.picks, "data_picks", "Picks basados en datos", (pick) => pick.canAdd);
-  add(results.poisson?.suggestedMarkets, "poisson", "Modelo Poisson");
-  add(results.teamGoals?.picks, "team_goals", "Probabilidad de gol por equipo");
+  add(results.dataPicks?.picks, "data_picks", "Motor de Decisión", (pick) => pick.canAdd);
+  add(results.poisson?.suggestedMarkets, "poisson", "Motor Poisson");
+  add(results.teamGoals?.picks, "team_goals", "Ataque vs Defensa");
   add(results.corners?.picks, "corners", "Corners");
   for (const group of results.specificMarkets?.groups || []) {
     for (const pick of group.picks || []) {
       const family = pick.sourceModule || "specific_markets";
-      const label = family === "poisson" ? "Modelo Poisson" : family === "team_goals" ? "Probabilidad de gol por equipo" : family === "corners" ? "Corners" : `Catálogo: ${group.label}`;
-      const candidate = candidateFromPick(fixture, pick, "specific_markets", label, family);
+      const label = family === "poisson" ? "Motor Poisson" : family === "team_goals" ? "Ataque vs Defensa" : family === "corners" ? "Corners" : `Catálogo: ${group.label}`;
+      const candidate = candidateFromPick(fixture, pick, "specific_markets", label, family, {
+        section: "Catálogo de mercados",
+        category: specificMarketIntent(group.key),
+        subcategory: group.label || "Mercado específico"
+      });
       if (candidate) rows.push(candidate);
     }
   }

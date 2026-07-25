@@ -4,12 +4,15 @@ El valor `sourceModule` se conserva como identificador técnico dentro de picks 
 
 | Origen técnico | Nombre visible | Módulo que lo genera | Tipo de pick | Estado | Flujo que lo guarda |
 | --- | --- | --- | --- | --- | --- |
-| `data_picks` | Picks basados en datos | `server/services/data-picks.service.js` | Mercados evaluados cruzando datos, cuotas, Poisson y probabilidad de gol | Activo | `addDataPickToParlay()` / `saveDataPick()` |
+| `data_picks` | Motor de Decisión | Guía de análisis / Motor de Decisión | Mercados evaluados cruzando datos, cuotas, Poisson y probabilidad de gol | Activo | `addDataPickToParlay()` / `saveDataPick()` |
 | `odds` | Cuotas | Datos de mercado / Cuotas | Selecciones normalizadas desde cuotas | Activo | `addOddsPickToParlay()` / `saveOddsPick()` |
-| `odds_rule_engine` | Análisis con datos | `server/services/rule-analysis.service.js` | Selecciones finales del Motor de Reglas | Activo | `addMarketToParlay()` / `saveAnalysisMarket()` |
-| `poisson` | Modelo Poisson | `server/services/poisson-model.service.js` | Goles, BTTS y resultados derivados de Poisson | Activo | `addPoissonPick()` / `savePoissonPick()` |
+| `odds_rule_engine` | Evaluación predictiva | Dashboard / Evaluación predictiva | Selecciones finales del Motor de Reglas | Activo | `addMarketToParlay()` / `saveAnalysisMarket()` |
+| `poisson` | Motor Poisson | Guía de análisis / Motor Poisson | Goles, BTTS y resultados derivados de Poisson | Activo | `addPoissonPick()` / `savePoissonPick()` |
 | `corners` | Corners | `server/services/corners-model.service.js` | Mercados de tiros de esquina | Activo | `addCornerPick()` / `saveCornerPick()` |
-| `team_goal_probability` | Probabilidad de gol | `server/services/team-goal-probability.service.js` | Goles por equipo y BTTS | Activo | `addTeamGoalPick()` / `saveTeamGoalPick()` |
+| `team_goal_probability` | Ataque vs Defensa | Guía de análisis / Ataque vs Defensa | Goles por equipo y BTTS | Activo | `addTeamGoalPick()` / `saveTeamGoalPick()` |
+| `team_goals` | Ataque vs Defensa | Alias interno usado por Picks recomendados | Goles por equipo y BTTS | Alias interno | `buildPickAnalysisCollection()` |
+| `specific_markets` | Catálogo de mercados | Catálogo de mercados / intención / categoría | Pick añadido desde una categoría concreta del catálogo | Activo | `addSpecificMarketPick()` / `saveSpecificMarketPick()` |
+| `pick_analysis_snapshot` | Picks recomendados | Picks recomendados / módulo de respaldo | Selección depurada por el motor de consenso | Activo | `addCollectionPick()` |
 | `team_average_performance` | Rendimiento promedio por equipo | `server/services/team-performance-picks.service.js` | DNB, doble oportunidad, gol de equipo y resultado derivados de tiros, pases, disciplina y muestra | Activo | `addTeamPerformancePick()` / `saveTeamPerformancePick()` |
 | `recent_form` | Forma reciente | `public/recent-form-recommendation.js` | Un pick contextual derivado de los partidos recientes ya mostrados en Estadísticas / forma | Activo | `addRecentFormRecommendationToParlay()` |
 | `xg_btts` | xG / xGA | `public/xg-btts-recommendation.js` | Un pick contextual BTTS derivado de xG y xGA históricos estimados | Activo | `addXgBttsRecommendationToParlay()` |
@@ -25,3 +28,14 @@ El valor `sourceModule` se conserva como identificador técnico dentro de picks 
 - `Ver Picks` es el nombre histórico de la acción visual; el módulo técnico vigente es `data_picks` y el nombre visible es **Picks basados en datos**.
 - `odds` y `odds_rule_engine` son diferentes: el primero nace directamente de Cuotas y el segundo de la decisión del Motor de Reglas.
 - Los orígenes se conservan al normalizar una selección en `public/parlay-store.js` y se muestran mediante `pickOriginLabel()` en `public/app.js`.
+
+## Ruta visual de procedencia
+
+Los picks nuevos pueden conservar cuatro niveles adicionales sin cambiar `sourceModule`: `originMenu`, `originSection`, `originCategory` y `originSubcategory`. La interfaz usa esos campos para mostrar rutas auditables como:
+
+- `Guía de análisis → Motor Poisson`.
+- `Picks recomendados → Motor de Decisión`.
+- `Catálogo de mercados → Mercados ofensivos → Ambos equipos anotan`.
+- `Picks recomendados → Catálogo de mercados → Mercados por nivel de riesgo → Mercados conservadores`.
+
+En registros históricos se usa únicamente la información realmente persistida (`originModule`, `source` o `backingModels`). Si esa información no existe, se muestra el origen general y no se inventa una categoría.

@@ -31,6 +31,7 @@ test("fusiona la misma selección y conserva consenso independiente", () => {
   assert.equal(snapshot.summary.apiRequests, 1);
   assert.equal(snapshot.summary.cacheUsed, true);
   assert.equal(snapshot.candidateMarkets[0].canAdd, false);
+  assert.equal(snapshot.candidateMarkets[0].originMenu, "Picks recomendados");
 });
 
 test("Catálogo no cuenta como respaldo independiente si reutiliza Poisson", () => {
@@ -39,12 +40,27 @@ test("Catálogo no cuenta como respaldo independiente si reutiliza Poisson", () 
   const results = {
     dataPicks: { picks: [] }, outcome: {}, poisson: { status: "available", suggestedMarkets: [poissonPick] },
     teamGoals: { picks: [] }, corners: { picks: [] }, teamPerformance: { picks: { home: [], away: [] } }, playerGoals: { candidates: [] },
-    specificMarkets: { groups: [{ label: "Conservadores", picks: [poissonPick] }] }
+    specificMarkets: { groups: [{ key: "conservative", label: "Conservadores", picks: [poissonPick] }] }
   };
   const snapshot = buildPickAnalysisCollection(dataset, results);
   assert.equal(snapshot.candidateMarkets[0].independentFamilies.length, 1);
   assert.equal(snapshot.consensus[0].status, "single_source");
   assert.equal(snapshot.candidateMarkets[0].canAdd, false);
+  assert.equal(snapshot.candidateMarkets[0].originSection, "Motor Poisson");
+});
+
+test("Picks recomendados conserva la categoría cuando el Catálogo es la fuente efectiva", () => {
+  const catalogPick = { ...basePick, sourceModule: "data_picks" };
+  const dataset = { fixture: { id: "10b", home: "A", away: "B", leagueName: "Liga" }, dataQuality: { score: 70 }, marketAnalysis: [] };
+  const results = {
+    dataPicks: { picks: [] }, outcome: {}, poisson: { suggestedMarkets: [] }, teamGoals: { picks: [] }, corners: { picks: [] },
+    teamPerformance: { picks: { home: [], away: [] } }, playerGoals: { candidates: [] },
+    specificMarkets: { groups: [{ key: "conservative", label: "Mercados conservadores", picks: [catalogPick] }] }
+  };
+  const snapshot = buildPickAnalysisCollection(dataset, results);
+  assert.equal(snapshot.candidateMarkets[0].originSection, "Catálogo de mercados");
+  assert.equal(snapshot.candidateMarkets[0].originCategory, "Mercados por nivel de riesgo");
+  assert.equal(snapshot.candidateMarkets[0].originSubcategory, "Mercados conservadores");
 });
 
 test("recomienda posible ganador cuando domina pases, tiros y entradas", () => {

@@ -1,4 +1,5 @@
 import { applyAnalysisTiming } from "./analysis-timing.js";
+import { pickOriginKey, pickOriginLabel } from "./pick-origins.js";
 
 export const PARLAY_DRAFT_KEY = "football-ai.parlay-draft.v1";
 export const SAVED_PARLAYS_KEY = "football-ai.saved-parlays.v1";
@@ -365,8 +366,9 @@ export function calculateOriginPerformance(picks = [], parlays = []) {
   };
   for (const { pick, kind } of rows) {
     if (!['won', 'lost'].includes(pick?.result)) continue;
-    const origin = pick.sourceModule || "odds";
-    const current = groups.get(origin) || { origin, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0, addedBuckets: {}, wonPicks: [], lostPicks: [], wonCategories: [], lostCategories: [], categoryPerformance: [] };
+    const origin = pickOriginKey(pick);
+    const originLabel = pickOriginLabel(pick);
+    const current = groups.get(origin) || { origin, originLabel, originModule: pick.sourceModule || "odds", evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0, addedBuckets: {}, wonPicks: [], lostPicks: [], wonCategories: [], lostCategories: [], categoryPerformance: [] };
     current.evaluated += 1;
     current[pick.result] += 1;
     if (kind === "parlay") current.parlayLegs += 1;
@@ -628,7 +630,9 @@ export function permanentlyDeleteRemovedParlayLeg(parlay, legId, now = new Date(
 export function calculateOriginRecommendations(performanceRows = []) {
   const entries = performanceRows.flatMap((row) => (row.categoryPerformance || []).map((category) => ({
     ...category,
-    origin: row.origin
+    origin: row.origin,
+    originLabel: row.originLabel,
+    originModule: row.originModule
   })));
   const recommended = entries.filter((entry) => entry.evaluated >= 3 && entry.winRate >= 60)
     .sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.category.localeCompare(b.category));
