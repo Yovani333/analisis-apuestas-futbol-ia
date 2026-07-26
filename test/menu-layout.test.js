@@ -159,6 +159,12 @@ test("parlays muestran marcador y minuto cuando el encuentro está en vivo", () 
   assert.match(app, /savedLegScoreHtml\(leg\)/);
 });
 
+test("parlays pendientes aparecen primero, perdidos al final y muestran porcentaje ganado", () => {
+  assert.match(app, /resultOrder = Object\.freeze\(\{ pending: 0, won: 1, void: 2, lost: 3 \}\)/);
+  assert.match(app, /calculateParlayWinProgress\(parlay\.legs\)/);
+  assert.match(app, /parlay-win-progress/);
+});
+
 test("En vivo permite scroll vertical interno y continuar en la pagina", () => {
   assert.match(styles, /\.live-data-content \.detail-table-wrap \{[^}]*max-height: min\(72vh, 720px\)[^}]*overflow: auto[^}]*overscroll-behavior-y: auto/);
 });

@@ -172,6 +172,17 @@ export function resolveSelectionCode(leg = {}) {
   return null;
 }
 
+export function calculateParlayWinProgress(legs = []) {
+  const selections = Array.isArray(legs) ? legs.filter(Boolean) : [];
+  const won = selections.filter((leg) => leg.result === "won").length;
+  const total = selections.length;
+  return {
+    won,
+    total,
+    percentage: total ? Number((won / total * 100).toFixed(1)) : 0
+  };
+}
+
 export function canAutomaticallySettlePick(leg = {}) {
   return AUTO_SETTLEMENT_CODES.has(resolveSelectionCode(leg));
 }

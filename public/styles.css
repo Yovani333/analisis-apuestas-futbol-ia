@@ -1735,7 +1735,11 @@ body {
 .saved-pick__result-control select { min-width: 118px; }
 .saved-market-metrics { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px !important; }
 .saved-market-metrics > span { display: grid; gap: 2px; padding: 6px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
-.saved-parlay__summary { display: flex; align-items: center; gap: 8px; }
+.saved-parlay__summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.parlay-win-progress { display: grid; grid-template-columns: auto auto; gap: 1px 5px; align-items: baseline; padding: 5px 7px; color: var(--muted); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
+.parlay-win-progress small { font-size: .57rem; }
+.parlay-win-progress small:last-child { grid-column: 1 / -1; }
+.parlay-win-progress strong { color: var(--text); font-size: .72rem; }
 .parlay-expand { width: 34px; height: 34px; color: var(--text); font-size: 1.15rem; font-weight: 900; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
 .odds-change--up { color: var(--success); }
 .odds-change--down { color: var(--danger); }

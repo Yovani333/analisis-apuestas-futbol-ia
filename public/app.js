@@ -2,7 +2,7 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  assessPickHistoricalRecommendation, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, createSavedParlay, createSavedPick,
+  assessPickHistoricalRecommendation, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, createSavedParlay, createSavedPick,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
 } from "./parlay-store.js?v=20260725-origin-winrate-v2";
@@ -3052,7 +3052,9 @@ function renderOriginPerformance() {
 
 function renderSavedParlays() {
   const allActiveParlays = activeSavedParlays();
-  const activeParlays = filterParlaysByFixtureDate(allActiveParlays, state.savedDateFilter);
+  const resultOrder = Object.freeze({ pending: 0, won: 1, void: 2, lost: 3 });
+  const activeParlays = filterParlaysByFixtureDate(allActiveParlays, state.savedDateFilter)
+    .sort((left, right) => (resultOrder[calculateParlayResult(left.legs)] ?? 2) - (resultOrder[calculateParlayResult(right.legs)] ?? 2));
   const metrics = calculateHistoryMetrics(activeParlays);
   const legCounts = calculateParlayLegCounts(activeParlays);
   elements.savedParlayCount.textContent = allActiveParlays.length + activeSavedPicks().length;
@@ -3077,12 +3079,13 @@ function renderSavedParlays() {
   const preferredOrigins = favoriteOriginKeys();
   elements.savedParlaysList.innerHTML = activeParlays.map((parlay) => {
     const result = calculateParlayResult(parlay.legs);
+    const winProgress = calculateParlayWinProgress(parlay.legs);
     const expanded = state.expandedParlays.has(parlay.id);
     parlay.result = result;
     return `<article class="saved-parlay saved-parlay--${result}" data-parlay-id="${escapeHtml(parlay.id)}">
       <header class="saved-parlay__header">
         <div><span>Parlay · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(parlay.createdAt)))}</time></div>
-        <div class="saved-parlay__summary"><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong><button class="parlay-expand" type="button" data-toggle-parlay aria-expanded="${expanded}">${expanded ? "−" : "+"}</button></div>
+        <div class="saved-parlay__summary"><span class="parlay-win-progress" title="${winProgress.won} de ${winProgress.total} selecciones ganadas"><small>Picks ganados</small><strong>${displayValue(winProgress.percentage)}%</strong><small>${winProgress.won}/${winProgress.total}</small></span><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong><button class="parlay-expand" type="button" data-toggle-parlay aria-expanded="${expanded}">${expanded ? "−" : "+"}</button></div>
       </header>
       <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); const favoriteOrigin = isActiveSavedPick(leg) && preferredOrigins.has(pickOriginKey(leg)); return `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
