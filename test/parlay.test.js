@@ -495,7 +495,7 @@ test("resultados por competición conserva el detalle ganado y perdido", () => {
   assert.equal(row.lostPicks[0].originLabel, "Selector obligatorio 1X2");
 });
 
-test("la búsqueda prioriza hasta dos orígenes con más picks ganados por competición", () => {
+test("la búsqueda prioriza hasta dos orígenes por porcentaje de acierto evaluado", () => {
   const leaders = calculateCompetitionOriginLeaders([
     { leagueId: 253, league: "MLS", result: "won", sourceModule: "h2h" },
     { leagueId: 253, league: "MLS", result: "won", sourceModule: "h2h" },
@@ -505,9 +505,22 @@ test("la búsqueda prioriza hasta dos orígenes con más picks ganados por compe
     { leagueId: 71, league: "Brasileirão Serie A", result: "won", sourceModule: "poisson" },
     { leagueId: 253, league: "MLS", result: "pending", sourceModule: "recent_form" }
   ], [], { leagueIds: [253], competitions: ["MLS"], limit: 2 });
-  assert.deepEqual(leaders.map((row) => [row.originLabel, row.won]), [["Head to head", 2], ["Corners", 1]]);
-  assert.equal(leaders[0].evaluated, 3);
+  assert.deepEqual(leaders.map((row) => [row.originLabel, row.winRate]), [["Corners", 100], ["Forma reciente", 100]]);
+  assert.equal(leaders[0].evaluated, 1);
   assert.equal(leaders.length, 2);
+});
+
+test("un origen con más ganados no supera a otro con mejor proporción entre ganados y perdidos", () => {
+  const leaders = calculateCompetitionOriginLeaders([
+    ...Array.from({ length: 7 }, (_, index) => ({ id: `volume-w-${index}`, league: "MLS", result: "won", sourceModule: "h2h" })),
+    ...Array.from({ length: 5 }, (_, index) => ({ id: `volume-l-${index}`, league: "MLS", result: "lost", sourceModule: "h2h" })),
+    ...Array.from({ length: 3 }, (_, index) => ({ id: `rate-w-${index}`, league: "MLS", result: "won", sourceModule: "recent_form" })),
+    { id: "rate-l", league: "MLS", result: "lost", sourceModule: "recent_form" }
+  ], [], { competitions: ["MLS"], limit: 2 });
+  assert.deepEqual(leaders.map((row) => [row.originLabel, row.won, row.lost, row.evaluated, row.winRate]), [
+    ["Forma reciente", 3, 1, 4, 75],
+    ["Head to head", 7, 5, 12, 58.3]
+  ]);
 });
 
 test("los orígenes de competición conservan la ruta detallada y no inventan ganados", () => {

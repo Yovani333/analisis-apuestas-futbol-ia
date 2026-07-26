@@ -539,7 +539,7 @@ export function calculateCompetitionOriginLeaders(picks = [], parlays = [], { le
   }
   const safeLimit = Math.max(1, Math.min(2, Number(limit) || 2));
   return [...groups.values()].filter((row) => row.won > 0)
-    .sort((a, b) => b.won - a.won || b.winRate - a.winRate || b.evaluated - a.evaluated || a.originLabel.localeCompare(b.originLabel, "es"))
+    .sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || b.won - a.won || a.originLabel.localeCompare(b.originLabel, "es"))
     .slice(0, safeLimit);
 }
 

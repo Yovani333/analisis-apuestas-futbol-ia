@@ -5,7 +5,7 @@ import {
   assessPickHistoricalRecommendation, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, createSavedParlay, createSavedPick,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260725-pick-history-warning-v1";
+} from "./parlay-store.js?v=20260725-origin-winrate-v2";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -1133,7 +1133,7 @@ function renderMatches() {
       competitions: [league.name, ...fixtures.map((fixture) => fixture.leagueName)],
       limit: 2
     });
-    const originLeadersHtml = originLeaders.length ? `<div class="league-origin-guides" aria-label="Orígenes con más picks ganados en ${escapeHtml(league.name)}"><span>Mejor origen:</span>${originLeaders.map((leader, index) => `<button class="league-origin-guide" type="button" data-competition-origin="${escapeHtml(leader.navigationOrigin)}" data-origin-league="${escapeHtml(league.slug)}" data-origin-label="${escapeHtml(leader.originLabel)}" title="${escapeHtml(`${leader.won} picks ganados de ${leader.evaluated} evaluados · ${leader.winRate}% de acierto`)}"><b>${index + 1}</b>${escapeHtml(leader.originLabel)}<small>${leader.won} G</small></button>`).join("")}</div>` : "";
+    const originLeadersHtml = originLeaders.length ? `<div class="league-origin-guides" aria-label="Orígenes con mejor porcentaje evaluado en ${escapeHtml(league.name)}"><span>Mejor origen:</span>${originLeaders.map((leader, index) => `<button class="league-origin-guide" type="button" data-competition-origin="${escapeHtml(leader.navigationOrigin)}" data-origin-league="${escapeHtml(league.slug)}" data-origin-label="${escapeHtml(leader.originLabel)}" title="${escapeHtml(`${leader.won} ganados y ${leader.lost} perdidos de ${leader.evaluated} evaluados · ${leader.winRate}% de acierto`)}"><b>${index + 1}</b>${escapeHtml(leader.originLabel)}<small>${leader.winRate}% · ${leader.won}/${leader.evaluated}</small></button>`).join("")}</div>` : "";
     return `
     <section class="league-group" aria-labelledby="league-${escapeHtml(league.slug)}">
       <header class="league-group__header">
