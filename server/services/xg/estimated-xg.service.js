@@ -1,12 +1,12 @@
-import { calculateEstimatedXG, MODEL_VERSION } from "./estimated-xg-calculator.js";
+import { calculateEstimatedXG, MODEL_FORMULA, MODEL_VERSION } from "./estimated-xg-calculator.js";
 import { calculateEstimatedXgConfidence } from "./estimated-xg-confidence.js";
 import { extractEstimatedXgInputs } from "./xg-data-extractor.js";
 
-const WARNING = "xG/xGA estimado calculado internamente con estadísticas del partido desde API-Football. No corresponde a xG oficial.";
+const WARNING = "xG/xGA estimado internamente con tiros a puerta y penales de API-Football. No corresponde a xG oficial.";
 
 function hasMinimumInputs(team) {
   return team.statisticsFound
-    && (team.rawStats.totalShots !== null || team.rawStats.shotsOnGoal !== null);
+    && team.rawStats.shotsOnGoal !== null;
 }
 
 function statusFromConfidence(score) {
@@ -23,13 +23,14 @@ function emptyResult(fixtureId, homeTeam, awayTeam, updatedAt, note = "No hay es
   return {
     status: "not_available", type: "fixture_estimated", source: "api-football-internal-model",
     modelVersion: MODEL_VERSION, scope: "current_fixture", fixtureId,
+    calculation: { formula: MODEL_FORMULA, penaltyAdjustmentMode: "shots_on_goal_includes_penalty" },
     homeTeam: { ...homeTeam, estimatedXG: null, estimatedXGA: null },
     awayTeam: { ...awayTeam, estimatedXG: null, estimatedXGA: null },
     confidence: { score: 0, label: "not_available", missingFields: [], optionalMissingFields: [], notes: [note] },
     diagnostics: {
       statisticsAvailable: {
-        home: hasRecordedValue(homeTeam?.rawStats?.totalShots) || hasRecordedValue(homeTeam?.rawStats?.shotsOnGoal),
-        away: hasRecordedValue(awayTeam?.rawStats?.totalShots) || hasRecordedValue(awayTeam?.rawStats?.shotsOnGoal)
+        home: hasRecordedValue(homeTeam?.rawStats?.shotsOnGoal),
+        away: hasRecordedValue(awayTeam?.rawStats?.shotsOnGoal)
       },
       eventsAvailable: false,
       detectedPenalties: { home: 0, away: 0 }
@@ -67,11 +68,12 @@ export function buildEstimatedXgFromDataset(dataset) {
   const notes = [...new Set([...homeConfidence.notes, ...awayConfidence.notes])];
   const penaltyCount = extracted.homeTeam.rawStats.penalties + extracted.awayTeam.rawStats.penalties;
   if (penaltyCount === 0) notes.push("No se detectaron eventos de penal o la fuente no los proporcionó.");
-  if (homeEstimatedXG > 6 || awayEstimatedXG > 6) notes.push("Resultado superior a 6.00; revisar posibles datos inflados o inconsistentes.");
+  if (homeEstimatedXG > 4 || awayEstimatedXG > 4) notes.push("Resultado superior a 4.00; revisar posibles datos inflados o inconsistentes.");
 
   return {
     status: statusFromConfidence(score), type: "fixture_estimated", source: "api-football-internal-model",
     modelVersion: MODEL_VERSION, scope: "current_fixture", fixtureId: extracted.fixtureId,
+    calculation: { formula: MODEL_FORMULA, penaltyAdjustmentMode: "shots_on_goal_includes_penalty" },
     homeTeam: {
       ...baseTeam(extracted.homeTeam), estimatedXG: homeEstimatedXG, estimatedXGA: awayEstimatedXG,
       confidence: homeConfidence
@@ -104,6 +106,7 @@ export async function getEstimatedXgForFixture(fixtureId, { loadFixtureDataset }
     return {
       status: "failed", type: "fixture_estimated", source: "api-football-internal-model",
       modelVersion: MODEL_VERSION, scope: "current_fixture", fixtureId: String(fixtureId), homeTeam: null, awayTeam: null,
+      calculation: { formula: MODEL_FORMULA, penaltyAdjustmentMode: "shots_on_goal_includes_penalty" },
       confidence: { score: 0, label: "not_available", missingFields: [], optionalMissingFields: [], notes: ["No fue posible procesar las estadísticas del fixture."] },
       diagnostics: {
         statisticsAvailable: { home: false, away: false },

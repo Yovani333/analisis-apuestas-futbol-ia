@@ -8,7 +8,8 @@ import {
 import { normalizeMatchResearchData } from "./match-research.service.js";
 import { collectExternalSourceData } from "./source-orchestrator.service.js";
 import { buildEstimatedXgFromDataset } from "./xg/estimated-xg.service.js";
-import { getHistoricalEstimatedXgXga } from "./xg/historical-estimated-xg.service.js";
+import { MODEL_VERSION as ESTIMATED_XG_MODEL_VERSION } from "./xg/estimated-xg-calculator.js";
+import { getHistoricalEstimatedXgXga, HISTORICAL_MODEL_VERSION } from "./xg/historical-estimated-xg.service.js";
 import {
   recordApiFootballCacheHit,
   recordApiFootballCacheMiss,
@@ -1191,10 +1192,22 @@ function withCacheInfo(dataset, info) {
   };
 }
 
+function hasCurrentXgModelVersions(dataset, includeHistorical) {
+  const fixtureEstimateIsCurrent = !dataset?.estimatedXg
+    || dataset.estimatedXg.modelVersion === ESTIMATED_XG_MODEL_VERSION;
+  const historicalEstimateIsCurrent = !includeHistorical
+    || dataset?.historicalEstimatedXg?.modelVersion === HISTORICAL_MODEL_VERSION;
+  return fixtureEstimateIsCurrent && historicalEstimateIsCurrent;
+}
+
 export async function getFixtureDataset(fixtureId, { forceRefresh = false, includeHistorical = false } = {}) {
   const key = String(fixtureId);
   const cachedDataset = datasetCache.get(key);
-  if (!forceRefresh && cachedDataset?.expiresAt > Date.now() && (!includeHistorical || cachedDataset.value.historicalEstimatedXg)) {
+  const cachedXgIsCurrent = cachedDataset
+    ? hasCurrentXgModelVersions(cachedDataset.value, includeHistorical)
+    : false;
+  if (!forceRefresh && cachedDataset?.expiresAt > Date.now()
+    && (!includeHistorical || cachedDataset.value.historicalEstimatedXg) && cachedXgIsCurrent) {
     return withCacheInfo(cachedDataset.value, cacheMeta({
       status: "hit",
       source: "memory-dataset-cache",
@@ -1204,7 +1217,11 @@ export async function getFixtureDataset(fixtureId, { forceRefresh = false, inclu
     }));
   }
   const persistedDataset = !forceRefresh ? await loadPersistedFixtureDataset(key) : null;
-  if (!forceRefresh && persistedDataset && (!includeHistorical || persistedDataset.historicalEstimatedXg)) {
+  const persistedXgIsCurrent = persistedDataset
+    ? hasCurrentXgModelVersions(persistedDataset, includeHistorical)
+    : false;
+  if (!forceRefresh && persistedDataset && (!includeHistorical || persistedDataset.historicalEstimatedXg)
+    && persistedXgIsCurrent) {
     if (scheduledDatasetNeedsRevalidation(persistedDataset)) {
       persistedDataset.cacheRevalidation = {
         reason: "scheduled_low_quality_or_incomplete_history",

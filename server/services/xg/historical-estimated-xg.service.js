@@ -1,4 +1,4 @@
-import { calculateEstimatedXG } from "./estimated-xg-calculator.js";
+import { calculateEstimatedXG, MODEL_FORMULA } from "./estimated-xg-calculator.js";
 import { calculateEstimatedXgConfidence } from "./estimated-xg-confidence.js";
 import {
   extractPenaltyCountFromEvents,
@@ -10,12 +10,12 @@ import {
   shrinkEstimate
 } from "../predictive-adjustments.service.js";
 
-export const HISTORICAL_MODEL_VERSION = "historical-estimated-xg-v2";
+export const HISTORICAL_MODEL_VERSION = "historical-estimated-xg-v3-shots-on-target";
 export const HISTORICAL_XG_WARNING = "xG / xGA estimado con base en partidos anteriores. No corresponde a xG oficial ni al xG del partido actual.";
 export const WORLD_CUP_XG_WARNING = "Modo Mundial: muestra estadística limitada. El xG/xGA histórico estimado usa partidos anteriores de cada selección y debe interpretarse con cautela.";
 
 const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
-const REQUIRED_FIELDS = ["totalShots", "shotsOnGoal", "shotsInsideBox", "shotsOutsideBox", "cornerKicks"];
+const REQUIRED_FIELDS = ["shotsOnGoal"];
 const HISTORY_REQUEST_CONCURRENCY = 2;
 
 async function mapWithConcurrency(rows, concurrency, worker) {
@@ -33,7 +33,7 @@ async function mapWithConcurrency(rows, concurrency, worker) {
 }
 
 function hasMinimumInputs(stats) {
-  return stats.totalShots !== null && stats.shotsOnGoal !== null;
+  return stats.shotsOnGoal !== null;
 }
 
 function fixtureDate(row) {
@@ -198,8 +198,8 @@ async function buildTeamHistory({
   const missingFields = [...new Set(records.flatMap((record) => record.missingFields))];
   const optionalMissingFields = [...new Set(records.flatMap((record) => record.optionalMissingFields || []))];
   const notes = [...confidence.notes];
-  if (records.some((record) => record.estimatedXG > 6 || record.estimatedXGA > 6)) {
-    notes.push("Un resultado histórico fue superior a 6.00; revisar posibles datos inflados o inconsistentes.");
+  if (records.some((record) => record.estimatedXG > 4 || record.estimatedXGA > 4)) {
+    notes.push("Un resultado histórico fue superior a 4.00; revisar posibles datos inflados o inconsistentes.");
   }
   const weightedXg = calculateRecencyWeightedAverage(records.map((record) => record.estimatedXG), recencyDecay);
   const weightedXga = calculateRecencyWeightedAverage(records.map((record) => record.estimatedXGA), recencyDecay);
@@ -225,6 +225,7 @@ async function buildTeamHistory({
     },
     confidence: { ...confidence, notes },
     calculation: {
+      formula: MODEL_FORMULA,
       recencyDecay,
       recencyWeightingApplied: records.length > 1,
       shrinkageApplied: adjustedXg.applied && adjustedXga.applied,
@@ -292,6 +293,7 @@ export async function getHistoricalEstimatedXgXga({
         notes
       },
       calculation: {
+        formula: MODEL_FORMULA,
         recencyDecay,
         priorStrength,
         shrinkageApplied: home.calculation.shrinkageApplied && away.calculation.shrinkageApplied,

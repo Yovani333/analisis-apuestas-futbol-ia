@@ -42,7 +42,8 @@ test("partido en vivo con estadísticas completas calcula xG/xGA del fixture", (
   assert.equal(result.status, "available");
   assert.equal(result.type, "fixture_estimated");
   assert.equal(result.scope, "current_fixture");
-  assert.equal(result.modelVersion, "fixture-estimated-xg-v1");
+  assert.equal(result.modelVersion, "fixture-estimated-xg-v2-shots-on-target");
+  assert.equal(result.calculation.formula, "xG_est = shotsOnGoal * 0.30 + penalties * 0.46");
   assert.equal(result.homeTeam.estimatedXGA, result.awayTeam.estimatedXG);
   assert.equal(result.awayTeam.estimatedXGA, result.homeTeam.estimatedXG);
   assert.equal(result.confidence.label, "high");
@@ -62,12 +63,13 @@ test("partido finalizado con estadísticas completas conserva el cálculo del fi
   assert.ok(Number.isFinite(result.awayTeam.estimatedXG));
 });
 
-test("marca parcial cuando faltan tiros dentro y fuera del área", () => {
+test("mantiene disponible el cálculo cuando faltan variables descartadas por la nueva fórmula", () => {
   const partial = { totalShots: 10, shotsOnGoal: 4, cornerKicks: 5 };
   const result = buildEstimatedXgFromDataset(dataset(partial, partial));
-  assert.equal(result.status, "partial");
-  assert.equal(result.confidence.label, "medium");
-  assert.ok(result.confidence.missingFields.includes("shotsInsideBox"));
+  assert.equal(result.status, "available");
+  assert.equal(result.confidence.label, "high");
+  assert.ok(!result.confidence.missingFields.includes("shotsInsideBox"));
+  assert.ok(result.confidence.optionalMissingFields.includes("shotsInsideBox"));
   assert.ok(result.confidence.optionalMissingFields.includes("dangerousAttacks"));
   assert.ok(!result.confidence.missingFields.includes("dangerousAttacks"));
 });
@@ -88,7 +90,7 @@ test("no calcula estadísticas del mismo fixture antes del inicio", () => {
   assert.match(result.confidence.notes.join(" "), /antes de que comience/);
 });
 
-test("suma 0.76 por un penal detectado", () => {
+test("agrega solo 0.46 por penal para no duplicar el tiro a puerta ya contabilizado", () => {
   const base = calculateEstimatedXG({ totalShots: 10, shotsOnGoal: 4, penalties: 0 });
   const result = buildEstimatedXgFromDataset(dataset(
     { totalShots: 10, shotsOnGoal: 4 }, { totalShots: 10, shotsOnGoal: 4 },
@@ -96,23 +98,27 @@ test("suma 0.76 por un penal detectado", () => {
   ));
   assert.equal(result.homeTeam.rawStats.penalties, 1);
   assert.equal(result.diagnostics.detectedPenalties.home, 1);
-  assert.equal(result.homeTeam.estimatedXG, Number((base + 0.76).toFixed(2)));
+  assert.equal(result.homeTeam.estimatedXG, Number((base + 0.46).toFixed(2)));
 });
 
-test("Big Chances aumenta el xG estimado cuando API-Football lo proporciona", () => {
+test("grandes ocasiones, corners y tiros totales no alteran el nuevo xG", () => {
   const base = calculateEstimatedXG({ totalShots: 10, shotsOnGoal: 4, bigChances: 0 });
-  const withBigChances = calculateEstimatedXG({ totalShots: 10, shotsOnGoal: 4, bigChances: 2 });
-  assert.equal(withBigChances, Number((base + 0.36).toFixed(2)));
+  const withDiscardedVariables = calculateEstimatedXG({
+    totalShots: 30, shotsOnGoal: 4, shotsInsideBox: 20, shotsOutsideBox: 10,
+    blockedShots: 8, cornerKicks: 14, bigChances: 7, dangerousAttacks: 120
+  });
+  assert.equal(withDiscardedVariables, base);
+  assert.equal(base, 1.2);
 });
 
-test("un penal fallado también suma 0.76 al xG estimado", () => {
+test("un penal fallado detectado aplica el ajuste conservador de 0.46", () => {
   const base = calculateEstimatedXG({ totalShots: 10, shotsOnGoal: 4, penalties: 0 });
   const result = buildEstimatedXgFromDataset(dataset(
     { totalShots: 10, shotsOnGoal: 4 }, { totalShots: 10, shotsOnGoal: 4 },
     [{ team: { id: 1 }, type: "Goal", detail: "Missed Penalty" }]
   ));
   assert.equal(result.homeTeam.rawStats.penalties, 1);
-  assert.equal(result.homeTeam.estimatedXG, Number((base + 0.76).toFixed(2)));
+  assert.equal(result.homeTeam.estimatedXG, Number((base + 0.46).toFixed(2)));
 });
 
 test("sin eventos de penal agrega la nota obligatoria", () => {
@@ -121,11 +127,12 @@ test("sin eventos de penal agrega la nota obligatoria", () => {
   assert.match(result.confidence.notes.join(" "), /No se detectaron eventos de penal/);
 });
 
-test("solo tiros totales y a puerta produce confianza baja", () => {
+test("tiros a puerta es el único campo estadístico obligatorio", () => {
   const sparse = { totalShots: 8, shotsOnGoal: 3 };
   const result = buildEstimatedXgFromDataset(dataset(sparse, sparse));
-  assert.equal(result.status, "partial");
-  assert.equal(result.confidence.label, "low");
+  assert.equal(result.status, "available");
+  assert.equal(result.confidence.label, "high");
+  assert.deepEqual(result.confidence.missingFields, []);
 });
 
 test("0 tiros produce xG 0 cuando no existen penales", () => {
@@ -143,7 +150,7 @@ test("estadísticas infladas generan una nota de revisión", () => {
   const inflated = { ...complete, totalShots: 100, shotsOnGoal: 50, shotsInsideBox: 70, dangerousAttacks: 200 };
   const result = buildEstimatedXgFromDataset(dataset(inflated, complete));
   assert.ok(result.homeTeam.estimatedXG > 6);
-  assert.match(result.confidence.notes.join(" "), /superior a 6\.00/);
+  assert.match(result.confidence.notes.join(" "), /superior a 4\.00/);
 });
 
 test("la función principal devuelve failed sin propagar detalles técnicos", async () => {

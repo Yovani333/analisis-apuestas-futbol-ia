@@ -478,7 +478,7 @@ test("integra xG estimado del mismo fixture únicamente cuando el partido inici�
   assert.equal(normalized.xgXga.scope, "current_fixture");
   assert.equal(normalized.xgXga.source, "api-football-internal-model");
   assert.equal(normalized.xgXga.analysisUse, "live_match_context_only");
-  assert.equal(normalized.xgXga.modelVersion, "fixture-estimated-xg-v1");
+  assert.equal(normalized.xgXga.modelVersion, "fixture-estimated-xg-v2-shots-on-target");
   assert.match(normalized.xgXga.message, /fixture actual/i);
   assert.match(normalized.xgXga.warning, /No corresponde a xG oficial/);
   assert.deepEqual(normalized.sourceCoverage.find((item) => item.module === "xgXga").activeSources, ["API-Football + modelo interno"]);
@@ -579,7 +579,7 @@ test("el prompt explica el tratamiento obligatorio del xG estimado", () => {
   const prompt = buildAnalysisContextFromMatchData(normalizeMatchResearchData(dataset));
   assert.match(prompt.instructions, /llámalo siempre "xG\/xGA estimado del partido"/);
   assert.match(prompt.instructions, /live_match_context_only/);
-  assert.match(prompt.input, /fixture-estimated-xg-v1/);
+  assert.match(prompt.input, /fixture-estimated-xg-v2-shots-on-target/);
 });
 
 test("las guardas corrigen cualquier mención de xG oficial cuando es estimado", () => {

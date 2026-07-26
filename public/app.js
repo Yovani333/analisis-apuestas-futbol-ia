@@ -18,7 +18,7 @@ import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from ".
 import { filterValidEvidenceSnapshots, isValidEvidenceSnapshot } from "./evidence-validity.js?v=20260719-remove-invalid-v1";
 import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2h-suggestion-v1";
 import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.js?v=20260722-recent-form-v1";
-import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=20260724-xg-btts-v1";
+import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=20260725-xg-btts-v2";
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
@@ -1411,7 +1411,7 @@ function researchRecommendationSummary(moduleKey, analysis) {
     return {
       selection: analysis.recommendedSelection, confidence: analysis.confidence,
       metric: analysis.selectedScore, metricLabel: "respaldo",
-      button: `<button class="pick-add-icon pick-add-icon--table" type="button" data-add-xg-btts-pick data-xg-btts-selection="${escapeHtml(analysis.recommendedSelection)}" data-xg-btts-confidence="${escapeHtml(analysis.confidence)}" data-xg-btts-score="${escapeHtml(analysis.selectedScore)}" data-xg-btts-estimated="${escapeHtml(analysis.estimatedBttsYes)}" data-xg-btts-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>`
+      button: `<button class="pick-add-icon pick-add-icon--table" type="button" data-add-xg-btts-pick data-xg-btts-selection="${escapeHtml(analysis.recommendedSelection)}" data-xg-btts-confidence="${escapeHtml(analysis.confidence)}" data-xg-btts-score="${escapeHtml(analysis.selectedScore)}" data-xg-btts-estimated="${escapeHtml(analysis.estimatedBttsYes)}" data-xg-btts-version="${escapeHtml(analysis.modelVersion)}" data-xg-btts-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>`
     };
   }
   return null;
@@ -1728,7 +1728,7 @@ function renderXgBttsSuggestion(analysis, homeName, awayName) {
   return `<section class="xg-btts-suggestion xg-btts-suggestion--${recommended ? confidenceClass : "unavailable"}">
     <header><div><p class="eyebrow">Análisis contextual determinístico</p><h3>Pick BTTS por xG / xGA</h3></div><span class="status-badge status-badge--${confidenceClass}">${escapeHtml(recommended ? analysis.confidence : "Sin pick")}</span></header>
     <div class="xg-btts-suggestion__summary">
-      <div><span>Selección</span><div class="h2h-suggestion__pick-line"><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick recomendado por xG / xGA")}</strong>${recommended ? `<button class="pick-add-icon" type="button" data-add-xg-btts-pick data-xg-btts-selection="${escapeHtml(analysis.recommendedSelection)}" data-xg-btts-confidence="${escapeHtml(analysis.confidence)}" data-xg-btts-score="${escapeHtml(analysis.selectedScore)}" data-xg-btts-estimated="${escapeHtml(analysis.estimatedBttsYes)}" data-xg-btts-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>` : ""}</div><small>${recommended ? "Recomendación disponible" : "No se fuerza una recomendación"}</small></div>
+      <div><span>Selección</span><div class="h2h-suggestion__pick-line"><strong>${escapeHtml(analysis?.recommendedSelection || "Sin pick recomendado por xG / xGA")}</strong>${recommended ? `<button class="pick-add-icon" type="button" data-add-xg-btts-pick data-xg-btts-selection="${escapeHtml(analysis.recommendedSelection)}" data-xg-btts-confidence="${escapeHtml(analysis.confidence)}" data-xg-btts-score="${escapeHtml(analysis.selectedScore)}" data-xg-btts-estimated="${escapeHtml(analysis.estimatedBttsYes)}" data-xg-btts-version="${escapeHtml(analysis.modelVersion)}" data-xg-btts-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>` : ""}</div><small>${recommended ? "Recomendación disponible" : "No se fuerza una recomendación"}</small></div>
       <div><span>Confianza del análisis</span><strong>${escapeHtml(analysis?.confidence || "Baja")}</strong><small>Calidad ${escapeHtml(analysis?.dataQuality || "Baja")}</small></div>
       <div><span>Muestra</span><strong>${escapeHtml(homeName)}: ${displayValue(analysis?.homeSampleSize, 0)} · ${escapeHtml(awayName)}: ${displayValue(analysis?.awaySampleSize, 0)}</strong><small>Máximo 8 partidos por equipo</small></div>
       <div><span>Fuerza esperada</span><strong>${displayValue(analysis?.expectedGoalStrengthHome)} / ${displayValue(analysis?.expectedGoalStrengthAway)}</strong><small>Local / visitante</small></div>
@@ -1782,6 +1782,7 @@ function xgBttsRecommendationLeg(dataset = {}) {
     sourceModule: "xg_btts",
     sourceLabel: "xG / xGA",
     source: "API-Football + análisis BTTS determinístico por xG/xGA",
+    modelVersion: dataset.xgBttsVersion || "xg-btts-poisson-v2",
     supportingData: [
       Number.isFinite(score) ? `Índice de respaldo: ${score}/100` : "",
       Number.isFinite(estimatedBttsYes) ? `Estimación matemática auxiliar BTTS Sí: ${estimatedBttsYes}%` : ""
@@ -1927,9 +1928,9 @@ function renderResearchModuleDetail(moduleKey, research) {
     const teams = detailTable(["Equipo", estimated ? "xG estimado" : "xG", estimated ? "xGA estimado" : "xGA", "Modo", "Muestra", "Confianza"], teamRows);
     const mandatoryText = historicalEstimated
       ? "xG / xGA estimado con base en partidos anteriores. No requiere enfrentamiento directo entre ambos equipos. No corresponde a xG real ni oficial del partido actual."
-      : "xG/xGA estimado calculado internamente con estadísticas del partido desde API-Football. No corresponde a xG oficial.";
+      : "xG/xGA estimado internamente con tiros a puerta y penales desde API-Football. No corresponde a xG oficial.";
     const metadata = estimated
-      ? `<div class="detail-note detail-note--info"><strong>API-Football + modelo interno · ${escapeHtml(module.modelVersion || (historicalEstimated ? "historical-estimated-xg-v1" : "fixture-estimated-xg-v1"))}</strong><span>${escapeHtml(mandatoryText)}</span></div>
+      ? `<div class="detail-note detail-note--info"><strong>API-Football + modelo interno · ${escapeHtml(module.modelVersion || (historicalEstimated ? "historical-estimated-xg-v3-shots-on-target" : "fixture-estimated-xg-v2-shots-on-target"))}</strong><span>${escapeHtml(mandatoryText)}</span></div>
         ${module.missingFields?.length ? `<div class="detail-note"><strong>Datos esenciales faltantes</strong><span>${escapeHtml(xgFieldList(module.missingFields))}. La ausencia de estos campos reduce la confianza del cálculo.</span></div>` : ""}
         ${module.optionalMissingFields?.length ? `<div class="detail-note detail-note--info"><strong>Datos complementarios no proporcionados</strong><span>${escapeHtml(xgFieldList(module.optionalMissingFields))}. No bloquean el cálculo ni reducen por sí solos la muestra.</span></div>` : ""}
         ${module.notes?.length ? `<div class="detail-note"><strong>Notas de revisión</strong><span>${escapeHtml(module.notes.join(" "))}</span></div>` : ""}`

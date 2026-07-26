@@ -1,9 +1,10 @@
 const REQUIRED_FIELDS = Object.freeze([
-  "totalShots", "shotsOnGoal", "shotsInsideBox", "shotsOutsideBox", "cornerKicks"
+  "shotsOnGoal"
 ]);
 
 const OPTIONAL_FIELDS = Object.freeze([
-  "shotsOffGoal", "blockedShots", "ballPossession", "goalkeeperSaves", "dangerousAttacks"
+  "totalShots", "shotsOffGoal", "shotsInsideBox", "shotsOutsideBox", "blockedShots",
+  "cornerKicks", "ballPossession", "goalkeeperSaves", "bigChances", "dangerousAttacks"
 ]);
 
 export function calculateEstimatedXgConfidence(stats = {}, { eventsAvailable = false } = {}) {
@@ -19,8 +20,6 @@ export function calculateEstimatedXgConfidence(stats = {}, { eventsAvailable = f
   else if (score === 0) label = "not_available";
   const notes = [];
   if (!eventsAvailable) notes.push("No se pudo confirmar la cobertura completa de eventos de penal.");
-  if (stats.dangerousAttacks === null || stats.dangerousAttacks === undefined) {
-    notes.push("Dangerous Attacks no fue proporcionado y aporta 0 al cálculo.");
-  }
+  notes.push("El xG estimado utiliza exclusivamente tiros a puerta y penales detectados.");
   return { score, label, missingFields, optionalMissingFields, notes };
 }

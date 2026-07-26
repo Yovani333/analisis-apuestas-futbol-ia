@@ -29,9 +29,17 @@ function evaluate(homeValues, awayValues, options = {}) {
 }
 
 test("BTTS Sí con ambos ataques fuertes y defensas frágiles", () => {
-  const result = evaluate([1.4, 1.2, 1.3, 1.1, 1.25, 1.2], [1.3, 1.15, 1.2, 1.1, 1.25, 1.05]);
+  const result = evaluate(
+    [1.65, 1.55, 1.6, 1.5, 1.55, 1.6],
+    [1.6, 1.5, 1.55, 1.45, 1.5, 1.55],
+    { homeXga: 1.55, awayXga: 1.6 }
+  );
   assert.equal(result.status, "RECOMMENDED");
   assert.equal(result.recommendedSelection, "Ambos equipos anotan: Sí");
+  assert.ok(result.estimatedBttsYes >= 52);
+  assert.ok(result.bttsYesScore >= 68);
+  assert.ok(result.scoreDifference >= 8);
+  assert.equal(result.modelVersion, "xg-btts-poisson-v2");
 });
 
 test("BTTS No por ataque local débil", () => {
