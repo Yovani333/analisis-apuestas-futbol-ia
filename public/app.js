@@ -1067,6 +1067,12 @@ function unfavorableCompetitionForFixtures(league, fixtures, rows) {
     && ((row.leagueId !== null && row.leagueId !== undefined && leagueIds.has(String(row.leagueId))) || names.has(normalizedCompetitionName(row.competition))));
 }
 
+function competitionHistoryOrder(league, fixtures, rows) {
+  if (positiveCompetitionForFixtures(league, fixtures, rows)) return 0;
+  if (unfavorableCompetitionForFixtures(league, fixtures, rows)) return 2;
+  return 1;
+}
+
 const COMPETITION_ORIGIN_DESTINATIONS = Object.freeze({
   recent_form: { view: "transparency", category: "statistics", target: "#research-panel" },
   h2h: { view: "transparency", category: "h2h", target: "#research-panel" },
@@ -1131,6 +1137,8 @@ function renderMatches() {
     fixtures: state.fixtures.filter((fixture) => fixture.leagueSlug === league.slug)
   })).filter((group) => group.fixtures.length);
   const competitionHistory = calculateCompetitionPerformance(state.savedPicks, state.savedParlays);
+  groups.sort((left, right) => competitionHistoryOrder(left.league, left.fixtures, competitionHistory)
+    - competitionHistoryOrder(right.league, right.fixtures, competitionHistory));
 
   elements.matchesList.innerHTML = groups.map(({ league, fixtures }) => {
     const expanded = state.expandedMatchGroups.has(league.slug);
