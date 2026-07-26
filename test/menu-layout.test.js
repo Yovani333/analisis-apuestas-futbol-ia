@@ -194,6 +194,7 @@ test("resultados históricos permiten filtrar por mes y abrir picks por competic
   assert.match(app, /filterParlaysByFixtureMonth\(state\.savedParlays, state\.performanceMonthFilter\)/);
   assert.match(app, /data-view-competition-picks/);
   assert.match(app, /showCompetitionPicksDialog/);
+  assert.match(app, /<th>Origen<\/th>/);
 });
 
 test("las señales históricas identifican mejores y peores resultados", () => {

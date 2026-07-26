@@ -470,6 +470,7 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
       id: pick.id || `${key}:${current.evaluated}`,
       selection: pick.selection || "Pick",
       market: pick.market || "Mercado no disponible",
+      originLabel: pickOriginLabel(pick),
       home: pick.home || "",
       away: pick.away || "",
       match: [pick.home, pick.away].filter(Boolean).join(" vs "),

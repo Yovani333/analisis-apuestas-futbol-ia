@@ -2749,7 +2749,7 @@ function showPerformancePicksDialog({ title, subtitle, picks = [] }) {
   elements.originPicksTitle.textContent = title;
   elements.originPicksSubtitle.textContent = subtitle;
   elements.originPicksContent.innerHTML = picks.length
-    ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Tipo</th><th>Pick</th><th>Partido</th><th>Competición</th><th>Fecha</th><th>Cuota</th></tr></thead><tbody>${picks.map((pick) => `<tr><td>${escapeHtml(pick.kind === "parlay" ? "Parlay" : "Individual")}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league || "No disponible")}</td><td>${escapeHtml(pick.date || "No disponible")}</td><td>${displayValue(pick.odds)}</td></tr>`).join("")}</tbody></table></div>`
+    ? `<div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>Tipo</th><th>Pick</th><th>Origen</th><th>Partido</th><th>Competición</th><th>Fecha</th><th>Cuota</th></tr></thead><tbody>${picks.map((pick) => `<tr><td>${escapeHtml(pick.kind === "parlay" ? "Parlay" : "Individual")}</td><td><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></td><td>${escapeHtml(pick.originLabel || "Otro módulo")}</td><td>${escapeHtml(pick.match || "No disponible")}</td><td>${escapeHtml(pick.league || "No disponible")}</td><td>${escapeHtml(pick.date || "No disponible")}</td><td>${displayValue(pick.odds)}</td></tr>`).join("")}</tbody></table></div>`
     : '<div class="saved-empty"><h3>Sin picks para mostrar</h3><p>No existen selecciones evaluadas dentro del filtro actual.</p></div>';
   if (!elements.originPicksDialog.open) elements.originPicksDialog.showModal();
 }

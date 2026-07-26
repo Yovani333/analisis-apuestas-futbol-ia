@@ -486,11 +486,13 @@ test("filtra estadísticas guardadas por el mes real del encuentro", () => {
 
 test("resultados por competición conserva el detalle ganado y perdido", () => {
   const [row] = calculateCompetitionPerformance([
-    { id: "w", league: "MLS", result: "won", home: "A", away: "B", selection: "Más de 1.5", market: "Goles" },
-    { id: "l", league: "MLS", result: "lost", home: "C", away: "D", selection: "Local", market: "1X2" }
+    { id: "w", league: "MLS", result: "won", home: "A", away: "B", selection: "Más de 1.5", market: "Goles", sourceModule: "recent_form" },
+    { id: "l", league: "MLS", result: "lost", home: "C", away: "D", selection: "Local", market: "1X2", sourceModule: "outcome_1x2" }
   ]);
   assert.equal(row.wonPicks[0].selection, "Más de 1.5");
+  assert.equal(row.wonPicks[0].originLabel, "Forma reciente");
   assert.equal(row.lostPicks[0].match, "C vs D");
+  assert.equal(row.lostPicks[0].originLabel, "Selector obligatorio 1X2");
 });
 
 test("equipos goleadores y goleados deduplica fixtures y separa localía", () => {
