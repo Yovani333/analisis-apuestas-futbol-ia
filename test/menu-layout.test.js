@@ -119,6 +119,7 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(html, /data-saved-tab="origins-lost"[^>]*>Resultados por origen Perdidos/);
   assert.match(html, /data-saved-tab="competitions"[^>]*>Resultados por competición/);
   assert.match(html, /data-saved-tab="origin-recommendations"[^>]*>Mejores picks/);
+  assert.match(html, /data-saved-tab="best-combination"[^>]*>Mejor combinación/);
   assert.match(html, /data-saved-tab="historical-validator"[^>]*>Validador histórico/);
   assert.match(html, /id="saved-individual-section"[\s\S]*id="update-individual-results"/);
   assert.match(html, /id="origin-results-section"[\s\S]*id="update-origin-results"/);
@@ -138,6 +139,7 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(app, /Picks perdidos/);
   assert.match(app, /deletedPermanently: true/);
   assert.match(app, /calculateOriginRecommendations\(allRows\)/);
+  assert.match(app, /buildBestCombinationAnalysis\(state\.savedPicks, state\.savedParlays\)/);
   assert.match(app, /buildHistoricalPickValidator\(state\.savedPicks, state\.savedParlays\)/);
   assert.match(app, /historicalValidatorSection\.hidden = state\.savedTab !== "historical-validator"/);
   assert.match(html, /id="competition-main"><option value="all" selected>Todas las competiciones/);

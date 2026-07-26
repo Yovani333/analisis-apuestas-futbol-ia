@@ -1,12 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFixtureStatusUpdate, assessPickHistoricalRecommendation, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { applyFixtureStatusUpdate, assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("calcula el porcentaje ganado de un parlay aunque el resultado general sea perdido", () => {
   assert.deepEqual(calculateParlayWinProgress([
     { result: "won" }, { result: "won" }, { result: "won" }, { result: "won" }, { result: "lost" }
   ]), { won: 4, total: 5, percentage: 80 });
   assert.deepEqual(calculateParlayWinProgress([]), { won: 0, total: 0, percentage: 0 });
+});
+
+test("mejor combinación usa solo resultados concluidos y evita muestras desfavorables", () => {
+  const picks = [
+    ...Array.from({ length: 3 }, (_, index) => ({ id: `a${index}`, league: "Liga A", sourceModule: "h2h", market: "Total", selection: "Más de 1.5", result: "won" })),
+    ...Array.from({ length: 3 }, (_, index) => ({ id: `b${index}`, league: "Liga B", sourceModule: "recent_form", market: "BTTS", selection: "Sí", result: index ? "lost" : "won" })),
+    { league: "Liga C", sourceModule: "poisson", market: "Total", selection: "Más de 2.5", result: "pending" }
+  ];
+  const report = buildBestCombinationAnalysis(picks, []);
+  assert.equal(report.evaluatedPicks, 6);
+  assert.equal(report.recommended[0].competition, "Liga A");
+  assert.equal(report.avoid[0].competition, "Liga B");
+  assert.equal(report.maxSelections, 2);
 });
 
 test("actualiza el estado de fixtures activos aunque el mercado no pueda liquidarse", () => {

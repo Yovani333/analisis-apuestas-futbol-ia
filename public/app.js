@@ -2,7 +2,7 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  assessPickHistoricalRecommendation, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, createSavedParlay, createSavedPick,
+  assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, createSavedParlay, createSavedPick,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
 } from "./parlay-store.js?v=20260725-origin-winrate-v2";
@@ -175,6 +175,8 @@ const elements = {
   originPerformance: document.querySelector("#origin-performance"),
   originLostPerformance: document.querySelector("#origin-lost-performance"),
   originRecommendations: document.querySelector("#origin-recommendations"),
+  bestCombinationResults: document.querySelector("#best-combination-results"),
+  runBestCombinationAnalysis: document.querySelector("#run-best-combination-analysis"),
   competitionPerformance: document.querySelector("#competition-performance"),
   pickTypesWon: document.querySelector("#pick-types-won"),
   pickTypesLost: document.querySelector("#pick-types-lost"),
@@ -206,6 +208,7 @@ const elements = {
   originResultsSection: document.querySelector("#origin-results-section"),
   originLostResultsSection: document.querySelector("#origin-lost-results-section"),
   originRecommendationsSection: document.querySelector("#origin-recommendations-section"),
+  bestCombinationSection: document.querySelector("#best-combination-section"),
   competitionResultsSection: document.querySelector("#competition-results-section"),
   pickTypesWonSection: document.querySelector("#pick-types-won-section"),
   pickTypesLostSection: document.querySelector("#pick-types-lost-section"),
@@ -3124,6 +3127,14 @@ function renderTrashParlays() {
   elements.trashParlaysList.innerHTML = `${removedRows ? `<div class="trash-section-heading"><h3>Picks retirados</h3><span>${removedPicks.length}</span></div>${removedRows}` : ""}${parlayRows ? `<div class="trash-section-heading"><h3>Parlays eliminados</h3><span>${trashed.length}</span></div>${parlayRows}` : ""}`;
 }
 
+function renderBestCombinationAnalysis() {
+  const analysis = buildBestCombinationAnalysis(state.savedPicks, state.savedParlays);
+  const combination = analysis.bestCombination.map((item, index) => `<article class="best-combination-card"><span>Selección ${index + 1}</span><h4>${escapeHtml(item.competition)}</h4><p><strong>${escapeHtml(item.market)}</strong></p><small>Origen: ${escapeHtml(item.originLabel)}</small><div><b>${item.winRate}% acierto</b><b>${item.won}/${item.evaluated} ganados</b></div></article>`).join("");
+  const avoidCompetitions = analysis.avoidCompetitions.map((item) => `<li><strong>${escapeHtml(item.competition)}</strong><span>${item.winRate}% · ${item.won} ganados / ${item.lost} perdidos</span></li>`).join("");
+  const avoidPicks = analysis.avoid.slice(0, 8).map((item) => `<li><strong>${escapeHtml(item.market)}</strong><span>${escapeHtml(item.competition)} · ${escapeHtml(item.originLabel)} · ${item.winRate}%</span></li>`).join("");
+  elements.bestCombinationResults.innerHTML = `<div class="best-combination-summary"><article><span>Resultados evaluados</span><strong>${analysis.evaluatedPicks}</strong></article><article><span>Máximo recomendado</span><strong>${analysis.maxSelections} selecciones</strong></article><article><span>Estado</span><strong>${analysis.status === "available" ? "Disponible" : analysis.status === "provisional" ? "Provisional" : "Sin evidencia"}</strong></article></div><section class="best-combination-block"><header><h3>Combinación sugerida</h3><p>Una selección por competición para reducir dependencia.</p></header><div class="best-combination-grid">${combination || '<p class="muted-text">No existen al menos dos combinaciones con muestra mínima y rendimiento favorable.</p>'}</div></section><div class="best-combination-columns"><section class="best-combination-block best-combination-block--avoid"><header><h3>Competiciones que no conviene mezclar</h3></header><ul>${avoidCompetitions || '<li>Sin competiciones desfavorables con muestra suficiente.</li>'}</ul></section><section class="best-combination-block best-combination-block--avoid"><header><h3>Picks que conviene evitar</h3></header><ul>${avoidPicks || '<li>Sin picks desfavorables con muestra suficiente.</li>'}</ul></section></div><section class="best-combination-block"><header><h3>Qué evitar</h3></header><ul>${analysis.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></section>`;
+}
+
 async function updateSavedParlayResults({ automatic = false } = {}) {
   if (state.isUpdatingSavedResults) {
     if (!automatic) showNotice("La actualizacion de Mis apuestas ya esta en curso.");
@@ -5149,6 +5160,10 @@ elements.refreshTeamGoalInsights.addEventListener("click", () => {
   renderTeamGoalInsights();
   showNotice("Análisis de equipos goleadores y goleados actualizado con los parlays guardados.");
 });
+elements.runBestCombinationAnalysis.addEventListener("click", () => {
+  renderBestCombinationAnalysis();
+  showNotice("Mejor combinación actualizada con los resultados guardados en Mis apuestas.");
+});
 const handleOriginDetailClick = (event) => {
   const open = event.target.closest("[data-view-origin-picks]");
   if (open) showOriginPicksDialog(open.dataset.viewOriginPicks, open.dataset.originResult || "won");
@@ -5336,6 +5351,7 @@ document.addEventListener("click", (event) => {
     elements.pickTypesWonSection.hidden = state.savedTab !== "types-won";
     elements.pickTypesLostSection.hidden = state.savedTab !== "types-lost";
     elements.originRecommendationsSection.hidden = state.savedTab !== "origin-recommendations";
+    elements.bestCombinationSection.hidden = state.savedTab !== "best-combination";
     elements.historicalValidatorSection.hidden = state.savedTab !== "historical-validator";
     elements.savedParlaysSection.hidden = state.savedTab !== "parlays";
     elements.trashResultsSection.hidden = state.savedTab !== "trash";

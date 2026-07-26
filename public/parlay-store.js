@@ -712,6 +712,74 @@ export function calculateOriginRecommendations(performanceRows = []) {
   return { recommended, notRecommended, observing };
 }
 
+export function buildBestCombinationAnalysis(picks = [], parlays = []) {
+  const settled = [
+    ...picks.map((pick) => ({ pick, kind: "individual" })),
+    ...parlays.flatMap((parlay) => (Array.isArray(parlay?.legs) ? parlay.legs : []).map((pick) => ({ pick, kind: "parlay" })))
+  ].filter(({ pick }) => ["won", "lost"].includes(pick?.result));
+  const groups = new Map();
+  for (const { pick, kind } of settled) {
+    const competition = String(pick.league || pick.competition || "Competición no disponible").trim();
+    const origin = pickOriginKey(pick);
+    const originLabel = pickOriginLabel(pick);
+    const market = originPerformanceCategory(pick);
+    const key = `${historicalCompetitionKey(pick)}::${origin}::${market}`;
+    const row = groups.get(key) || { key, competition, leagueId: pick.leagueId ?? pick.league_id ?? null, origin, originLabel, market, evaluated: 0, won: 0, lost: 0, individual: 0, parlayLegs: 0, winRate: 0 };
+    row.evaluated += 1;
+    row[pick.result] += 1;
+    row[kind === "individual" ? "individual" : "parlayLegs"] += 1;
+    row.winRate = Number((row.won / row.evaluated * 100).toFixed(1));
+    groups.set(key, row);
+  }
+  const ranked = [...groups.values()].sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.competition.localeCompare(b.competition, "es"));
+  const recommended = ranked.filter((row) => row.evaluated >= 3 && row.winRate >= 60);
+  const avoid = ranked.filter((row) => row.evaluated >= 3 && row.winRate < 50).sort((a, b) => a.winRate - b.winRate || b.evaluated - a.evaluated);
+  const observing = ranked.filter((row) => row.evaluated < 3 || (row.winRate >= 50 && row.winRate < 60));
+  const sizeGroups = new Map();
+  for (const parlay of parlays) {
+    const result = calculateParlayResult(parlay?.legs || []);
+    if (!['won', 'lost'].includes(result)) continue;
+    const size = (parlay.legs || []).length;
+    if (size < 2) continue;
+    const row = sizeGroups.get(size) || { selections: size, evaluated: 0, won: 0, lost: 0, winRate: 0 };
+    row.evaluated += 1;
+    row[result] += 1;
+    row.winRate = Number((row.won / row.evaluated * 100).toFixed(1));
+    sizeGroups.set(size, row);
+  }
+  const sizePerformance = [...sizeGroups.values()].sort((a, b) => b.winRate - a.winRate || a.selections - b.selections);
+  const supportedSize = sizePerformance.find((row) => row.evaluated >= 3 && row.winRate >= 50);
+  const maxSelections = supportedSize ? Math.min(5, supportedSize.selections) : 2;
+  const selectedCompetitions = new Set();
+  const bestCombination = [];
+  for (const row of recommended) {
+    const competitionKey = row.leagueId ? `id:${row.leagueId}` : row.competition.toLowerCase();
+    if (selectedCompetitions.has(competitionKey)) continue;
+    selectedCompetitions.add(competitionKey);
+    bestCombination.push(row);
+    if (bestCombination.length >= maxSelections) break;
+  }
+  const competitionRows = calculateCompetitionPerformance(picks, parlays);
+  const avoidCompetitions = competitionRows.filter((row) => row.evaluated >= 3 && row.winRate < 50)
+    .sort((a, b) => a.winRate - b.winRate || b.evaluated - a.evaluated);
+  return {
+    status: bestCombination.length >= 2 ? "available" : settled.length ? "provisional" : "insufficient",
+    evaluatedPicks: settled.length,
+    maxSelections,
+    bestCombination,
+    recommended,
+    avoid,
+    observing,
+    avoidCompetitions,
+    sizePerformance,
+    warnings: [
+      "No mezclar dos picks del mismo encuentro ni selecciones fuertemente correlacionadas.",
+      "El rendimiento histórico no garantiza el resultado del próximo parlay.",
+      supportedSize ? `El límite se apoya en ${supportedSize.evaluated} parlays de ${supportedSize.selections} selecciones.` : "No hay muestra suficiente por tamaño; se aplica un máximo conservador de 2 selecciones."
+    ]
+  };
+}
+
 function normalizedHistoricalText(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/,/g, ".").trim();
 }

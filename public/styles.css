@@ -682,6 +682,24 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .rank-movement--same { color: var(--muted); }
 .origin-picks-dialog .origin-category-list { margin-bottom: 12px; }
 .origin-recommendations { display: grid; gap: 12px; }
+.best-combination-results { display: grid; gap: 12px; }
+.best-combination-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.best-combination-summary article, .best-combination-block { padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.best-combination-summary article { display: grid; gap: 3px; }
+.best-combination-summary span, .best-combination-card small { color: var(--muted); font-size: .66rem; }
+.best-combination-summary strong { font-size: .9rem; }
+.best-combination-block header h3, .best-combination-card h4 { margin: 0; }
+.best-combination-block header p { margin: 3px 0 0; color: var(--muted); font-size: .7rem; }
+.best-combination-grid, .best-combination-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 10px; }
+.best-combination-card { display: grid; gap: 4px; padding: 10px; border-left: 3px solid var(--success); background: var(--surface-subtle); border-radius: 6px; }
+.best-combination-card > span { color: var(--success); font-size: .6rem; font-weight: 900; text-transform: uppercase; }
+.best-combination-card p { margin: 0; }
+.best-combination-card div { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+.best-combination-card b { padding: 3px 5px; font-size: .61rem; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; }
+.best-combination-block ul { display: grid; gap: 6px; padding: 0; margin: 10px 0 0; list-style: none; }
+.best-combination-block li { display: flex; justify-content: space-between; gap: 8px; padding: 7px; font-size: .68rem; background: var(--surface-subtle); border-radius: 5px; }
+.best-combination-block li span { color: var(--muted); text-align: right; }
+.best-combination-block--avoid { border-left: 3px solid var(--danger); }
 .origin-recommendations__notice { display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px; }
 .origin-recommendations__notice span { color: var(--muted); font-size: .72rem; }
 .origin-recommendations__columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -991,6 +1009,7 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 @media (max-width: 820px) { .guide-module summary { grid-template-columns: minmax(0, 1fr) auto; } .guide-module summary span, .guide-module summary small { grid-column: 1 / -1; } }
 @media (max-width: 720px) { .live-data-grid, .collection-summary, .collection-grid { grid-template-columns: 1fr; } .collection-pick { grid-template-columns: 1fr; } .collection-list-heading, .saved-section-toolbar { align-items: stretch; flex-direction: column; } .saved-section-toolbar .button { width: 100%; } }
 @media (max-width: 720px) { .origin-recommendations__columns, .origin-recommendations__observing > div { grid-template-columns: 1fr; } .origin-recommendations__notice { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 720px) { .best-combination-summary, .best-combination-grid, .best-combination-columns { grid-template-columns: 1fr; } .best-combination-block li { align-items: flex-start; flex-direction: column; } .best-combination-block li span { text-align: left; } }
 @media (max-width: 900px) { .historical-validator__summary { grid-template-columns: repeat(3, minmax(0, 1fr)); } .historical-validator__list { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .historical-validator__summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .historical-validator__sizes > header, .historical-validator__active > header, .historical-validation-card > header { align-items: stretch; flex-direction: column; } .historical-validation-card > header > strong { max-width: none; } .historical-validator__dimensions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .guide-module summary { gap: 5px 10px; } .guide-module .panel-actions .button { width: auto; } .catalog-reading-path { grid-template-columns: 1fr; } .live-refresh-actions { align-items: stretch; justify-content: stretch; width: 100%; } .live-refresh-actions .button, .live-last-updated { width: 100%; } }
