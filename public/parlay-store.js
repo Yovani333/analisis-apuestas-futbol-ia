@@ -343,6 +343,15 @@ export function createSavedPick(leg, now = new Date()) {
   };
 }
 
+function originPerformanceCategory(pick = {}) {
+  const value = String(pick.selection || pick.market || "Pick").trim();
+  const total = value.match(/(más|menos)\s+de\s+(\d+(?:[.,]\d+)?)/i);
+  if (total) return `${total[1][0].toUpperCase()}${total[1].slice(1).toLowerCase()} de ${total[2].replace(",", ".")}`;
+  if (/^empate$/i.test(value) || /resultado.*empate/i.test(`${pick.market} ${value}`)) return "Empate";
+  if (/\bgana\b/i.test(value)) return "Gana";
+  return value;
+}
+
 export function calculateOriginPerformance(picks = [], parlays = []) {
   const groups = new Map();
   const parlayLegs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
@@ -355,14 +364,6 @@ export function calculateOriginPerformance(picks = [], parlays = []) {
     if (minutes >= 1440) return `${Math.floor(minutes / 1440)} d`;
     if (minutes >= 60) return `${Math.floor(minutes / 60)} h`;
     return `${minutes} min`;
-  };
-  const classify = (pick) => {
-    const value = String(pick.selection || pick.market || "Pick").trim();
-    const total = value.match(/(más|menos)\s+de\s+(\d+(?:[.,]\d+)?)/i);
-    if (total) return `${total[1][0].toUpperCase()}${total[1].slice(1).toLowerCase()} de ${total[2].replace(",", ".")}`;
-    if (/^empate$/i.test(value) || /resultado.*empate/i.test(`${pick.market} ${value}`)) return "Empate";
-    if (/\bgana\b/i.test(value)) return "Gana";
-    return value;
   };
   for (const { pick, kind } of rows) {
     if (!['won', 'lost'].includes(pick?.result)) continue;
@@ -386,7 +387,7 @@ export function calculateOriginPerformance(picks = [], parlays = []) {
       match: [pick.home, pick.away].filter(Boolean).join(" vs "),
       league: pick.league || "No disponible",
       addedLead: lead,
-      category: classify(pick),
+      category: originPerformanceCategory(pick),
       odds: pick.originalOdds ?? pick.decimalOdds ?? null
     };
     if (pick.result === "won") current.wonPicks.push(resultPick);
@@ -410,6 +411,17 @@ export function calculateOriginPerformance(picks = [], parlays = []) {
     current.addedSummary = Object.entries(current.addedBuckets).map(([label, count]) => `${label} (${count})`).join(" · ");
   }
   return [...groups.values()].sort((a, b) => b.winRate - a.winRate || b.evaluated - a.evaluated || a.origin.localeCompare(b.origin));
+}
+
+export function assessPickHistoricalRecommendation(pick = {}, performanceRows = []) {
+  const origin = pickOriginKey(pick);
+  const category = originPerformanceCategory(pick);
+  const originRow = performanceRows.find((row) => row.origin === origin);
+  const sample = originRow?.categoryPerformance?.find((row) => row.category === category) || null;
+  if (!sample || sample.evaluated < 3) return { status: "insufficient", category, sample };
+  if (sample.winRate < 50) return { status: "not_recommended", category, sample };
+  if (sample.winRate >= 60) return { status: "recommended", category, sample };
+  return { status: "observing", category, sample };
 }
 
 export function calculateCompetitionPerformance(picks = [], parlays = []) {

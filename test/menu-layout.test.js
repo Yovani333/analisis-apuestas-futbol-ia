@@ -202,3 +202,9 @@ test("las señales históricas identifican mejores y peores resultados", () => {
   assert.match(app, /performance-signal--worst[\s\S]*🟥/);
   assert.match(app, /league-performance-badge[\s\S]*⚽ Mejor historial/);
 });
+
+test("Picks recomendados muestra tarjeta roja solo con respaldo histórico desfavorable", () => {
+  assert.match(app, /assessPickHistoricalRecommendation\(pick, performanceRows\)/);
+  assert.match(app, /collection-pick--historical-avoid/);
+  assert.match(app, /Menos recomendado por historial/);
+});

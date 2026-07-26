@@ -2,10 +2,10 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, createSavedParlay, createSavedPick,
+  assessPickHistoricalRecommendation, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, createSavedParlay, createSavedPick,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260725-competition-origin-leaders-v1";
+} from "./parlay-store.js?v=20260725-pick-history-warning-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -3412,10 +3412,16 @@ function renderPickCollection(snapshot) {
     return;
   }
   const recommended = (snapshot.candidateMarkets || []).filter((pick) => pick.canAdd);
+  const performanceRows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
   const candidates = recommended.map((pick) => {
     const index = (snapshot.candidateMarkets || []).indexOf(pick);
-    return `<article class="collection-pick collection-pick--recommended">
-      <div><span>${escapeHtml(pick.market)}</span><strong>${escapeHtml(pick.selection)}</strong><small>Confianza ${displayValue(pick.confidenceScore, 0)}/100 · Cuota ${displayValue(pick.decimalOdds, "No disponible")} · EV ${pick.expectedValue === null ? "No disponible" : `${displayValue(pick.expectedValue)}%`}</small><small>Origen: ${escapeHtml((pick.backingModels || []).join(" + ") || pick.source)}</small><p>${escapeHtml(pick.reasoning)}</p></div>
+    const history = assessPickHistoricalRecommendation(pick, performanceRows);
+    const lessRecommended = history.status === "not_recommended";
+    const historyWarning = lessRecommended
+      ? `<div class="collection-pick__history-warning"><strong>Menos recomendado por historial</strong><span>${history.sample.won} ganados · ${history.sample.lost} perdidos · ${displayValue(history.sample.winRate)}% de acierto</span></div>`
+      : "";
+    return `<article class="collection-pick collection-pick--recommended${lessRecommended ? " collection-pick--historical-avoid" : ""}">
+      <div>${historyWarning}<span>${escapeHtml(pick.market)}</span><strong>${escapeHtml(pick.selection)}</strong><small>Confianza ${displayValue(pick.confidenceScore, 0)}/100 · Cuota ${displayValue(pick.decimalOdds, "No disponible")} · EV ${pick.expectedValue === null ? "No disponible" : `${displayValue(pick.expectedValue)}%`}</small><small>Origen: ${escapeHtml((pick.backingModels || []).join(" + ") || pick.source)}</small><p>${escapeHtml(pick.reasoning)}</p></div>
       <button class="button button--primary button--compact" type="button" data-add-collection-pick="${index}">Agregar pick</button>
     </article>`;
   }).join("");

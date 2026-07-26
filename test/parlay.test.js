@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFixtureStatusUpdate, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { applyFixtureStatusUpdate, assessPickHistoricalRecommendation, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("actualiza el estado de fixtures activos aunque el mercado no pueda liquidarse", () => {
   assert.equal(needsFixtureStatusRefresh({ fixtureId: 10, fixtureStatus: "En vivo", result: "won" }), true);
@@ -518,6 +518,25 @@ test("los orígenes de competición conservan la ruta detallada y no inventan ga
   assert.equal(leaders.length, 1);
   assert.equal(leaders[0].originLabel, "Catálogo de mercados → Mercados ofensivos");
   assert.equal(leaders[0].navigationOrigin, "specific_markets");
+});
+
+test("Picks recomendados marca como menos recomendado solo un historial desfavorable suficiente", () => {
+  const identity = { selection: "Más de 2.5", market: "Total de goles", sourceModule: "pick_analysis_snapshot", originModule: "data_picks", originMenu: "Picks recomendados", originSection: "Motor de Decisión" };
+  const performance = calculateOriginPerformance([
+    { ...identity, id: "a", result: "won" },
+    { ...identity, id: "b", result: "lost" },
+    { ...identity, id: "c", result: "lost" },
+    { ...identity, id: "d", result: "lost" }
+  ]);
+  const assessment = assessPickHistoricalRecommendation(identity, performance);
+  assert.equal(assessment.status, "not_recommended");
+  assert.deepEqual(assessment.sample, { category: "Más de 2.5", won: 1, lost: 3, evaluated: 4, winRate: 25 });
+});
+
+test("Picks recomendados no penaliza una muestra histórica menor de tres", () => {
+  const identity = { selection: "Sí", market: "Ambos equipos anotan", sourceModule: "pick_analysis_snapshot", originModule: "poisson", originMenu: "Picks recomendados", originSection: "Motor Poisson" };
+  const performance = calculateOriginPerformance([{ ...identity, result: "lost" }, { ...identity, result: "lost" }]);
+  assert.equal(assessPickHistoricalRecommendation(identity, performance).status, "insufficient");
 });
 
 test("equipos goleadores y goleados deduplica fixtures y separa localía", () => {
