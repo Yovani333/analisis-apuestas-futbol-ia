@@ -1687,6 +1687,8 @@ body {
 .performance-signal--best { filter: saturate(.9); }
 .performance-signal--worst { font-size: .72rem; }
 .league-performance-badge { display: inline-flex; align-items: center; padding: 3px 6px; color: #087a55; background: #e7f8ef; border: 1px solid #9ddcbd; border-radius: 5px; font-size: .58rem; font-weight: 900; }
+.league-performance-badge--worst { color: #a51d32; background: #fff0f2; border-color: #f1a4b0; }
+.favorite-origin-badge { display: inline-flex; align-items: center; width: fit-content; margin: 5px 0; padding: 3px 6px; color: #087a55; background: #e7f8ef; border: 1px solid #9ddcbd; border-radius: 5px; font-size: .62rem; font-weight: 900; }
 .team-goal-insights-view { display: grid; align-content: start; gap: 12px; }
 .team-goal-insights-note { display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; }
 .team-goal-insights-note span { color: var(--muted); font-size: .72rem; }
@@ -1749,6 +1751,8 @@ body {
 :root[data-theme="dark"] .detail-table th { color: #cbd5e1; background: var(--surface-subtle); }
 :root[data-theme="dark"] .app-notice { color: var(--text); background: var(--surface); border-color: var(--border); }
 :root[data-theme="dark"] .league-performance-badge { color: #b9fbef; background: rgb(16 185 129 / 15%); border-color: rgb(52 211 153 / 32%); }
+:root[data-theme="dark"] .league-performance-badge--worst { color: #fecdd3; background: rgb(225 29 72 / 16%); border-color: rgb(251 113 133 / 38%); }
+:root[data-theme="dark"] .favorite-origin-badge { color: #b9fbef; background: rgb(16 185 129 / 15%); border-color: rgb(52 211 153 / 32%); }
 
 @media (max-width: 900px) {
   .simple-filters { grid-template-columns: 1fr 1fr !important; }

@@ -9,7 +9,7 @@ import {
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginLabel } from "./pick-origins.js?v=20260724-detailed-origins-v3";
+import { pickOriginKey, pickOriginLabel } from "./pick-origins.js?v=20260726-favorite-origin-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260724-parlay-trash-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260722-corners-v2";
@@ -1060,6 +1060,13 @@ function positiveCompetitionForFixtures(league, fixtures, rows) {
     && ((row.leagueId !== null && row.leagueId !== undefined && leagueIds.has(String(row.leagueId))) || names.has(normalizedCompetitionName(row.competition))));
 }
 
+function unfavorableCompetitionForFixtures(league, fixtures, rows) {
+  const leagueIds = new Set(fixtures.map((fixture) => fixture.leagueId ?? fixture.league?.id).filter((value) => value !== null && value !== undefined && value !== "").map(String));
+  const names = new Set([league.name, ...fixtures.map((fixture) => fixture.leagueName)].map(normalizedCompetitionName));
+  return rows.find((row) => row.evaluated >= 3 && row.winRate < 50
+    && ((row.leagueId !== null && row.leagueId !== undefined && leagueIds.has(String(row.leagueId))) || names.has(normalizedCompetitionName(row.competition))));
+}
+
 const COMPETITION_ORIGIN_DESTINATIONS = Object.freeze({
   recent_form: { view: "transparency", category: "statistics", target: "#research-panel" },
   h2h: { view: "transparency", category: "h2h", target: "#research-panel" },
@@ -1128,6 +1135,7 @@ function renderMatches() {
   elements.matchesList.innerHTML = groups.map(({ league, fixtures }) => {
     const expanded = state.expandedMatchGroups.has(league.slug);
     const positiveHistory = positiveCompetitionForFixtures(league, fixtures, competitionHistory);
+    const unfavorableHistory = positiveHistory ? null : unfavorableCompetitionForFixtures(league, fixtures, competitionHistory);
     const originLeaders = calculateCompetitionOriginLeaders(state.savedPicks, state.savedParlays, {
       leagueIds: fixtures.map((fixture) => fixture.leagueId ?? fixture.league?.id),
       competitions: [league.name, ...fixtures.map((fixture) => fixture.leagueName)],
@@ -1137,7 +1145,7 @@ function renderMatches() {
     return `
     <section class="league-group" aria-labelledby="league-${escapeHtml(league.slug)}">
       <header class="league-group__header">
-        <div class="league-group__identity"><h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span>${positiveHistory ? `<span class="league-performance-badge" title="${escapeHtml(`${positiveHistory.winRate}% de acierto en ${positiveHistory.evaluated} picks evaluados`)}">⚽ Mejor historial</span>` : ""}<small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>${originLeadersHtml}</div>
+        <div class="league-group__identity"><h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span>${positiveHistory ? `<span class="league-performance-badge" title="${escapeHtml(`${positiveHistory.winRate}% de acierto en ${positiveHistory.evaluated} picks evaluados`)}">⚽ Mejor historial</span>` : unfavorableHistory ? `<span class="league-performance-badge league-performance-badge--worst" title="${escapeHtml(`${unfavorableHistory.winRate}% de acierto en ${unfavorableHistory.evaluated} picks evaluados`)}">🟥 Historial desfavorable</span>` : ""}<small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>${originLeadersHtml}</div>
         <button class="league-group__toggle" type="button" data-toggle-league="${escapeHtml(league.slug)}" aria-expanded="${expanded}" aria-controls="league-matches-${escapeHtml(league.slug)}" aria-label="${expanded ? "Ocultar" : "Mostrar"} encuentros de ${escapeHtml(league.name)}" title="${expanded ? "Ocultar encuentros" : "Mostrar encuentros"}">${expanded ? "−" : "+"}</button>
       </header>
       <div id="league-matches-${escapeHtml(league.slug)}" class="league-group__matches" ${expanded ? "" : "hidden"}>
@@ -2600,7 +2608,10 @@ function renderParlayDraft(open = false, minimized = true) {
   elements.parlayLegCount.textContent = count;
   elements.parlayFabCount.textContent = count;
   elements.parlayFab.hidden = count === 0 || !elements.parlaySlip.hidden;
-  elements.saveParlay.disabled = count < 2;
+  elements.saveParlay.disabled = count < 1;
+  elements.saveParlay.textContent = "Agregar";
+  elements.parlayName.disabled = count === 1;
+  elements.parlayName.placeholder = count === 1 ? "Se guardará como pick individual" : "Ej. Mundial · Jornada 2";
 
   if (!count) {
     elements.parlaySlip.hidden = true;
@@ -2749,8 +2760,25 @@ function saveAnalysisMarket(analysis, marketIndex) {
 }
 
 function saveCurrentParlay() {
-  if (state.parlayDraft.length < 2) {
-    showNotice("Agrega al menos dos selecciones para guardar un parlay.");
+  if (state.parlayDraft.length < 1) {
+    showNotice("Agrega al menos una selección al cupón.");
+    return;
+  }
+  if (state.parlayDraft.length === 1) {
+    const [leg] = state.parlayDraft;
+    const duplicate = hasDuplicatePick(state.savedPicks, leg);
+    if (duplicate && !window.confirm("Este pick ya está guardado. ¿Deseas guardar otro registro igual?")) return;
+    state.savedPicks.unshift(createSavedPick({ ...leg, id: `${leg.id || "pick"}:${Date.now()}` }));
+    state.parlayDraft = [];
+    elements.parlayName.value = "";
+    persistSavedPicks();
+    persistParlayDraft();
+    renderParlayDraft();
+    renderSavedPicks();
+    renderOriginPerformance();
+    refreshActivePickIndicators();
+    switchView("saved");
+    showNotice("Pick agregado a individuales.");
     return;
   }
   state.savedParlays.unshift(createSavedParlay(elements.parlayName.value, state.parlayDraft));
@@ -2775,6 +2803,21 @@ function oddsUpdateHtml(item) {
 
 function activeSavedPicks() {
   return state.savedPicks.filter((pick) => !pick.trashed && !pick.deletedPermanently);
+}
+
+function isActiveSavedPick(pick) {
+  if (pick?.result !== "pending") return false;
+  const status = normalizedSavedStatus(pick.fixtureStatus);
+  if (["Finalizado", "Suspendido", "Postergado", "Cancelado"].includes(status)) return false;
+  if (["Programado", "En vivo"].includes(status)) return true;
+  const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || pick.date || "");
+  return Number.isFinite(kickoff) && kickoff > Date.now();
+}
+
+function favoriteOriginKeys() {
+  return new Set(calculateOriginPerformance(state.savedPicks, state.savedParlays)
+    .filter((row) => row.evaluated >= 3 && row.winRate >= 60)
+    .map((row) => row.origin));
 }
 
 function activeSavedParlays() {
@@ -2802,11 +2845,12 @@ function renderSavedPicks() {
       : '<div class="saved-empty"><h3>Aún no hay picks individuales</h3><p>Usa “Guardar pick” desde Cuotas o desde el análisis con datos.</p><button class="button button--primary" type="button" data-view="dashboard">Ir al dashboard</button></div>';
     return;
   }
-  elements.savedPicksList.innerHTML = visiblePicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}" data-pick-id="${escapeHtml(pick.id)}">
+  const preferredOrigins = favoriteOriginKeys();
+  elements.savedPicksList.innerHTML = visiblePicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); const favoriteOrigin = isActiveSavedPick(pick) && preferredOrigins.has(pickOriginKey(pick)); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}" data-pick-id="${escapeHtml(pick.id)}">
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}${savedLegScoreHtml(pick)}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
+    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong>${favoriteOrigin ? '<span class="favorite-origin-badge" title="Origen favorito por su historial evaluado" aria-label="Origen favorito por su historial evaluado">⚽ Origen favorito</span>' : ""}<label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`; }).join("");
 }
@@ -3022,6 +3066,7 @@ function renderSavedParlays() {
     return;
   }
 
+  const preferredOrigins = favoriteOriginKeys();
   elements.savedParlaysList.innerHTML = activeParlays.map((parlay) => {
     const result = calculateParlayResult(parlay.legs);
     const expanded = state.expandedParlays.has(parlay.id);
@@ -3031,10 +3076,10 @@ function renderSavedParlays() {
         <div><span>Parlay · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(parlay.createdAt)))}</time></div>
         <div class="saved-parlay__summary"><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong><button class="parlay-expand" type="button" data-toggle-parlay aria-expanded="${expanded}">${expanded ? "−" : "+"}</button></div>
       </header>
-      <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); return `
+      <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); const favoriteOrigin = isActiveSavedPick(leg) && preferredOrigins.has(pickOriginKey(leg)); return `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
-          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${savedLegScoreHtml(leg)}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)} · Origen ${escapeHtml(pickOriginLabel(leg))} ${infoTooltip("pick_origin")}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span>${favoriteOrigin ? '<span class="favorite-origin-badge" title="Origen favorito por su historial evaluado" aria-label="Origen favorito por su historial evaluado">⚽ Origen favorito</span>' : ""}<small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${savedLegScoreHtml(leg)}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)} · Origen ${escapeHtml(pickOriginLabel(leg))} ${infoTooltip("pick_origin")}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
           <div class="saved-leg__controls"><label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label><div><button class="button button--secondary button--compact" type="button" data-save-parlay-leg>Guardar</button><button class="button button--danger button--compact" type="button" data-remove-parlay-leg aria-label="Quitar ${escapeHtml(leg.selection)} del parlay">Quitar</button></div></div>
         </section>`; }).join("")}</div>
       <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>

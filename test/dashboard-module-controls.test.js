@@ -59,6 +59,8 @@ test("Corners esperados se puede guardar o agregar al cupon", () => {
 
 test("el cupon agregado se abre minimizado y solo el FAB lo maximiza", () => {
   assert.match(app, /function renderParlayDraft\(open = false, minimized = true\)/);
+  assert.match(app, /saveParlay\.disabled = count < 1/);
+  assert.match(app, /state\.parlayDraft\.length === 1[\s\S]*createSavedPick/);
   assert.match(app, /parlayFab\.addEventListener\("click", \(\) => renderParlayDraft\(true, false\)\)/);
 });
 
