@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFixtureStatusUpdate, buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { applyFixtureStatusUpdate, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("actualiza el estado de fixtures activos aunque el mercado no pueda liquidarse", () => {
   assert.equal(needsFixtureStatusRefresh({ fixtureId: 10, fixtureStatus: "En vivo", result: "won" }), true);
@@ -493,6 +493,31 @@ test("resultados por competición conserva el detalle ganado y perdido", () => {
   assert.equal(row.wonPicks[0].originLabel, "Forma reciente");
   assert.equal(row.lostPicks[0].match, "C vs D");
   assert.equal(row.lostPicks[0].originLabel, "Selector obligatorio 1X2");
+});
+
+test("la búsqueda prioriza hasta dos orígenes con más picks ganados por competición", () => {
+  const leaders = calculateCompetitionOriginLeaders([
+    { leagueId: 253, league: "MLS", result: "won", sourceModule: "h2h" },
+    { leagueId: 253, league: "MLS", result: "won", sourceModule: "h2h" },
+    { leagueId: 253, league: "MLS", result: "lost", sourceModule: "h2h" },
+    { leagueId: 253, league: "MLS", result: "won", sourceModule: "recent_form" },
+    { leagueId: 253, league: "MLS", result: "won", sourceModule: "corners" },
+    { leagueId: 71, league: "Brasileirão Serie A", result: "won", sourceModule: "poisson" },
+    { leagueId: 253, league: "MLS", result: "pending", sourceModule: "recent_form" }
+  ], [], { leagueIds: [253], competitions: ["MLS"], limit: 2 });
+  assert.deepEqual(leaders.map((row) => [row.originLabel, row.won]), [["Head to head", 2], ["Corners", 1]]);
+  assert.equal(leaders[0].evaluated, 3);
+  assert.equal(leaders.length, 2);
+});
+
+test("los orígenes de competición conservan la ruta detallada y no inventan ganados", () => {
+  const leaders = calculateCompetitionOriginLeaders([], [{ legs: [
+    { league: "Liga MX", result: "won", sourceModule: "poisson", originMenu: "Catálogo de mercados", originSection: "Mercados ofensivos" },
+    { league: "Liga MX", result: "lost", sourceModule: "recent_form" }
+  ] }], { competitions: ["Liga MX"], limit: 5 });
+  assert.equal(leaders.length, 1);
+  assert.equal(leaders[0].originLabel, "Catálogo de mercados → Mercados ofensivos");
+  assert.equal(leaders[0].navigationOrigin, "specific_markets");
 });
 
 test("equipos goleadores y goleados deduplica fixtures y separa localía", () => {

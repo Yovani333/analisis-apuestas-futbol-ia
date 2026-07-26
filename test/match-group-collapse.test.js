@@ -23,3 +23,10 @@ test("el control desplegable conserva dimensiones estables y foco visible", () =
   assert.match(styles, /\.league-group__toggle:focus-visible/);
   assert.match(styles, /\.league-group__matches\s*\{[\s\S]*display: grid;/);
 });
+
+test("cada competición muestra y abre hasta dos orígenes líderes", () => {
+  assert.match(app, /calculateCompetitionOriginLeaders\(state\.savedPicks, state\.savedParlays/);
+  assert.match(app, /data-competition-origin=/);
+  assert.match(app, /openCompetitionOrigin\(/);
+  assert.match(styles, /\.league-origin-guides\s*\{/);
+});

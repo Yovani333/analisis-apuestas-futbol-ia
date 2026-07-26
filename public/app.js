@@ -2,10 +2,10 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  buildHistoricalPickValidator, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, createSavedParlay, createSavedPick,
+  buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, createSavedParlay, createSavedPick,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260724-detailed-origins-v2";
+} from "./parlay-store.js?v=20260725-competition-origin-leaders-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -1060,6 +1060,55 @@ function positiveCompetitionForFixtures(league, fixtures, rows) {
     && ((row.leagueId !== null && row.leagueId !== undefined && leagueIds.has(String(row.leagueId))) || names.has(normalizedCompetitionName(row.competition))));
 }
 
+const COMPETITION_ORIGIN_DESTINATIONS = Object.freeze({
+  recent_form: { view: "transparency", category: "statistics", target: "#research-panel" },
+  h2h: { view: "transparency", category: "h2h", target: "#research-panel" },
+  xg_btts: { view: "transparency", category: "xg", target: "#research-panel" },
+  "xG / xGA": { view: "transparency", category: "xg", target: "#research-panel" },
+  odds: { view: "transparency", category: "odds", target: "#research-panel" },
+  outcome_1x2: { view: "dashboard", target: "#outcome-panel" },
+  corners: { view: "dashboard", target: "#corners-panel" },
+  team_average_performance: { view: "dashboard", target: "#team-performance-panel" },
+  player_goal_candidate: { view: "dashboard", target: "#player-goal-panel" },
+  odds_rule_engine: { view: "dashboard", target: "#analysis-panel" },
+  poisson: { view: "guide", target: "#guide-poisson-module", expand: true },
+  data_picks: { view: "guide", target: "#guide-data-picks-module", expand: true },
+  team_goal_probability: { view: "guide", target: "#guide-team-goals-module", expand: true },
+  team_goals: { view: "guide", target: "#guide-team-goals-module", expand: true },
+  specific_markets: { view: "markets", target: "#specific-markets-panel" },
+  pick_analysis_snapshot: { view: "pick-collection", target: "#pick-collection-content" },
+  manual: { view: "saved", target: "#saved-individual-section" },
+  manual_picks: { view: "saved", target: "#saved-individual-section" }
+});
+
+function competitionOriginDestination(origin) {
+  return COMPETITION_ORIGIN_DESTINATIONS[String(origin || "").split("::")[0]]
+    || { view: "saved", target: "#origin-results-section" };
+}
+
+function openCompetitionOrigin(origin, leagueSlug, originLabel) {
+  const fixture = selectedFixture();
+  if (!fixture || fixture.leagueSlug !== leagueSlug) {
+    state.expandedMatchGroups.add(leagueSlug);
+    renderMatches();
+    showNotice(`Selecciona un encuentro de esta competición antes de abrir ${originLabel}.`);
+    return;
+  }
+  const destination = competitionOriginDestination(origin);
+  switchView(destination.view);
+  if (destination.category) {
+    openDataDetail(destination.category);
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    const target = document.querySelector(destination.target);
+    if (!target) return;
+    if (destination.expand && target instanceof HTMLDetailsElement) target.open = true;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    target.querySelector("summary, button")?.focus({ preventScroll: true });
+  });
+}
+
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
@@ -1079,10 +1128,16 @@ function renderMatches() {
   elements.matchesList.innerHTML = groups.map(({ league, fixtures }) => {
     const expanded = state.expandedMatchGroups.has(league.slug);
     const positiveHistory = positiveCompetitionForFixtures(league, fixtures, competitionHistory);
+    const originLeaders = calculateCompetitionOriginLeaders(state.savedPicks, state.savedParlays, {
+      leagueIds: fixtures.map((fixture) => fixture.leagueId ?? fixture.league?.id),
+      competitions: [league.name, ...fixtures.map((fixture) => fixture.leagueName)],
+      limit: 2
+    });
+    const originLeadersHtml = originLeaders.length ? `<div class="league-origin-guides" aria-label="Orígenes con más picks ganados en ${escapeHtml(league.name)}"><span>Mejor origen:</span>${originLeaders.map((leader, index) => `<button class="league-origin-guide" type="button" data-competition-origin="${escapeHtml(leader.navigationOrigin)}" data-origin-league="${escapeHtml(league.slug)}" data-origin-label="${escapeHtml(leader.originLabel)}" title="${escapeHtml(`${leader.won} picks ganados de ${leader.evaluated} evaluados · ${leader.winRate}% de acierto`)}"><b>${index + 1}</b>${escapeHtml(leader.originLabel)}<small>${leader.won} G</small></button>`).join("")}</div>` : "";
     return `
     <section class="league-group" aria-labelledby="league-${escapeHtml(league.slug)}">
       <header class="league-group__header">
-        <h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span>${positiveHistory ? `<span class="league-performance-badge" title="${escapeHtml(`${positiveHistory.winRate}% de acierto en ${positiveHistory.evaluated} picks evaluados`)}">⚽ Mejor historial</span>` : ""}<small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>
+        <div class="league-group__identity"><h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span>${positiveHistory ? `<span class="league-performance-badge" title="${escapeHtml(`${positiveHistory.winRate}% de acierto en ${positiveHistory.evaluated} picks evaluados`)}">⚽ Mejor historial</span>` : ""}<small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>${originLeadersHtml}</div>
         <button class="league-group__toggle" type="button" data-toggle-league="${escapeHtml(league.slug)}" aria-expanded="${expanded}" aria-controls="league-matches-${escapeHtml(league.slug)}" aria-label="${expanded ? "Ocultar" : "Mostrar"} encuentros de ${escapeHtml(league.name)}" title="${expanded ? "Ocultar encuentros" : "Mostrar encuentros"}">${expanded ? "−" : "+"}</button>
       </header>
       <div id="league-matches-${escapeHtml(league.slug)}" class="league-group__matches" ${expanded ? "" : "hidden"}>
@@ -5182,6 +5237,11 @@ elements.matchesList.addEventListener("click", async (event) => {
     else state.expandedMatchGroups.delete(leagueSlug);
     renderMatches();
     elements.matchesList.querySelector(`[data-toggle-league="${CSS.escape(leagueSlug)}"]`)?.focus();
+    return;
+  }
+  const originGuide = event.target.closest("[data-competition-origin]");
+  if (originGuide) {
+    openCompetitionOrigin(originGuide.dataset.competitionOrigin, originGuide.dataset.originLeague, originGuide.dataset.originLabel || "este origen");
     return;
   }
   const favoriteButton = event.target.closest("[data-favorite-side]");

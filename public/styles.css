@@ -1258,6 +1258,27 @@ body {
   letter-spacing: 0;
   text-transform: none;
 }
+.league-group__identity { display: grid; flex: 1 1 auto; gap: 7px; min-width: 0; }
+.league-origin-guides { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.league-origin-guides > span { color: var(--muted); font-size: .62rem; font-weight: 800; }
+.league-origin-guide {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 7px;
+  overflow: hidden;
+  color: var(--text);
+  font: 750 .62rem/1.2 system-ui, sans-serif;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.league-origin-guide b { display: grid; width: 17px; height: 17px; place-items: center; flex: 0 0 17px; color: white; background: var(--primary); border-radius: 50%; font-size: .56rem; }
+.league-origin-guide small { flex: 0 0 auto; color: var(--success); font-size: .58rem; font-weight: 900; }
+.league-origin-guide:hover, .league-origin-guide:focus-visible { color: var(--primary); background: var(--primary-soft); border-color: var(--primary); outline: none; }
 .league-group__toggle {
   display: grid;
   width: 34px;

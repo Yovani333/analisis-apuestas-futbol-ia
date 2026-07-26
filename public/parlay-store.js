@@ -486,6 +486,51 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
   return [...groups.values()].sort((a, b) => (b.winRate ?? -1) - (a.winRate ?? -1) || b.evaluated - a.evaluated || a.competition.localeCompare(b.competition));
 }
 
+export function calculateCompetitionOriginLeaders(picks = [], parlays = [], { leagueIds = [], competitions = [], limit = 2 } = {}) {
+  const normalizeCompetition = (value) => String(value || "").trim()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/\b(uefa|conmebol|clasificacion|qualification|qualifying)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+  const targetLeagueIds = new Set(leagueIds.filter((value) => value !== null && value !== undefined && value !== "").map(String));
+  const targetCompetitions = new Set(competitions.map(normalizeCompetition).filter(Boolean));
+  const rows = [
+    ...picks.map((pick) => ({ pick, kind: "individual" })),
+    ...parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay" })) : [])
+  ];
+  const groups = new Map();
+  for (const { pick, kind } of rows) {
+    if (!['won', 'lost'].includes(pick?.result)) continue;
+    const pickLeagueId = pick.leagueId ?? pick.league_id ?? null;
+    const sameLeagueId = pickLeagueId !== null && pickLeagueId !== undefined && targetLeagueIds.has(String(pickLeagueId));
+    const sameCompetition = targetCompetitions.has(normalizeCompetition(pick.league || pick.competition));
+    if (!sameLeagueId && !sameCompetition) continue;
+    const origin = pickOriginKey(pick);
+    const current = groups.get(origin) || {
+      origin,
+      originLabel: pickOriginLabel(pick),
+      navigationOrigin: pick.originMenu === "Catálogo de mercados"
+        ? "specific_markets"
+        : (pick.sourceModule || pick.origin || "odds"),
+      won: 0,
+      lost: 0,
+      evaluated: 0,
+      individual: 0,
+      parlayLegs: 0,
+      winRate: 0
+    };
+    current[pick.result] += 1;
+    current.evaluated += 1;
+    if (kind === "parlay") current.parlayLegs += 1;
+    else current.individual += 1;
+    current.winRate = Number((current.won / current.evaluated * 100).toFixed(1));
+    groups.set(origin, current);
+  }
+  const safeLimit = Math.max(1, Math.min(2, Number(limit) || 2));
+  return [...groups.values()].filter((row) => row.won > 0)
+    .sort((a, b) => b.won - a.won || b.winRate - a.winRate || b.evaluated - a.evaluated || a.originLabel.localeCompare(b.originLabel, "es"))
+    .slice(0, safeLimit);
+}
+
 function fixtureMonthValue(item = {}) {
   const raw = String(item.date || item.kickoffAt || item.utcDateTime || "").trim();
   const direct = raw.match(/^(\d{4}-\d{2})/);
