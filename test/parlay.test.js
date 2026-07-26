@@ -132,6 +132,16 @@ test("validador resume parlays concluidos por tamaño y excluye papelera", () =>
   assert.equal(report.historical.evaluated, 9);
 });
 
+test("validador retira picks pendientes vencidos sin perder estadísticas generales ni rendimiento por tamaño", () => {
+  const report = buildHistoricalPickValidator([
+    { id: "settled", result: "won", sourceModule: "h2h", market: "Goles", selection: "Más de 1.5", league: "MLS" },
+    { id: "expired", result: "pending", fixtureStatus: "Programado", kickoffAt: "2026-07-20T12:00:00Z", sourceModule: "h2h", market: "Goles", selection: "Más de 1.5", league: "MLS" }
+  ], [{ id: "settled-parlay", legs: [{ result: "won" }, { result: "lost" }] }], new Date("2026-07-26T12:00:00Z"));
+  assert.equal(report.activeValidations.length, 0);
+  assert.deepEqual(report.historical, { evaluated: 3, won: 2, lost: 1, winRate: 66.7, maturity: "insufficient" });
+  assert.deepEqual(report.parlaySizePerformance, [{ key: "2", label: "2", order: 2, won: 0, lost: 1, evaluated: 1, winRate: 0 }]);
+});
+
 test("validador es determinista y no usa picks retirados", () => {
   const picks = [
     { id: "visible", fixtureId: 1, sourceModule: "corners", market: "Corners", selection: "Más de 8 corners", league: "MLS", result: "won" },

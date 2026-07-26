@@ -814,10 +814,14 @@ function historicalSample(values = []) {
   };
 }
 
-function isPendingActivePick(pick = {}) {
+function isPendingActivePick(pick = {}, now = new Date()) {
   if (pick.result !== "pending") return false;
   const status = normalizedHistoricalText(pick.fixtureStatus || pick.status);
-  return !/(final|finished|\bft\b|aet|pen|cancel|postpon|suspend|abandon)/.test(status);
+  if (/(final|finished|\bft\b|aet|pen|cancel|postpon|suspend|abandon)/.test(status)) return false;
+  if (/(en vivo|live|\b1h\b|\b2h\b|half|extra time)/.test(status)) return true;
+  const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || pick.date || "");
+  if (Number.isFinite(kickoff)) return kickoff > now.getTime();
+  return /(program|scheduled|not started|\bns\b|tbd)/.test(status);
 }
 
 function historicalValidationForPick(pick, settled, context = {}) {
@@ -868,16 +872,16 @@ function historicalValidationForPick(pick, settled, context = {}) {
   };
 }
 
-export function buildHistoricalPickValidator(picks = [], parlays = []) {
+export function buildHistoricalPickValidator(picks = [], parlays = [], now = new Date()) {
   const activePicks = picks.filter((pick) => !pick?.trashed && !pick?.deletedPermanently);
   const activeParlays = parlays.filter((parlay) => !parlay?.trashed && !parlay?.deletedPermanently);
   const settled = [
     ...activePicks.filter((pick) => ["won", "lost"].includes(pick?.result)),
     ...activeParlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []).filter((pick) => ["won", "lost"].includes(pick?.result))
   ];
-  const validations = activePicks.filter(isPendingActivePick).map((pick) => historicalValidationForPick(pick, settled));
+  const validations = activePicks.filter((pick) => isPendingActivePick(pick, now)).map((pick) => historicalValidationForPick(pick, settled));
   for (const parlay of activeParlays) {
-    const pendingLegs = (parlay.legs || []).filter(isPendingActivePick);
+    const pendingLegs = (parlay.legs || []).filter((pick) => isPendingActivePick(pick, now));
     const fixtureCounts = pendingLegs.reduce((counts, leg) => counts.set(String(leg.fixtureId), (counts.get(String(leg.fixtureId)) || 0) + 1), new Map());
     for (const leg of pendingLegs) validations.push(historicalValidationForPick(leg, settled, {
       kind: "parlay",
