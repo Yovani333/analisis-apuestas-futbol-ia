@@ -4,7 +4,7 @@ export const PICK_ORIGINS = Object.freeze({
   odds_rule_engine: { label: "Evaluación predictiva", module: "Dashboard / Evaluación predictiva", status: "active" },
   outcome_1x2: { label: "Selector obligatorio 1X2", module: "Selector obligatorio 1X2", status: "active" },
   h2h: { label: "Head to head", module: "Transparencia de datos / Head to head", status: "active" },
-  recent_form: { label: "Forma reciente", module: "Transparencia de datos / Estadísticas y forma", status: "active" },
+  recent_form: { label: "Estadísticas / forma", module: "Transparencia de datos / Estadísticas / forma", status: "active" },
   xg_btts: { label: "xG / xGA", module: "Transparencia de datos / xG / xGA", status: "active" },
   "xG / xGA": { label: "xG / xGA", module: "Transparencia de datos / xG / xGA", status: "legacy_alias" },
   poisson: { label: "Motor Poisson", module: "Guía de análisis / Motor Poisson", status: "active" },

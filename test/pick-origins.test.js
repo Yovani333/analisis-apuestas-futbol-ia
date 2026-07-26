@@ -30,6 +30,10 @@ test("muestra el título principal vigente de los módulos de análisis", () => 
   assert.equal(pickOriginLabel("odds_rule_engine"), "Evaluación predictiva");
 });
 
+test("la recomendación de forma conserva el mismo título como origen", () => {
+  assert.equal(pickOriginLabel("recent_form"), "Estadísticas / forma");
+});
+
 test("conserva compatibilidad con el origen textual legado", () => {
   assert.equal(pickOriginLabel("Picks basados en datos"), "Picks basados en datos");
   assert.equal(pickOriginDefinition("Picks basados en datos").status, "legacy_alias");

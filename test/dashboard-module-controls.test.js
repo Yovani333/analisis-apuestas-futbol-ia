@@ -78,6 +78,16 @@ test("Sugerencia H2H ofrece un boton para agregar el pick al cupon", () => {
   assert.match(app, /sourceModule: "h2h"/);
 });
 
+test("Datos del partido resume confianza y permite agregar los tres picks contextuales", () => {
+  assert.match(app, /<th>Confianza<\/th>/);
+  assert.match(app, /researchRecommendationSummary\(moduleKey, evaluateResearchRecommendation/);
+  assert.match(app, /pick-add-icon--table[\s\S]*data-add-h2h-pick/);
+  assert.match(app, /pick-add-icon--table[\s\S]*data-add-recent-form-pick/);
+  assert.match(app, /pick-add-icon--table[\s\S]*data-add-xg-btts-pick/);
+  assert.match(app, /metricLabel: "cumplimiento"/);
+  assert.match(app, /metricLabel: "respaldo"/);
+});
+
 test("Transparencia muestra cuotas normalizadas si la respuesta cruda viene vacia", () => {
   assert.match(app, /function renderNormalizedOddsDetail\(module\)/);
   assert.match(app, /function renderOddsDetail\(data, normalizedModule = null\)/);

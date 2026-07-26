@@ -1357,6 +1357,66 @@ function renderGuideCoverageSummary(fixture) {
     <div class="coverage-impact"><strong>Impacto de datos faltantes</strong>${missing.length ? missing.map((item) => { const level = impact(item); return `<span class="impact-chip impact-chip--${level}"><b>${impactLabel[level]}</b>${escapeHtml(item.label || item.module || "Dato")}</span>`; }).join("") : '<span class="impact-chip impact-chip--ok"><b>Sin bloqueo</b>No se reportan faltantes en la matriz.</span>'}</div>`;
 }
 
+function evaluateResearchRecommendation(moduleKey, research) {
+  const module = research?.[moduleKey];
+  if (!module || !research?.homeTeam || !research?.awayTeam) return null;
+  if (moduleKey === "h2h") {
+    return evaluateH2HRecommendation({
+      matches: module.matches || [], currentHomeTeam: research.homeTeam, currentAwayTeam: research.awayTeam,
+      currentFixtureDate: research.dateTime, neutralVenue: research.venue?.neutral, source: module.source
+    });
+  }
+  if (moduleKey === "statsForm") {
+    return evaluateRecentFormRecommendation({
+      homeMatches: module.homeLastMatches, awayMatches: module.awayLastMatches,
+      homeTeamName: research.homeTeam.name, awayTeamName: research.awayTeam.name, currentFixtureDate: research.dateTime
+    });
+  }
+  if (moduleKey === "xgXga") {
+    const historicalAttempted = module.type === "historical_estimated"
+      || module.dataSource === "historical_api_estimate" || module.historicalAttempted === true;
+    if (!historicalAttempted) return null;
+    return evaluateXgBttsRecommendation({
+      homeFixtures: module.fixturesUsed?.home || module.fixturesUsedHome || [],
+      awayFixtures: module.fixturesUsed?.away || module.fixturesUsedAway || [],
+      homeTeam: research.homeTeam, awayTeam: research.awayTeam,
+      currentFixtureId: research.matchId, currentFixtureDate: research.dateTime,
+      sourceQualityScore: module.confidenceScore
+    });
+  }
+  return null;
+}
+
+function researchRecommendationSummary(moduleKey, analysis) {
+  if (!analysis) return null;
+  if (moduleKey === "h2h" && analysis.recommendedMarket) {
+    const winner = analysis.calculationDetails?.winningCandidate;
+    if (!winner?.key) return null;
+    return {
+      selection: analysis.recommendedSelection, confidence: analysis.confidence,
+      metric: analysis.weightedRate, metricLabel: "cumplimiento",
+      button: `<button class="pick-add-icon pick-add-icon--table" type="button" data-add-h2h-pick data-h2h-key="${escapeHtml(winner.key)}" data-h2h-market="${escapeHtml(analysis.recommendedMarket)}" data-h2h-selection="${escapeHtml(analysis.recommendedSelection)}" data-h2h-confidence="${escapeHtml(analysis.confidence)}" data-h2h-rate="${escapeHtml(analysis.weightedRate)}" data-h2h-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>`
+    };
+  }
+  if (moduleKey === "statsForm" && analysis.recommendedMarket) {
+    const winner = analysis.calculationDetails?.winningCandidate;
+    if (!winner?.key) return null;
+    return {
+      selection: analysis.recommendedSelection, confidence: analysis.confidence,
+      metric: analysis.weightedRate, metricLabel: "cumplimiento",
+      button: `<button class="pick-add-icon pick-add-icon--table" type="button" data-add-recent-form-pick data-recent-form-key="${escapeHtml(winner.key)}" data-recent-form-market="${escapeHtml(analysis.recommendedMarket)}" data-recent-form-selection="${escapeHtml(analysis.recommendedSelection)}" data-recent-form-confidence="${escapeHtml(analysis.confidence)}" data-recent-form-rate="${escapeHtml(analysis.weightedRate)}" data-recent-form-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>`
+    };
+  }
+  if (moduleKey === "xgXga" && analysis.status === "RECOMMENDED") {
+    return {
+      selection: analysis.recommendedSelection, confidence: analysis.confidence,
+      metric: analysis.selectedScore, metricLabel: "respaldo",
+      button: `<button class="pick-add-icon pick-add-icon--table" type="button" data-add-xg-btts-pick data-xg-btts-selection="${escapeHtml(analysis.recommendedSelection)}" data-xg-btts-confidence="${escapeHtml(analysis.confidence)}" data-xg-btts-score="${escapeHtml(analysis.selectedScore)}" data-xg-btts-estimated="${escapeHtml(analysis.estimatedBttsYes)}" data-xg-btts-explanation="${escapeHtml(analysis.explanation)}" aria-label="Agregar ${escapeHtml(analysis.recommendedSelection)} al cupón" title="Agregar al parlay">+</button>`
+    };
+  }
+  return null;
+}
+
 function renderCoverageTable(fixture) {
   const coverageRows = new Map((fixture.researchData?.sourceCoverage || []).map((row) => [row.moduleKey, row]));
   elements.dataGrid.innerHTML = `
@@ -1366,6 +1426,7 @@ function renderCoverageTable(fixture) {
           <tr>
             <th>Dato</th>
             <th>Estado</th>
+            <th>Confianza</th>
             <th>Fuente principal</th>
             <th>Respaldo</th>
             <th>Fuente activa</th>
@@ -1383,9 +1444,16 @@ function renderCoverageTable(fixture) {
             const backup = coverage?.secondarySources?.join(" / ") || "Sin respaldo activo";
             const active = coverage?.activeSources?.join(" / ") || (researchModule?.source ? researchSourceLabel(moduleKey, researchModule) : "Ninguna");
             const sourceType = active.includes("modelo interno") ? "model" : active.includes("API-Football") ? "api" : "external";
+            const recommendation = researchRecommendationSummary(moduleKey, evaluateResearchRecommendation(moduleKey, fixture.researchData));
+            const recommendationHtml = recommendation
+              ? `<div class="coverage-recommendation"><span>${escapeHtml(recommendation.selection)}</span>${recommendation.button}</div>` : "";
+            const confidenceHtml = recommendation
+              ? `<div class="coverage-confidence"><strong>${escapeHtml(recommendation.confidence || "Baja")}</strong><small>${displayValue(recommendation.metric)}% ${escapeHtml(recommendation.metricLabel)}</small></div>`
+              : ["statsForm", "h2h", "xgXga"].includes(moduleKey) ? '<span class="muted-text">Sin pick</span>' : '<span class="muted-text">No aplica</span>';
             return `<tr class="coverage-row coverage-row--${sourceType}">
-              <td data-label="Dato"><strong>${labelWithTooltip(category.label, category.key === "xg" ? "xg" : category.key === "odds" ? "odds" : null)}</strong></td>
+              <td data-label="Dato"><div class="coverage-datum"><strong>${labelWithTooltip(category.label, category.key === "xg" ? "xg" : category.key === "odds" ? "odds" : null)}</strong>${recommendationHtml}</div></td>
               <td data-label="Estado">${statusBadge(status)}</td>
+              <td data-label="Confianza">${confidenceHtml}</td>
               <td data-label="Fuente principal">${escapeHtml(primary)}</td>
               <td data-label="Respaldo">${escapeHtml(backup)}</td>
               <td data-label="Fuente activa"><span class="source-chip source-chip--${sourceType}">${escapeHtml(active)}</span></td>
@@ -1570,6 +1638,7 @@ function h2hRecommendationLeg(dataset = {}) {
     reasoning: dataset.h2hExplanation || "Sugerencia contextual basada en enfrentamientos directos.",
     requiresReview: true,
     sourceModule: "h2h",
+    sourceLabel: "Head to head",
     source: "API-Football + análisis H2H determinístico",
     supportingData: Number.isFinite(weightedRate) ? [`Cumplimiento H2H ponderado: ${weightedRate}%`] : [],
     contradictingData: ["El H2H es evidencia contextual y no un pronóstico completo."]
@@ -1769,6 +1838,7 @@ function recentFormRecommendationLeg(dataset = {}) {
     reasoning: dataset.recentFormExplanation || "Sugerencia contextual basada en la forma reciente.",
     requiresReview: true,
     sourceModule: "recent_form",
+    sourceLabel: "Estadísticas / forma",
     source: "API-Football + análisis determinístico de forma reciente",
     supportingData: Number.isFinite(weightedRate) ? [`Cumplimiento ponderado: ${weightedRate}%`] : [],
     missingData: ["Cuota no disponible"]
@@ -1788,7 +1858,7 @@ function renderResearchModuleDetail(moduleKey, research) {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Posición", module.home?.rank], ["Puntos", module.home?.points], ["Partidos", module.home?.played], ["Diferencia de gol", module.home?.goalDifference], ["Forma", module.home?.form]])}${researchTeamStats(research.awayTeam.name, [["Posición", module.away?.rank], ["Puntos", module.away?.points], ["Partidos", module.away?.played], ["Diferencia de gol", module.away?.goalDifference], ["Forma", module.away?.form]])}</div>`;
   } else if (moduleKey === "h2h") {
     const rows = (module.matches || []).map((match) => [displayValue(match.date), displayValue(match.homeTeam), `<strong>${displayValue(match.homeGoals)} – ${displayValue(match.awayGoals)}</strong>`, displayValue(match.awayTeam)]);
-    const analysis = evaluateH2HRecommendation({ matches: module.matches || [], currentHomeTeam: research.homeTeam, currentAwayTeam: research.awayTeam, currentFixtureDate: research.dateTime, neutralVenue: research.venue?.neutral, source: module.source });
+    const analysis = evaluateResearchRecommendation("h2h", research);
     content = `<div class="research-kpis"><span>Victorias ${escapeHtml(research.homeTeam.name)} <strong>${displayValue(module.homeWins)}</strong></span><span>Empates <strong>${displayValue(module.draws)}</strong></span><span>Victorias ${escapeHtml(research.awayTeam.name)} <strong>${displayValue(module.awayWins)}</strong></span></div>${rows.length ? detailTable(["Fecha", "Local", "Marcador", "Visitante"], rows) : emptyDetail("No hay enfrentamientos disponibles.")}${renderH2HSuggestion(analysis, research.homeTeam.name, research.awayTeam.name)}`;
   } else if (moduleKey === "odds") {
     const performanceRows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
@@ -1815,8 +1885,7 @@ function renderResearchModuleDetail(moduleKey, research) {
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Días de descanso", module.homeRestDays], ["Próximos partidos", module.homeUpcomingMatches?.length || 0]])}${researchTeamStats(research.awayTeam.name, [["Días de descanso", module.awayRestDays], ["Próximos partidos", module.awayUpcomingMatches?.length || 0]])}</div>${(module.notes || []).length ? `<ul class="detail-list">${module.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}`;
   } else if (moduleKey === "statsForm") {
     const matchRows = (team, matches) => (matches || []).map((match) => [escapeHtml(team), displayValue(match.date), displayValue(match.opponent), displayValue(match.venue), `<strong>${displayValue(match.goalsFor)}–${displayValue(match.goalsAgainst)}</strong>`, displayValue(match.result)]);
-    const analysis = evaluateRecentFormRecommendation({ homeMatches: module.homeLastMatches, awayMatches: module.awayLastMatches,
-      homeTeamName: research.homeTeam.name, awayTeamName: research.awayTeam.name, currentFixtureDate: research.dateTime });
+    const analysis = evaluateResearchRecommendation("statsForm", research);
     content = `<div class="team-stat-grid">${researchTeamStats(research.homeTeam.name, [["Goles a favor", module.homeGoalsFor], ["Goles en contra", module.homeGoalsAgainst], ["Tasa de victoria", module.homeWinRate === null ? null : `${module.homeWinRate}%`], ["Porterías a cero", module.homeCleanSheets]])}${researchTeamStats(research.awayTeam.name, [["Goles a favor", module.awayGoalsFor], ["Goles en contra", module.awayGoalsAgainst], ["Tasa de victoria", module.awayWinRate === null ? null : `${module.awayWinRate}%`], ["Porterías a cero", module.awayCleanSheets]])}</div>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "Marcador", "Resultado"], [...matchRows(research.homeTeam.name, module.homeLastMatches), ...matchRows(research.awayTeam.name, module.awayLastMatches)])}${renderRecentFormSuggestion(analysis, research.homeTeam.name, research.awayTeam.name)}`;
   } else if (moduleKey === "injuriesSuspensions") {
     const absenceRows = (team, side) => ["injuries", "suspensions", "doubts"].flatMap((kind) => (side?.[kind] || []).map((player) => [escapeHtml(team), kind === "injuries" ? "Lesión" : kind === "suspensions" ? "Sanción" : "Duda", displayValue(player.name), displayValue(player.startDate ? formatUpdatedAt(player.startDate) : null), displayValue(player.reason || player.type)]));
@@ -1922,15 +1991,7 @@ function renderResearchModuleDetail(moduleKey, research) {
     const fixtures = fixtureRows.length
       ? `<section class="detail-section"><h3>Partidos usados</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "xG estimado", "xGA estimado"], fixtureRows)}</section>`
       : "";
-    const bttsAnalysis = historicalAttempted ? evaluateXgBttsRecommendation({
-      homeFixtures: module.fixturesUsed?.home || module.fixturesUsedHome || [],
-      awayFixtures: module.fixturesUsed?.away || module.fixturesUsedAway || [],
-      homeTeam: research.homeTeam,
-      awayTeam: research.awayTeam,
-      currentFixtureId: research.matchId,
-      currentFixtureDate: research.dateTime,
-      sourceQualityScore: module.confidenceScore
-    }) : null;
+    const bttsAnalysis = historicalAttempted ? evaluateResearchRecommendation("xgXga", research) : null;
     const bttsSuggestion = bttsAnalysis ? renderXgBttsSuggestion(bttsAnalysis, research.homeTeam.name, research.awayTeam.name) : "";
     content = `${metadata}${teams}${diagnostics}${rawStats}${fixtures}${bttsSuggestion}`;
   } else if (moduleKey === "weatherPitch") {
@@ -4881,6 +4942,12 @@ elements.setToday.addEventListener("click", () => {
   elements.dateTo.value = today;
 });
 elements.dataGrid.addEventListener("click", (event) => {
+  const addH2HButton = event.target.closest("[data-add-h2h-pick]");
+  const addRecentFormButton = event.target.closest("[data-add-recent-form-pick]");
+  const addXgBttsButton = event.target.closest("[data-add-xg-btts-pick]");
+  if (addH2HButton) return addH2HRecommendationToParlay(addH2HButton.dataset);
+  if (addRecentFormButton) return addRecentFormRecommendationToParlay(addRecentFormButton.dataset);
+  if (addXgBttsButton) return addXgBttsRecommendationToParlay(addXgBttsButton.dataset);
   const card = event.target.closest("[data-category]");
   if (card) openDataDetail(card.dataset.category);
 });

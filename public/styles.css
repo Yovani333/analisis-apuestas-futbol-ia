@@ -286,9 +286,17 @@ button { touch-action: manipulation; }
 .data-grid { display: block; }
 .coverage-table-wrap { border-radius: 10px; }
 .coverage-table th, .coverage-table td { vertical-align: middle; }
-.coverage-table td:first-child { min-width: 180px; }
-.coverage-table td:nth-child(3), .coverage-table td:nth-child(4), .coverage-table td:nth-child(5) { white-space: normal; min-width: 150px; }
+.coverage-table td:first-child { min-width: 240px; }
+.coverage-table td:nth-child(3) { min-width: 125px; }
+.coverage-table td:nth-child(4), .coverage-table td:nth-child(5), .coverage-table td:nth-child(6) { white-space: normal; min-width: 150px; }
 .coverage-table .button { white-space: nowrap; }
+.coverage-datum { display: grid; gap: 6px; }
+.coverage-recommendation { display: flex; align-items: center; gap: 7px; color: var(--text); font-size: .68rem; line-height: 1.35; }
+.coverage-recommendation span { min-width: 0; font-weight: 750; }
+.pick-add-icon--table { width: 24px; height: 24px; flex: 0 0 24px; font-size: .9rem; }
+.coverage-confidence { display: grid; gap: 2px; }
+.coverage-confidence strong { color: var(--text); font-size: .7rem; }
+.coverage-confidence small { color: var(--muted); font-size: .62rem; white-space: nowrap; }
 .data-card { min-width: 0; padding: 11px; color: var(--text); font: inherit; text-align: left; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
 .data-card:hover { border-color: #9fbcf5; box-shadow: 0 8px 18px rgb(37 99 235 / 8%); transform: translateY(-1px); }
 .data-card:focus-visible { outline: 0; border-color: var(--primary); box-shadow: var(--focus); }
@@ -862,7 +870,7 @@ body:has(.data-dialog[open]) { overflow: hidden; }
   .detail-table td:last-child { border-bottom: 0; }
   .detail-table td::before { content: attr(data-label); color: var(--muted); font-size: .61rem; font-weight: 800; text-transform: uppercase; }
   .detail-table td .button { width: 100%; }
-  .coverage-table td:first-child, .coverage-table td:nth-child(3), .coverage-table td:nth-child(4), .coverage-table td:nth-child(5), .source-table td:last-child { min-width: 0; }
+  .coverage-table td:first-child, .coverage-table td:nth-child(3), .coverage-table td:nth-child(4), .coverage-table td:nth-child(5), .coverage-table td:nth-child(6), .source-table td:last-child { min-width: 0; }
   .pick-color-legend { gap: 8px; padding: 7px; }
 }
 

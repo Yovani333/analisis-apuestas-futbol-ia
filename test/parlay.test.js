@@ -490,7 +490,7 @@ test("resultados por competición conserva el detalle ganado y perdido", () => {
     { id: "l", league: "MLS", result: "lost", home: "C", away: "D", selection: "Local", market: "1X2", sourceModule: "outcome_1x2" }
   ]);
   assert.equal(row.wonPicks[0].selection, "Más de 1.5");
-  assert.equal(row.wonPicks[0].originLabel, "Forma reciente");
+  assert.equal(row.wonPicks[0].originLabel, "Estadísticas / forma");
   assert.equal(row.lostPicks[0].match, "C vs D");
   assert.equal(row.lostPicks[0].originLabel, "Selector obligatorio 1X2");
 });
@@ -505,7 +505,7 @@ test("la búsqueda prioriza hasta dos orígenes por porcentaje de acierto evalua
     { leagueId: 71, league: "Brasileirão Serie A", result: "won", sourceModule: "poisson" },
     { leagueId: 253, league: "MLS", result: "pending", sourceModule: "recent_form" }
   ], [], { leagueIds: [253], competitions: ["MLS"], limit: 2 });
-  assert.deepEqual(leaders.map((row) => [row.originLabel, row.winRate]), [["Corners", 100], ["Forma reciente", 100]]);
+  assert.deepEqual(leaders.map((row) => [row.originLabel, row.winRate]), [["Corners", 100], ["Estadísticas / forma", 100]]);
   assert.equal(leaders[0].evaluated, 1);
   assert.equal(leaders.length, 2);
 });
@@ -518,7 +518,7 @@ test("un origen con más ganados no supera a otro con mejor proporción entre ga
     { id: "rate-l", league: "MLS", result: "lost", sourceModule: "recent_form" }
   ], [], { competitions: ["MLS"], limit: 2 });
   assert.deepEqual(leaders.map((row) => [row.originLabel, row.won, row.lost, row.evaluated, row.winRate]), [
-    ["Forma reciente", 3, 1, 4, 75],
+    ["Estadísticas / forma", 3, 1, 4, 75],
     ["Head to head", 7, 5, 12, 58.3]
   ]);
 });
