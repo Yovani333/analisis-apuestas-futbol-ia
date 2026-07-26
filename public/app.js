@@ -3083,11 +3083,12 @@ function renderSavedParlays() {
   elements.savedParlaysList.innerHTML = activeParlays.map((parlay) => {
     const result = calculateParlayResult(parlay.legs);
     const winProgress = calculateParlayWinProgress(parlay.legs);
+    const hasLiveFixture = (parlay.legs || []).some((leg) => normalizedSavedStatus(leg.fixtureStatus) === "En vivo");
     const expanded = state.expandedParlays.has(parlay.id);
     parlay.result = result;
     return `<article class="saved-parlay saved-parlay--${result}" data-parlay-id="${escapeHtml(parlay.id)}">
       <header class="saved-parlay__header">
-        <div><span>Parlay · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(parlay.createdAt)))}</time></div>
+        <div><span>Parlay · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}${hasLiveFixture ? '<strong class="parlay-live-badge">En vivo</strong>' : ""}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(parlay.createdAt)))}</time></div>
         <div class="saved-parlay__summary"><span class="parlay-win-progress" title="${winProgress.won} de ${winProgress.total} selecciones ganadas"><small>Acierto</small><strong>${displayValue(winProgress.percentage)}%</strong><small>${winProgress.won}/${winProgress.total}</small></span><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong><button class="parlay-expand" type="button" data-toggle-parlay aria-expanded="${expanded}">${expanded ? "−" : "+"}</button></div>
       </header>
       <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); const favoriteOrigin = isActiveSavedPick(leg) && preferredOrigins.has(pickOriginKey(leg)); return `

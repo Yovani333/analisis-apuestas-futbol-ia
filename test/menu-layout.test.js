@@ -159,6 +159,7 @@ test("parlays muestran marcador y minuto cuando el encuentro está en vivo", () 
   assert.match(app, /applyFixtureStatusUpdate\(leg/);
   assert.match(app, /statusLabel: fixtureResult\?\.statusLabel/);
   assert.match(app, /savedLegScoreHtml\(leg\)/);
+  assert.match(app, /hasLiveFixture[\s\S]*parlay-live-badge[\s\S]*En vivo/);
 });
 
 test("parlays pendientes aparecen primero, perdidos al final y muestran porcentaje ganado", () => {

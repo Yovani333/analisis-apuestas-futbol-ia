@@ -771,6 +771,7 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .saved-parlay__header { display: flex; justify-content: space-between; gap: 16px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
 .saved-parlay__header span, .saved-parlay__header time { display: block; color: var(--muted); font-size: .69rem; }
 .saved-parlay__header h3 { margin: 2px 0; font-size: 1rem; }
+.parlay-live-badge { display: inline-flex; align-items: center; margin-left: 7px; padding: 3px 6px; color: #fff; background: #c72f45; border: 1px solid #ef6376; border-radius: 4px; font-size: .58rem; font-weight: 900; text-transform: uppercase; vertical-align: middle; }
 .result-badge { align-self: flex-start; padding: 6px 10px; font-size: .7rem; border-radius: 999px; }
 .result-badge--pending { color: var(--warning); background: var(--warning-soft); }
 .result-badge--won { color: var(--success); background: var(--success-soft); }
