@@ -1735,11 +1735,10 @@ body {
 .saved-pick__result-control select { min-width: 118px; }
 .saved-market-metrics { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px !important; }
 .saved-market-metrics > span { display: grid; gap: 2px; padding: 6px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
-.saved-parlay__summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
-.parlay-win-progress { display: grid; grid-template-columns: auto auto; gap: 1px 5px; align-items: baseline; padding: 5px 7px; color: var(--muted); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
-.parlay-win-progress small { font-size: .57rem; }
-.parlay-win-progress small:last-child { grid-column: 1 / -1; }
-.parlay-win-progress strong { color: var(--text); font-size: .72rem; }
+.saved-parlay__summary { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.saved-parlay__summary .parlay-win-progress { display: inline-flex; min-height: 30px; align-items: center; gap: 4px; padding: 4px 7px; color: var(--muted); white-space: nowrap; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
+.parlay-win-progress small { font-size: .56rem; }
+.parlay-win-progress strong { color: var(--text); font-size: .66rem; }
 .parlay-expand { width: 34px; height: 34px; color: var(--text); font-size: 1.15rem; font-weight: 900; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
 .odds-change--up { color: var(--success); }
 .odds-change--down { color: var(--danger); }
@@ -3037,6 +3036,22 @@ body {
     min-width: 0;
     padding-inline: 8px;
   }
+
+  .saved-parlay__summary {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto 36px;
+    align-items: center;
+    justify-content: stretch;
+    gap: 7px;
+  }
+
+  .saved-parlay__summary .parlay-win-progress {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .saved-parlay__summary .result-badge { min-width: 0; }
 
   .saved-date-filter, .performance-month-filter { grid-template-columns: minmax(0, 1fr); }
   .saved-date-filter > div, .saved-date-filter .button, .saved-date-filter span,
