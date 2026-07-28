@@ -201,6 +201,22 @@ test("detecta RPC faltante o falla de timestamp para usar respaldo seguro", () =
   assert.equal(cloudSyncInternals.isRpcExecutionFailure(new Error('invalid input syntax for type timestamp with time zone: ""')), true);
 });
 
+test("la respuesta compacta del estado no transporta evidencias completas", () => {
+  const response = cloudSyncInternals.compactCloudStateResponse(
+    {
+      preferences: { theme: "dark" },
+      saved_picks: [{ id: "pick-1" }],
+      evidence_snapshots: [{ id: "ev-heavy", modules: { raw: "large" } }]
+    },
+    { automaticAvailable: 81, latestAutomaticCapturedAt: "2026-07-20T10:00:00Z" }
+  );
+  assert.deepEqual(response.evidence_snapshots, []);
+  assert.equal(response.saved_picks.length, 1);
+  assert.equal(response.evidence_sync_summary.compacted, true);
+  assert.equal(response.evidence_sync_summary.automaticAvailable, 81);
+  assert.equal(response.evidence_sync_summary.latestAutomaticCapturedAt, "2026-07-20T10:00:00Z");
+});
+
 test("el respaldo del servidor combina filas existentes y entrantes sin borrar", () => {
   const merged = cloudSyncInternals.mergeNormalizedState(
     { saved_parlays: [{ id: "remote" }, { id: "same", value: "old" }], saved_picks: [{ id: "remote-pick" }] },

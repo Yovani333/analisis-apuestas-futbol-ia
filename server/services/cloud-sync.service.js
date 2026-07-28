@@ -194,52 +194,18 @@ function mergeEvidenceSnapshots(manualRows, automaticRows) {
     .sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0)).slice(0, 500);
 }
 
-function compactEvidenceForCloudState(snapshot = {}) {
-  if (!snapshot || typeof snapshot !== "object") return null;
+function compactCloudStateResponse(state = {}, evidenceSummary = {}) {
   return {
-    version: snapshot.version || 2,
-    id: snapshot.id || snapshot.fixture?.id || null,
-    capturedAt: snapshot.capturedAt || null,
-    updatedAt: snapshot.updatedAt || snapshot.capturedAt || null,
-    timezone: snapshot.timezone || null,
-    fixture: snapshot.fixture ? {
-      id: snapshot.fixture.id || null,
-      date: snapshot.fixture.date || null,
-      time: snapshot.fixture.time || null,
-      utcDateTime: snapshot.fixture.utcDateTime || null,
-      status: snapshot.fixture.status || null,
-      statusLabel: snapshot.fixture.statusLabel || null,
-      leagueName: snapshot.fixture.leagueName || null,
-      leagueId: snapshot.fixture.leagueId ?? null,
-      leagueSlug: snapshot.fixture.leagueSlug || null,
-      season: snapshot.fixture.season ?? null,
-      country: snapshot.fixture.country || null,
-      home: snapshot.fixture.home || null,
-      away: snapshot.fixture.away || null,
-      homeTeamId: snapshot.fixture.homeTeamId ?? null,
-      awayTeamId: snapshot.fixture.awayTeamId ?? null
-    } : null,
-    dataQuality: snapshot.dataQuality ? {
-      score: snapshot.dataQuality.score ?? null,
-      level: snapshot.dataQuality.level || null
-    } : null,
-    auditMetadata: snapshot.auditMetadata ? {
-      captureMode: snapshot.auditMetadata.captureMode || null,
-      sourceFile: snapshot.auditMetadata.sourceFile || null,
-      dataPicksModelVersion: snapshot.auditMetadata.dataPicksModelVersion || null
-    } : null,
-    currentFixtureStatisticsUsed: snapshot.currentFixtureStatisticsUsed === true,
-    openAiUsed: snapshot.openAiUsed === true,
-    compactedForCloudState: true
+    ...(state || { preferences: {}, parlay_draft: [], saved_picks: [], saved_parlays: [], alerts: [], analysis_usage: {} }),
+    evidence_snapshots: [],
+    evidence_sync_summary: {
+      compacted: true,
+      included: 0,
+      automaticAvailable: Number(evidenceSummary.automaticAvailable || 0),
+      latestAutomaticCapturedAt: evidenceSummary.latestAutomaticCapturedAt || null,
+      note: "El estado de cuenta no descarga evidencias completas para reducir ancho de banda. Las evidencias completas permanecen guardadas en la biblioteca automatica."
+    }
   };
-}
-
-function compactEvidenceRowsForCloudState(rows, limit = MAX_CLOUD_STATE_EVIDENCE) {
-  return filterValidEvidenceSnapshots(Array.isArray(rows) ? rows : [])
-    .sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0))
-    .slice(0, limit)
-    .map(compactEvidenceForCloudState)
-    .filter(Boolean);
 }
 
 export async function saveCloudEvidenceSnapshots(authorization, input = {}) {
@@ -331,7 +297,7 @@ export async function getCloudState(authorization) {
   const token = bearerToken(authorization);
   let rows;
   try {
-    rows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage,updated_at&limit=1", { token });
+    rows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,alerts,analysis_usage,updated_at&limit=1", { token });
   } catch (error) {
     if (isMissingCloudSchema(error)) {
       throw new AppError("La tabla de sincronizacion no esta disponible en Supabase. Ejecuta las migraciones cloud y recarga el schema cache.", 503, "CLOUD_SCHEMA_MISSING");
@@ -347,62 +313,19 @@ export async function getCloudState(authorization) {
     if (!/automatic_evidence_snapshots|schema cache|could not find|does not exist|PGRST205/i.test(providerMessage(error))) throw error;
   }
   if (!state && !automaticMetadataRows.length) return null;
-  return {
-    ...(state || { preferences: {}, parlay_draft: [], saved_picks: [], saved_parlays: [], alerts: [], analysis_usage: {} }),
-    evidence_snapshots: [],
-    evidence_sync_summary: {
-      compacted: true,
-      included: 0,
-      automaticAvailable: automaticMetadataRows.length,
-      latestAutomaticCapturedAt: automaticMetadataRows[0]?.captured_at || null,
-      note: "El estado de cuenta no descarga evidencias completas para reducir ancho de banda. Las evidencias completas permanecen guardadas en la biblioteca automatica."
-    }
-  };
+  return compactCloudStateResponse(state, {
+    automaticAvailable: automaticMetadataRows.length,
+    latestAutomaticCapturedAt: automaticMetadataRows[0]?.captured_at || null
+  });
 }
 
 export async function saveCloudState(authorization, input) {
   const token = bearerToken(authorization);
   const state = normalizedState(input);
   const userId = userIdFromToken(token);
-  try {
-    const rows = await supabaseRequest("/rest/v1/rpc/merge_user_sync_state_v2", {
-      method: "POST",
-      token,
-      body: {
-        p_preferences: state.preferences,
-        p_parlay_draft: state.parlay_draft,
-        p_saved_picks: state.saved_picks,
-        p_saved_parlays: state.saved_parlays,
-        p_evidence_snapshots: state.evidence_snapshots,
-        p_alerts: state.alerts,
-        p_analysis_usage: state.analysis_usage
-      }
-    });
-    return Array.isArray(rows) ? rows[0] || state : rows;
-  } catch (error) {
-    if (!isMissingRpc(error, "merge_user_sync_state_v2") && !isRpcExecutionFailure(error)) throw error;
-  }
-  try {
-    const rows = await supabaseRequest("/rest/v1/rpc/merge_user_sync_state", {
-      method: "POST",
-      token,
-      body: {
-        p_preferences: state.preferences,
-        p_parlay_draft: state.parlay_draft,
-        p_saved_picks: state.saved_picks,
-        p_saved_parlays: state.saved_parlays,
-        p_evidence_snapshots: state.evidence_snapshots,
-        p_alerts: state.alerts,
-        p_analysis_usage: state.analysis_usage
-      }
-    });
-    return Array.isArray(rows) ? rows[0] || state : rows;
-  } catch (error) {
-    if (!isMissingRpc(error, "merge_user_sync_state") && !isRpcExecutionFailure(error)) throw error;
-  }
   let existingRows;
   try {
-    existingRows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,evidence_snapshots,alerts,analysis_usage&limit=1", { token });
+    existingRows = await supabaseRequest("/rest/v1/user_sync_state?select=preferences,parlay_draft,saved_picks,saved_parlays,alerts,analysis_usage&limit=1", { token });
   } catch (error) {
     if (isMissingCloudSchema(error)) {
       throw new AppError("La tabla de sincronizacion no esta disponible en Supabase. Ejecuta las migraciones cloud y recarga el schema cache.", 503, "CLOUD_SCHEMA_MISSING");
@@ -411,11 +334,11 @@ export async function saveCloudState(authorization, input) {
   }
   const existing = Array.isArray(existingRows) ? existingRows[0] || {} : {};
   const merged = mergeNormalizedState(existing, state);
-  const payload = { user_id: userId, ...merged, updated_at: new Date().toISOString() };
-  let rows;
+  const { evidence_snapshots: _evidenceSnapshots, ...mergedWithoutEvidence } = merged;
+  const payload = { user_id: userId, ...mergedWithoutEvidence, updated_at: new Date().toISOString() };
   try {
-    rows = await supabaseRequest("/rest/v1/user_sync_state?on_conflict=user_id", {
-      method: "POST", token, body: payload, prefer: "resolution=merge-duplicates,return=representation"
+    await supabaseRequest("/rest/v1/user_sync_state?on_conflict=user_id", {
+      method: "POST", token, body: payload, prefer: "resolution=merge-duplicates,return=minimal"
     });
   } catch (error) {
     if (isMissingCloudSchema(error)) {
@@ -423,7 +346,7 @@ export async function saveCloudState(authorization, input) {
     }
     throw error;
   }
-  return Array.isArray(rows) ? rows[0] || payload : payload;
+  return compactCloudStateResponse(payload);
 }
 
 export async function registerEvidenceWatchlist(authorization, input = {}) {
@@ -557,4 +480,4 @@ export async function updateEvidenceWatchlist(row, changes) {
   });
 }
 
-export const cloudSyncInternals = { bearerToken, isMissingCloudSchema, isMissingEvidenceSchema, isMissingRpc, isRpcExecutionFailure, mergeEvidenceSnapshots, mergeNormalizedState, normalizedState, normalizeWatchedFixture, providerMessage, userIdFromToken, validateCredentials };
+export const cloudSyncInternals = { bearerToken, compactCloudStateResponse, isMissingCloudSchema, isMissingEvidenceSchema, isMissingRpc, isRpcExecutionFailure, mergeEvidenceSnapshots, mergeNormalizedState, normalizedState, normalizeWatchedFixture, providerMessage, userIdFromToken, validateCredentials };
