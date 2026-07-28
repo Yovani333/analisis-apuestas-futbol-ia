@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { byteLength, recordServiceInitiatedTraffic } from "./bandwidth-observability.service.js";
 
 const TABLE = "fixture_analysis_cache";
 const MAX_DATASET_BYTES = 1_800_000;
@@ -22,6 +23,7 @@ function isMissingSchema(error) {
 async function supabaseAdminRequest(path, { method = "GET", body, prefer = "" } = {}) {
   if (!configured()) return null;
   const secret = env.supabaseSecretKey;
+  const bodyText = body === undefined ? undefined : JSON.stringify(body);
   const response = await fetch(`${baseUrl()}${path}`, {
     method,
     headers: {
@@ -30,9 +32,16 @@ async function supabaseAdminRequest(path, { method = "GET", body, prefer = "" } 
       ...(secret.startsWith("eyJ") ? { Authorization: `Bearer ${secret}` } : {}),
       ...(prefer ? { Prefer: prefer } : {})
     },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) })
+    ...(bodyText === undefined ? {} : { body: bodyText })
   });
-  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+  const responseText = response.status === 204 ? "" : await response.text().catch(() => "");
+  recordServiceInitiatedTraffic({
+    service: "supabase-fixture-cache",
+    endpoint: path.split("?")[0],
+    requestBytes: byteLength(bodyText),
+    responseBytes: byteLength(responseText)
+  });
+  const payload = responseText ? (() => { try { return JSON.parse(responseText); } catch { return null; } })() : null;
   if (!response.ok) {
     const error = new Error(payload?.message || payload?.error || "Supabase rechazo la solicitud de cache de fixture.");
     error.status = response.status;

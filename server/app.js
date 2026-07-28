@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { apiRouter } from "./routes/api.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
+import { bandwidthResponseMiddleware } from "./services/bandwidth-observability.service.js";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const publicDir = path.join(rootDir, "public");
@@ -12,6 +13,7 @@ export const app = express();
 
 app.disable("x-powered-by");
 app.use(helmet({ contentSecurityPolicy: { directives: { "script-src": ["'self'"], "style-src": ["'self'"], "img-src": ["'self'", "data:", "https://media.api-sports.io"] } } }));
+app.use(bandwidthResponseMiddleware);
 app.use(express.json({ limit: "2mb" }));
 app.use("/api", rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: "draft-8", legacyHeaders: false }), apiRouter);
 app.use(express.static(publicDir, {

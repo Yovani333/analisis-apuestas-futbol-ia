@@ -18,6 +18,7 @@ import {
   recordApiFootballPendingHit,
   recordApiFootballResponse
 } from "./api-football-observability.service.js";
+import { byteLength, recordServiceInitiatedTraffic } from "./bandwidth-observability.service.js";
 import { evaluatePickRecommendations } from "./pick-recommendation.service.js";
 import { calculateCornersModel } from "./corners-model.service.js";
 import { calculatePoissonModel } from "./poisson-model.service.js";
@@ -203,6 +204,17 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
   recordApiFootballCacheMiss({ endpoint: url.pathname });
 
   const request = (async () => {
+  const parseApiFootballPayload = async (responseToParse) => {
+    const text = typeof responseToParse.text === "function"
+      ? await responseToParse.text()
+      : JSON.stringify(await responseToParse.json());
+    recordServiceInitiatedTraffic({
+      service: "api-football",
+      endpoint: url.pathname,
+      responseBytes: byteLength(text)
+    });
+    return text ? JSON.parse(text) : {};
+  };
   let response;
   try {
     response = await fetch(url, {
@@ -225,7 +237,7 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
       { status: response.status }
     );
   }
-  let payload = await response.json();
+  let payload = await parseApiFootballPayload(response);
   let providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
   if (providerErrors?.length) {
     recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_PROVIDER_ERROR", headers: response.headers });
@@ -238,7 +250,7 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
         });
         recordApiFootballResponse({ endpoint: url.pathname, headers: retryResponse.headers });
         if (retryResponse.ok) {
-          payload = await retryResponse.json();
+          payload = await parseApiFootballPayload(retryResponse);
           providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
           if (!providerErrors?.length) {
             const retryValue = payload.response || [];
@@ -262,7 +274,7 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
           });
           recordApiFootballResponse({ endpoint: url.pathname, headers: retryResponse.headers });
           if (retryResponse.ok) {
-            payload = await retryResponse.json();
+            payload = await parseApiFootballPayload(retryResponse);
             providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
             if (!providerErrors?.length) {
               const retryValue = payload.response || [];

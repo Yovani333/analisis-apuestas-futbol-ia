@@ -1,5 +1,6 @@
 import { SOURCE_STATUS } from "../../constants/source-catalog.js";
 import { createSourceResult } from "./source-adapter.js";
+import { byteLength, recordServiceInitiatedTraffic } from "../bandwidth-observability.service.js";
 
 const LIVE_CACHE_TTL = 5 * 60 * 1000;
 const NEAR_FORECAST_CACHE_TTL = 15 * 60 * 1000;
@@ -40,8 +41,24 @@ function estimatedPitch({ precipitation, rainProbability }) {
 
 async function requestJson(url, fetchImpl) {
   const response = await fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": "football-analysis-dashboard/1.0", Referer: "https://analisis-apuestas-futbol-ia.onrender.com/" } });
+  const endpoint = (() => {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.hostname}${parsed.pathname}`;
+    } catch {
+      return "weather-provider";
+    }
+  })();
   if (!response.ok) throw new Error(`Open-Meteo HTTP ${response.status}`);
-  const payload = await response.json();
+  const text = typeof response.text === "function"
+    ? await response.text()
+    : JSON.stringify(await response.json());
+  recordServiceInitiatedTraffic({
+    service: endpoint.includes("nominatim") ? "openstreetmap-nominatim" : "open-meteo",
+    endpoint,
+    responseBytes: byteLength(text)
+  });
+  const payload = text ? JSON.parse(text) : {};
   if (payload?.error) throw new Error(payload.reason || "Open-Meteo error");
   return payload;
 }

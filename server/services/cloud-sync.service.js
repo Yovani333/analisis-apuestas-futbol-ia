@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import { AppError } from "../errors.js";
 import { filterValidEvidenceSnapshots } from "../../public/evidence-validity.js";
+import { byteLength, recordServiceInitiatedTraffic } from "./bandwidth-observability.service.js";
 
 const MAX_SYNC_BYTES = 1_500_000;
 const MAX_WATCHLIST_FIXTURES = 100;
@@ -116,6 +117,7 @@ function mergeNormalizedState(existing = {}, incoming = {}) {
 
 async function supabaseRequest(path, { method = "GET", token = "", body, prefer = "" } = {}) {
   if (!configured()) throw new AppError("La sincronizacion en linea no esta configurada.", 503, "CLOUD_NOT_CONFIGURED");
+  const bodyText = body === undefined ? undefined : JSON.stringify(body);
   let response;
   try {
     response = await fetch(`${baseUrl()}${path}`, {
@@ -126,12 +128,19 @@ async function supabaseRequest(path, { method = "GET", token = "", body, prefer 
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(prefer ? { Prefer: prefer } : {})
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      ...(bodyText === undefined ? {} : { body: bodyText })
     });
   } catch {
     throw new AppError("No fue posible conectar con la base en linea.", 503, "CLOUD_UNREACHABLE");
   }
-  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+  const responseText = response.status === 204 ? "" : await response.text().catch(() => "");
+  recordServiceInitiatedTraffic({
+    service: "supabase",
+    endpoint: path.split("?")[0],
+    requestBytes: byteLength(bodyText),
+    responseBytes: byteLength(responseText)
+  });
+  const payload = responseText ? (() => { try { return JSON.parse(responseText); } catch { return null; } })() : null;
   if (!response.ok) {
     const message = payload?.msg || payload?.message || payload?.error_description || payload?.error || "Supabase rechazo la solicitud.";
     throw new AppError(message, response.status, "CLOUD_PROVIDER_ERROR", payload || undefined);
@@ -144,6 +153,7 @@ async function supabaseAdminRequest(path, { method = "GET", body, prefer = "" } 
     throw new AppError("La captura automatica requiere SUPABASE_SECRET_KEY en el backend.", 503, "EVIDENCE_AUTOMATION_NOT_CONFIGURED");
   }
   const secret = env.supabaseSecretKey;
+  const bodyText = body === undefined ? undefined : JSON.stringify(body);
   let response;
   try {
     response = await fetch(`${baseUrl()}${path}`, {
@@ -154,12 +164,19 @@ async function supabaseAdminRequest(path, { method = "GET", body, prefer = "" } 
         ...(secret.startsWith("eyJ") ? { Authorization: `Bearer ${secret}` } : {}),
         ...(prefer ? { Prefer: prefer } : {})
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      ...(bodyText === undefined ? {} : { body: bodyText })
     });
   } catch {
     throw new AppError("No fue posible conectar con Supabase para automatizar evidencias.", 503, "EVIDENCE_AUTOMATION_UNREACHABLE");
   }
-  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+  const responseText = response.status === 204 ? "" : await response.text().catch(() => "");
+  recordServiceInitiatedTraffic({
+    service: "supabase-admin",
+    endpoint: path.split("?")[0],
+    requestBytes: byteLength(bodyText),
+    responseBytes: byteLength(responseText)
+  });
+  const payload = responseText ? (() => { try { return JSON.parse(responseText); } catch { return null; } })() : null;
   if (!response.ok) {
     throw new AppError(payload?.message || payload?.error || "Supabase rechazo la automatizacion.", response.status, "EVIDENCE_AUTOMATION_PROVIDER_ERROR");
   }

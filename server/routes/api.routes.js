@@ -16,6 +16,7 @@ import { calculateCornersModel } from "../services/corners-model.service.js";
 import { buildOutcomeScenarios } from "../services/outcome-scenarios.service.js";
 import { buildSpecificMarkets } from "../services/specific-markets.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
+import { getBandwidthObservability } from "../services/bandwidth-observability.service.js";
 import { resolvePendingAuditError, runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
 import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
@@ -63,6 +64,7 @@ apiRouter.get("/health", (req, res) => {
         configured: Boolean(env.apiFootballKey),
         observability: getApiFootballObservability()
       },
+      bandwidth: getBandwidthObservability(),
       cloudSync: {
         configured: Boolean(env.supabaseUrl && env.supabasePublishableKey),
         automaticEvidence: cloudConfiguration().automaticEvidence,
