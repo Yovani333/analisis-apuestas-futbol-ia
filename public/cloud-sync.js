@@ -44,6 +44,15 @@ const PARLAY_SYNC_KEYS = new Set([
   "id", "name", "createdAt", "updatedAt", "result", "notes", "collapsed",
   "lastCheckedAt", "trashed", "deletedAt", "deletedPermanently", "restoredAt"
 ]);
+const AUDIT_SUMMARY_KEYS = new Set([
+  "evaluablePicks", "decisivePicks", "discardedPicks", "counterfactualAssessable",
+  "counterfactualHits", "counterfactualMisses", "completed", "hits", "misses",
+  "voids", "finalScore", "auditSchemaVersion"
+]);
+const AUDIT_METRIC_KEYS = new Set([
+  "total", "decisive", "hits", "misses", "voids", "noBets", "eligible",
+  "hitRate", "ROI", "calibrationSample", "brier", "logLoss", "ECE"
+]);
 
 async function requestJson(path, { method = "GET", token = "", body } = {}) {
   const response = await fetch(path, {
@@ -151,6 +160,62 @@ function mergePreferences(local = {}, remote = {}) {
     merged.parlayDraftUpdatedAt = local.parlayDraftUpdatedAt;
   }
   return merged;
+}
+
+function compactAuditMetricForSync(metric = {}) {
+  if (!metric || typeof metric !== "object") return undefined;
+  const result = {};
+  for (const key of AUDIT_METRIC_KEYS) {
+    if (metric[key] !== undefined) result[key] = metric[key];
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
+function compactAuditSummaryForSync(summary = {}) {
+  if (!summary || typeof summary !== "object") return undefined;
+  const result = {};
+  for (const key of AUDIT_SUMMARY_KEYS) {
+    if (summary[key] !== undefined) result[key] = summary[key];
+  }
+  const metrics = compactAuditMetricForSync(summary.metrics);
+  if (metrics) result.metrics = metrics;
+  return Object.keys(result).length ? result : undefined;
+}
+
+function compactEvidenceAuditsForSync(audits = {}) {
+  const entries = Object.entries(audits || {})
+    .filter(([id, value]) => id && value && typeof value === "object")
+    .sort(([, a], [, b]) => rowTimestamp(b) - rowTimestamp(a))
+    .slice(0, 1_000);
+  return Object.fromEntries(entries.map(([id, value]) => {
+    const audit = {};
+    for (const key of ["auditedAt", "lastCheckedAt", "nextEvaluationAt", "pendingCode"]) {
+      if (value[key] !== undefined) audit[key] = value[key];
+    }
+    const summary = compactAuditSummaryForSync(value.auditSummary);
+    if (summary) audit.auditSummary = summary;
+    return [id, audit];
+  }));
+}
+
+function compactPreferencesForSync(preferences = {}) {
+  const compact = compactNestedValue(preferences || {}, 0, { maxArray: 120, maxString: 1_000 }) || {};
+  compact.favoriteTeams = Array.isArray(preferences.favoriteTeams)
+    ? preferences.favoriteTeams.slice(-200).map((team) => compactNestedValue(team, 0, { maxArray: 12, maxString: 500 }))
+    : [];
+  compact.removedEvidenceIds = Array.isArray(preferences.removedEvidenceIds)
+    ? [...new Set(preferences.removedEvidenceIds.map(String))].slice(-500)
+    : [];
+  compact.evidenceAudits = compactEvidenceAuditsForSync(preferences.evidenceAudits);
+  compact.performancePreviousRanks = preferences.performancePreviousRanks && typeof preferences.performancePreviousRanks === "object"
+    ? Object.fromEntries(Object.entries(preferences.performancePreviousRanks).slice(-500).map(([key, value]) => [key, Number(value)]))
+    : {};
+  return compact;
+}
+
+function compactAnalysisUsageForSync(usage = {}) {
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return {};
+  return compactNestedValue(usage, 0, { maxArray: 30, maxString: 500 }) || {};
 }
 
 function mergeParlayDraft(local = {}, remote = {}) {
@@ -297,6 +362,8 @@ export function prepareEvidenceSyncBatches(rows = [], batchSize = 10) {
 export function compactCloudStateForSync(state = {}, { aggressive = false } = {}) {
   return {
     ...state,
+    preferences: compactPreferencesForSync(state.preferences),
+    analysisUsage: compactAnalysisUsageForSync(state.analysisUsage),
     parlayDraft: compactNestedValue(state.parlayDraft || [], 0, { maxArray: 12, maxString: MAX_COMPACT_STRING }),
     savedPicks: Array.isArray(state.savedPicks) ? state.savedPicks.slice(0, 500).map((row) => compactPickForSync(row, { aggressive })) : [],
     savedParlays: Array.isArray(state.savedParlays) ? state.savedParlays.slice(0, 200).map((row) => compactParlayForSync(row, { aggressive })) : [],

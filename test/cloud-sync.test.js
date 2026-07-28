@@ -168,6 +168,41 @@ test("la sincronizacion compacta picks y parlays sin perder campos operativos", 
   assert.ok(Buffer.byteLength(JSON.stringify(state), "utf8") < 25_000);
 });
 
+test("compacta auditorias y uso dentro de preferencias sin perder conteos", () => {
+  const heavyDimension = Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`market-${index}`, { hits: index, misses: index, rows: Array(100).fill("detalle largo") }]));
+  const state = compactCloudStateForSync({
+    preferences: {
+      theme: "light",
+      removedEvidenceIds: Array.from({ length: 600 }, (_, index) => `ev-${index}`),
+      performancePreviousRanks: Object.fromEntries(Array.from({ length: 700 }, (_, index) => [`origin:${index}`, index])),
+      evidenceAudits: {
+        "ev-audited": {
+          auditedAt: "2026-07-21T10:00:00Z",
+          auditSummary: {
+            completed: true,
+            decisivePicks: 4,
+            discardedPicks: 2,
+            counterfactualAssessable: 1,
+            finalScore: "2-1",
+            metrics: { total: 9, hits: 3, misses: 1, ROI: 12.5, rawRows: Array(100).fill("x") },
+            dimensions: { market: heavyDimension, origin: heavyDimension }
+          }
+        }
+      }
+    },
+    analysisUsage: { date: "2026-07-21", count: 8, history: Array.from({ length: 100 }, (_, index) => ({ index, text: "uso largo".repeat(100) })) }
+  });
+  assert.equal(state.preferences.theme, "light");
+  assert.equal(state.preferences.removedEvidenceIds.length, 500);
+  assert.equal(Object.keys(state.preferences.performancePreviousRanks).length, 500);
+  assert.equal(state.preferences.evidenceAudits["ev-audited"].auditSummary.completed, true);
+  assert.equal(state.preferences.evidenceAudits["ev-audited"].auditSummary.decisivePicks, 4);
+  assert.equal(state.preferences.evidenceAudits["ev-audited"].auditSummary.dimensions, undefined);
+  assert.equal(state.preferences.evidenceAudits["ev-audited"].auditSummary.metrics.hits, 3);
+  assert.equal(state.analysisUsage.date, "2026-07-21");
+  assert.ok(Buffer.byteLength(JSON.stringify(state), "utf8") < 80_000);
+});
+
 test("sincronizacion individual prepara todas las evidencias sin limite de 25", () => {
   const rows = Array.from({ length: 81 }, (_, index) => ({
     id: `evidence-${index}`,
@@ -250,7 +285,15 @@ test("detecta RPC faltante o falla de timestamp para usar respaldo seguro", () =
 test("la respuesta compacta del estado no transporta evidencias completas", () => {
   const response = cloudSyncInternals.compactCloudStateResponse(
     {
-      preferences: { theme: "dark" },
+      preferences: {
+        theme: "dark",
+        evidenceAudits: {
+          "ev-audited": {
+            auditedAt: "2026-07-21T10:00:00Z",
+            auditSummary: { completed: true, decisivePicks: 3, dimensions: { market: { huge: Array(100).fill("x") } } }
+          }
+        }
+      },
       saved_picks: [{ id: "pick-1", fixtureId: 1, market: "Total", selection: "Más de 1.5", result: "won", raw: { large: true } }],
       saved_parlays: [{ id: "parlay-1", name: "Parlay", legs: [{ id: "leg-1", fixtureId: 2, result: "pending", snapshot: { large: true } }] }],
       evidence_snapshots: [{ id: "ev-heavy", modules: { raw: "large" } }]
@@ -261,6 +304,8 @@ test("la respuesta compacta del estado no transporta evidencias completas", () =
   assert.equal(response.saved_picks.length, 1);
   assert.equal(response.saved_picks[0].raw, undefined);
   assert.equal(response.saved_parlays[0].legs[0].snapshot, undefined);
+  assert.equal(response.preferences.evidenceAudits["ev-audited"].auditSummary.dimensions, undefined);
+  assert.equal(response.preferences.evidenceAudits["ev-audited"].auditSummary.decisivePicks, 3);
   assert.equal(response.evidence_sync_summary.compacted, true);
   assert.equal(response.evidence_sync_summary.automaticAvailable, 81);
   assert.equal(response.evidence_sync_summary.latestAutomaticCapturedAt, "2026-07-20T10:00:00Z");
@@ -268,11 +313,11 @@ test("la respuesta compacta del estado no transporta evidencias completas", () =
 
 test("el respaldo del servidor combina filas existentes y entrantes sin borrar", () => {
   const merged = cloudSyncInternals.mergeNormalizedState(
-    { saved_parlays: [{ id: "remote" }, { id: "same", value: "old" }], saved_picks: [{ id: "remote-pick" }] },
-    { saved_parlays: [{ id: "local" }, { id: "same", value: "new" }], saved_picks: [] }
+    { saved_parlays: [{ id: "remote" }, { id: "same", notes: "old" }], saved_picks: [{ id: "remote-pick" }] },
+    { saved_parlays: [{ id: "local" }, { id: "same", notes: "new" }], saved_picks: [] }
   );
   assert.deepEqual(merged.saved_parlays.map((row) => row.id), ["remote", "same", "local"]);
-  assert.equal(merged.saved_parlays.find((row) => row.id === "same").value, "new");
+  assert.equal(merged.saved_parlays.find((row) => row.id === "same").notes, "new");
   assert.deepEqual(merged.saved_picks.map((row) => row.id), ["remote-pick"]);
 });
 

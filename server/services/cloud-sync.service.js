@@ -32,6 +32,15 @@ const PARLAY_SYNC_KEYS = new Set([
   "id", "name", "createdAt", "updatedAt", "result", "notes", "collapsed",
   "lastCheckedAt", "trashed", "deletedAt", "deletedPermanently", "restoredAt"
 ]);
+const AUDIT_SUMMARY_KEYS = new Set([
+  "evaluablePicks", "decisivePicks", "discardedPicks", "counterfactualAssessable",
+  "counterfactualHits", "counterfactualMisses", "completed", "hits", "misses",
+  "voids", "finalScore", "auditSchemaVersion"
+]);
+const AUDIT_METRIC_KEYS = new Set([
+  "total", "decisive", "hits", "misses", "voids", "noBets", "eligible",
+  "hitRate", "ROI", "calibrationSample", "brier", "logLoss", "ECE"
+]);
 
 function configured() {
   return Boolean(env.supabaseUrl && env.supabasePublishableKey);
@@ -98,8 +107,8 @@ function normalizedState(value = {}) {
     alerts: [value.alerts, 500]
   };
   const state = {
-    preferences: value.preferences && typeof value.preferences === "object" && !Array.isArray(value.preferences) ? value.preferences : {},
-    analysis_usage: value.analysisUsage && typeof value.analysisUsage === "object" && !Array.isArray(value.analysisUsage) ? value.analysisUsage : {}
+    preferences: compactPreferencesForCloudState(value.preferences),
+    analysis_usage: compactAnalysisUsageForCloudState(value.analysisUsage)
   };
   for (const [key, [rows, limit]] of Object.entries(arrays)) {
     const values = key === "evidence_snapshots" ? filterValidEvidenceSnapshots(rows) : rows;
@@ -136,10 +145,11 @@ function mergeNormalizedState(existing = {}, incoming = {}) {
     alerts: mergeRowsById(existing.alerts, incoming.alerts, 500),
     analysis_usage: { ...(existing.analysis_usage || {}), ...(incoming.analysis_usage || {}) }
   };
-  if (Buffer.byteLength(JSON.stringify(merged), "utf8") > MAX_SYNC_BYTES) {
+  const compacted = compactStateRows(merged);
+  if (Buffer.byteLength(JSON.stringify(compacted), "utf8") > MAX_SYNC_BYTES) {
     throw new AppError("Los datos combinados exceden el limite de sincronizacion.", 413, "CLOUD_STATE_TOO_LARGE");
   }
-  return merged;
+  return compacted;
 }
 
 function compactSyncValue(value, depth = 0, { maxArray = 80, maxString = 1_000 } = {}) {
@@ -193,11 +203,67 @@ function compactParlayForCloudState(row = {}) {
   return result;
 }
 
+function compactAuditMetricForCloudState(metric = {}) {
+  if (!metric || typeof metric !== "object") return undefined;
+  const result = {};
+  for (const key of AUDIT_METRIC_KEYS) {
+    if (metric[key] !== undefined) result[key] = metric[key];
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
+function compactAuditSummaryForCloudState(summary = {}) {
+  if (!summary || typeof summary !== "object") return undefined;
+  const result = {};
+  for (const key of AUDIT_SUMMARY_KEYS) {
+    if (summary[key] !== undefined) result[key] = summary[key];
+  }
+  const metrics = compactAuditMetricForCloudState(summary.metrics);
+  if (metrics) result.metrics = metrics;
+  return Object.keys(result).length ? result : undefined;
+}
+
+function compactEvidenceAuditsForCloudState(audits = {}) {
+  return Object.fromEntries(Object.entries(audits || {})
+    .filter(([id, value]) => id && value && typeof value === "object")
+    .sort(([, a], [, b]) => syncTimestamp(b?.auditedAt || b?.lastCheckedAt || b?.nextEvaluationAt) - syncTimestamp(a?.auditedAt || a?.lastCheckedAt || a?.nextEvaluationAt))
+    .slice(0, 1_000)
+    .map(([id, value]) => {
+      const audit = {};
+      for (const key of ["auditedAt", "lastCheckedAt", "nextEvaluationAt", "pendingCode"]) {
+        if (value[key] !== undefined) audit[key] = value[key];
+      }
+      const summary = compactAuditSummaryForCloudState(value.auditSummary);
+      if (summary) audit.auditSummary = summary;
+      return [id, audit];
+    }));
+}
+
+function compactPreferencesForCloudState(preferences = {}) {
+  const compact = compactSyncValue(preferences || {}, 0, { maxArray: 120, maxString: 1_000 }) || {};
+  compact.favoriteTeams = Array.isArray(preferences?.favoriteTeams)
+    ? preferences.favoriteTeams.slice(-200).map((team) => compactSyncValue(team, 0, { maxArray: 12, maxString: 500 }))
+    : [];
+  compact.removedEvidenceIds = Array.isArray(preferences?.removedEvidenceIds)
+    ? [...new Set(preferences.removedEvidenceIds.map(String))].slice(-500)
+    : [];
+  compact.evidenceAudits = compactEvidenceAuditsForCloudState(preferences?.evidenceAudits);
+  compact.performancePreviousRanks = preferences?.performancePreviousRanks && typeof preferences.performancePreviousRanks === "object"
+    ? Object.fromEntries(Object.entries(preferences.performancePreviousRanks).slice(-500).map(([key, value]) => [key, Number(value)]))
+    : {};
+  return compact;
+}
+
+function compactAnalysisUsageForCloudState(usage = {}) {
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return {};
+  return compactSyncValue(usage, 0, { maxArray: 30, maxString: 500 }) || {};
+}
+
 function compactStateRows(state = {}) {
   return {
     ...(state || {}),
-    preferences: state?.preferences && typeof state.preferences === "object" && !Array.isArray(state.preferences) ? state.preferences : {},
-    analysis_usage: state?.analysis_usage && typeof state.analysis_usage === "object" && !Array.isArray(state.analysis_usage) ? state.analysis_usage : {},
+    preferences: compactPreferencesForCloudState(state?.preferences),
+    analysis_usage: compactAnalysisUsageForCloudState(state?.analysis_usage),
     parlay_draft: Array.isArray(state?.parlay_draft) ? state.parlay_draft.slice(0, 12).map(compactPickForCloudState) : [],
     saved_picks: Array.isArray(state?.saved_picks) ? state.saved_picks.slice(0, 500).map(compactPickForCloudState) : [],
     saved_parlays: Array.isArray(state?.saved_parlays) ? state.saved_parlays.slice(0, 200).map(compactParlayForCloudState) : [],
