@@ -5,6 +5,7 @@ import { byteLength, recordServiceInitiatedTraffic } from "./bandwidth-observabi
 
 const MAX_SYNC_BYTES = 1_500_000;
 const MAX_WATCHLIST_FIXTURES = 100;
+const MAX_AUTOMATIC_EVIDENCE_METADATA_ON_STATE = 100;
 
 function configured() {
   return Boolean(env.supabaseUrl && env.supabasePublishableKey);
@@ -193,6 +194,54 @@ function mergeEvidenceSnapshots(manualRows, automaticRows) {
     .sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0)).slice(0, 500);
 }
 
+function compactEvidenceForCloudState(snapshot = {}) {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  return {
+    version: snapshot.version || 2,
+    id: snapshot.id || snapshot.fixture?.id || null,
+    capturedAt: snapshot.capturedAt || null,
+    updatedAt: snapshot.updatedAt || snapshot.capturedAt || null,
+    timezone: snapshot.timezone || null,
+    fixture: snapshot.fixture ? {
+      id: snapshot.fixture.id || null,
+      date: snapshot.fixture.date || null,
+      time: snapshot.fixture.time || null,
+      utcDateTime: snapshot.fixture.utcDateTime || null,
+      status: snapshot.fixture.status || null,
+      statusLabel: snapshot.fixture.statusLabel || null,
+      leagueName: snapshot.fixture.leagueName || null,
+      leagueId: snapshot.fixture.leagueId ?? null,
+      leagueSlug: snapshot.fixture.leagueSlug || null,
+      season: snapshot.fixture.season ?? null,
+      country: snapshot.fixture.country || null,
+      home: snapshot.fixture.home || null,
+      away: snapshot.fixture.away || null,
+      homeTeamId: snapshot.fixture.homeTeamId ?? null,
+      awayTeamId: snapshot.fixture.awayTeamId ?? null
+    } : null,
+    dataQuality: snapshot.dataQuality ? {
+      score: snapshot.dataQuality.score ?? null,
+      level: snapshot.dataQuality.level || null
+    } : null,
+    auditMetadata: snapshot.auditMetadata ? {
+      captureMode: snapshot.auditMetadata.captureMode || null,
+      sourceFile: snapshot.auditMetadata.sourceFile || null,
+      dataPicksModelVersion: snapshot.auditMetadata.dataPicksModelVersion || null
+    } : null,
+    currentFixtureStatisticsUsed: snapshot.currentFixtureStatisticsUsed === true,
+    openAiUsed: snapshot.openAiUsed === true,
+    compactedForCloudState: true
+  };
+}
+
+function compactEvidenceRowsForCloudState(rows, limit = MAX_CLOUD_STATE_EVIDENCE) {
+  return filterValidEvidenceSnapshots(Array.isArray(rows) ? rows : [])
+    .sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0))
+    .slice(0, limit)
+    .map(compactEvidenceForCloudState)
+    .filter(Boolean);
+}
+
 export async function saveCloudEvidenceSnapshots(authorization, input = {}) {
   const token = bearerToken(authorization);
   const userId = userIdFromToken(token);
@@ -290,17 +339,24 @@ export async function getCloudState(authorization) {
     throw error;
   }
   const state = Array.isArray(rows) ? rows[0] || null : null;
-  let automaticRows = [];
+  let automaticMetadataRows = [];
   try {
-    const payload = await supabaseRequest("/rest/v1/automatic_evidence_snapshots?select=snapshot,captured_at&order=captured_at.desc&limit=500", { token });
-    automaticRows = Array.isArray(payload) ? payload : [];
+    const payload = await supabaseRequest(`/rest/v1/automatic_evidence_snapshots?select=fixture_id,captured_at&order=captured_at.desc&limit=${MAX_AUTOMATIC_EVIDENCE_METADATA_ON_STATE}`, { token });
+    automaticMetadataRows = Array.isArray(payload) ? payload : [];
   } catch (error) {
     if (!/automatic_evidence_snapshots|schema cache|could not find|does not exist|PGRST205/i.test(providerMessage(error))) throw error;
   }
-  if (!state && !automaticRows.length) return null;
+  if (!state && !automaticMetadataRows.length) return null;
   return {
     ...(state || { preferences: {}, parlay_draft: [], saved_picks: [], saved_parlays: [], alerts: [], analysis_usage: {} }),
-    evidence_snapshots: mergeEvidenceSnapshots(state?.evidence_snapshots, automaticRows)
+    evidence_snapshots: [],
+    evidence_sync_summary: {
+      compacted: true,
+      included: 0,
+      automaticAvailable: automaticMetadataRows.length,
+      latestAutomaticCapturedAt: automaticMetadataRows[0]?.captured_at || null,
+      note: "El estado de cuenta no descarga evidencias completas para reducir ancho de banda. Las evidencias completas permanecen guardadas en la biblioteca automatica."
+    }
   };
 }
 

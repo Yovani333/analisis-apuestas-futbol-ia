@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compactCloudStateForSync, mergeCloudState, prepareEvidenceSyncBatches } from "../public/cloud-sync.js";
+import { CloudSyncClient, compactCloudStateForSync, mergeCloudState, prepareEvidenceSyncBatches } from "../public/cloud-sync.js";
 import { cloudSyncInternals } from "../server/services/cloud-sync.service.js";
 
 function token(payload) {
@@ -103,7 +103,7 @@ test("normaliza y limita el estado sincronizable", () => {
   assert.deepEqual(state.analysis_usage, {});
 });
 
-test("compacta evidencias grandes antes de sincronizar sin tocar picks ni parlays", () => {
+test("el estado principal ya no transporta evidencias completas", () => {
   const heavyText = "dato ".repeat(10_000);
   const state = compactCloudStateForSync({
     savedPicks: [{ id: "pick-1" }],
@@ -118,11 +118,8 @@ test("compacta evidencias grandes antes de sincronizar sin tocar picks ni parlay
   });
   assert.equal(state.savedPicks.length, 1);
   assert.equal(state.savedParlays.length, 1);
-  assert.equal(state.evidenceSnapshots.length, 25);
-  assert.equal(state.evidenceSnapshots[0].raw, undefined);
-  assert.equal(state.evidenceSnapshots[0].picks.length, 80);
-  assert.equal(state.evidenceSnapshots[0].compactedForCloud, true);
-  assert.ok(JSON.stringify(state).length < 900_000);
+  assert.deepEqual(state.evidenceSnapshots, []);
+  assert.ok(JSON.stringify(state).length < 20_000);
 });
 
 test("sincronizacion individual prepara todas las evidencias sin limite de 25", () => {
@@ -156,13 +153,37 @@ test("elimina bloques analiticos pesados y ofrece una segunda compactacion", () 
   };
   const normal = compactCloudStateForSync(input);
   const aggressive = compactCloudStateForSync(input, { aggressive: true });
-  assert.equal(normal.evidenceSnapshots.length, 25);
-  assert.equal(aggressive.evidenceSnapshots.length, 10);
-  assert.equal(normal.evidenceSnapshots[0].preMatch, undefined);
-  assert.equal(normal.evidenceSnapshots[0].marketAnalysis, undefined);
-  assert.equal(normal.evidenceSnapshots[0].researchData.oversizedBlock, undefined);
-  assert.equal(normal.evidenceSnapshots[0].modules.poisson.scoreMatrix, undefined);
+  assert.deepEqual(normal.evidenceSnapshots, []);
+  assert.deepEqual(aggressive.evidenceSnapshots, []);
   assert.ok(Buffer.byteLength(JSON.stringify(aggressive), "utf8") < 1_500_000);
+});
+
+test("la huella persistente evita reenviar evidencias iguales tras recargar", async () => {
+  const storage = new Map();
+  const fakeStorage = {
+    getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+    setItem(key, value) { storage.set(key, value); },
+    removeItem(key) { storage.delete(key); }
+  };
+  const client = new CloudSyncClient(fakeStorage);
+  client.session = { accessToken: "token", refreshToken: "refresh", expiresAt: Math.floor(Date.now() / 1000) + 3600, user: { id: "user-1" } };
+  const previousFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return { ok: true, json: async () => ({ received: 1 }) };
+  };
+  try {
+    const rows = [{ id: "ev-1", capturedAt: "2026-07-20T10:00:00Z", raw: { heavy: true } }];
+    await client.saveEvidenceSnapshots(rows);
+    const secondClient = new CloudSyncClient(fakeStorage);
+    secondClient.session = client.session;
+    const result = await secondClient.saveEvidenceSnapshots(rows);
+    assert.equal(calls, 1);
+    assert.equal(result.unchanged, true);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });
 
 test("detecta schema faltante de sincronizacion con mensajes de Supabase", () => {

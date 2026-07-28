@@ -3,6 +3,7 @@ import { filterValidEvidenceSnapshots, isValidEvidenceSnapshot } from "./evidenc
 
 export const CLOUD_SESSION_KEY = "football-ai.cloud-session.v1";
 export const CLOUD_INITIALIZED_USERS_KEY = "football-ai.cloud-initialized-users.v1";
+export const CLOUD_EVIDENCE_FINGERPRINT_KEY = "football-ai.cloud-evidence-fingerprint.v1";
 
 function readJson(storage, key, fallback) {
   try { return JSON.parse(storage?.getItem(key) || "null") ?? fallback; } catch { return fallback; }
@@ -231,22 +232,14 @@ export function prepareEvidenceSyncBatches(rows = [], batchSize = 10) {
 }
 
 export function compactCloudStateForSync(state = {}, { aggressive = false } = {}) {
-  const evidenceLimit = aggressive ? AGGRESSIVE_SYNC_EVIDENCE : MAX_SYNC_EVIDENCE;
-  const evidenceTextLimit = aggressive ? AGGRESSIVE_EVIDENCE_TEXT : MAX_SYNC_EVIDENCE_TEXT;
   const maxArray = aggressive ? 30 : 80;
-  const evidenceSnapshots = Array.isArray(state.evidenceSnapshots)
-    ? filterValidEvidenceSnapshots(state.evidenceSnapshots)
-      .sort((a, b) => rowTimestamp(b) - rowTimestamp(a))
-      .slice(0, evidenceLimit)
-      .map((row) => compactEvidenceSnapshot(row, { maxText: evidenceTextLimit, maxArray }))
-    : [];
   return {
     ...state,
     parlayDraft: compactNestedValue(state.parlayDraft || [], 0, { maxArray: 12, maxString: MAX_COMPACT_STRING }),
     savedPicks: compactNestedValue(state.savedPicks || [], 0, { maxArray: 500, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
     savedParlays: compactNestedValue(state.savedParlays || [], 0, { maxArray: 200, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
     alerts: compactNestedValue(state.alerts || [], 0, { maxArray: 500, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
-    evidenceSnapshots
+    evidenceSnapshots: []
   };
 }
 
@@ -326,13 +319,17 @@ export class CloudSyncClient {
     if (!token) return { received: 0 };
     const batches = prepareEvidenceSyncBatches(rows);
     const fingerprint = batches.flat().map((row) => `${row.id}:${row.capturedAt || row.updatedAt || ""}`).join("|");
-    if (fingerprint && fingerprint === this.evidenceFingerprint) return { received: batches.flat().length, unchanged: true };
+    const userId = this.session?.user?.id || this.session?.user?.sub || "default";
+    const fingerprintKey = `${CLOUD_EVIDENCE_FINGERPRINT_KEY}:${userId}`;
+    const storedFingerprint = readJson(this.storage, fingerprintKey, "");
+    if (fingerprint && (fingerprint === this.evidenceFingerprint || fingerprint === storedFingerprint)) return { received: batches.flat().length, unchanged: true };
     let received = 0;
     for (const snapshots of batches) {
       const result = await requestJson("/api/cloud/evidence/sync", { method: "POST", token, body: { snapshots } });
       received += Number(result.received || 0);
     }
     this.evidenceFingerprint = fingerprint;
+    if (fingerprint) writeJson(this.storage, fingerprintKey, fingerprint);
     return { received };
   }
 
