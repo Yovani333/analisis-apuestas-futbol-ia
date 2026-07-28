@@ -122,6 +122,52 @@ test("el estado principal ya no transporta evidencias completas", () => {
   assert.ok(JSON.stringify(state).length < 20_000);
 });
 
+test("la sincronizacion compacta picks y parlays sin perder campos operativos", () => {
+  const heavy = "detalle ".repeat(3_000);
+  const state = compactCloudStateForSync({
+    savedPicks: [{
+      id: "pick-heavy",
+      fixtureId: 100,
+      league: "MLS",
+      home: "A",
+      away: "B",
+      market: "Total de goles",
+      selection: "Más de 1.5",
+      result: "won",
+      sourceModule: "h2h",
+      finalScore: "2-1",
+      explanationLong: heavy,
+      modules: { poisson: { scoreMatrix: Array(100).fill([1, 2, 3]) } },
+      supportingData: Array.from({ length: 30 }, () => heavy)
+    }],
+    savedParlays: [{
+      id: "parlay-heavy",
+      name: "Parlay",
+      legs: [{
+        id: "leg-heavy",
+        fixtureId: 101,
+        market: "BTTS",
+        selection: "Ambos equipos anotan: Sí",
+        result: "pending",
+        sourceModule: "xg_btts",
+        rawOdds: { huge: heavy }
+      }],
+      removedLegs: [{ id: "removed", fixtureId: 102, result: "lost", removedFromParlayAt: "2026-07-20T10:00:00Z" }],
+      analysisDetails: { huge: heavy }
+    }]
+  });
+  assert.equal(state.savedPicks[0].id, "pick-heavy");
+  assert.equal(state.savedPicks[0].fixtureId, 100);
+  assert.equal(state.savedPicks[0].result, "won");
+  assert.equal(state.savedPicks[0].sourceModule, "h2h");
+  assert.equal(state.savedPicks[0].modules, undefined);
+  assert.equal(state.savedPicks[0].explanationLong, undefined);
+  assert.ok(state.savedPicks[0].supportingData.length <= 8);
+  assert.equal(state.savedParlays[0].legs[0].rawOdds, undefined);
+  assert.equal(state.savedParlays[0].removedLegs[0].removedFromParlayAt, "2026-07-20T10:00:00Z");
+  assert.ok(Buffer.byteLength(JSON.stringify(state), "utf8") < 25_000);
+});
+
 test("sincronizacion individual prepara todas las evidencias sin limite de 25", () => {
   const rows = Array.from({ length: 81 }, (_, index) => ({
     id: `evidence-${index}`,
@@ -205,13 +251,16 @@ test("la respuesta compacta del estado no transporta evidencias completas", () =
   const response = cloudSyncInternals.compactCloudStateResponse(
     {
       preferences: { theme: "dark" },
-      saved_picks: [{ id: "pick-1" }],
+      saved_picks: [{ id: "pick-1", fixtureId: 1, market: "Total", selection: "Más de 1.5", result: "won", raw: { large: true } }],
+      saved_parlays: [{ id: "parlay-1", name: "Parlay", legs: [{ id: "leg-1", fixtureId: 2, result: "pending", snapshot: { large: true } }] }],
       evidence_snapshots: [{ id: "ev-heavy", modules: { raw: "large" } }]
     },
     { automaticAvailable: 81, latestAutomaticCapturedAt: "2026-07-20T10:00:00Z" }
   );
   assert.deepEqual(response.evidence_snapshots, []);
   assert.equal(response.saved_picks.length, 1);
+  assert.equal(response.saved_picks[0].raw, undefined);
+  assert.equal(response.saved_parlays[0].legs[0].snapshot, undefined);
   assert.equal(response.evidence_sync_summary.compacted, true);
   assert.equal(response.evidence_sync_summary.automaticAvailable, 81);
   assert.equal(response.evidence_sync_summary.latestAutomaticCapturedAt, "2026-07-20T10:00:00Z");

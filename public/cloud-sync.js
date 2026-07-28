@@ -20,7 +20,29 @@ const AGGRESSIVE_SYNC_EVIDENCE = 10;
 const AGGRESSIVE_EVIDENCE_TEXT = 4_000;
 const HEAVY_SYNC_KEYS = new Set([
   "raw", "rawData", "dataset", "matchData", "fullDataset", "debug", "logs",
-  "apiResponse", "response", "scoreMatrix", "goalMatrix", "matrix"
+  "apiResponse", "response", "scoreMatrix", "goalMatrix", "matrix",
+  "snapshot", "evidence", "evidenceSnapshot", "fixtureAnalysisData", "analysisDetails",
+  "calculationDetails", "calculation", "modelDetails", "diagnostics", "diagnostic",
+  "explanationLong", "rawOdds", "allOdds", "availableOdds", "markets", "players",
+  "statistics", "events", "lineups", "injuries", "weather", "researchData", "modules"
+]);
+const PICK_SYNC_KEYS = new Set([
+  "id", "fixtureId", "matchId", "league", "leagueId", "league_id", "leagueSlug",
+  "competition", "season", "home", "away", "homeTeam", "awayTeam", "teamName",
+  "opponentName", "teamId", "playerId", "playerName", "date", "fixtureDate",
+  "market", "selection", "marketCode", "selectionCode", "decimalOdds", "originalOdds",
+  "updatedOdds", "impliedProbability", "modelProbability", "estimatedProbability",
+  "expectedValue", "confidence", "effectiveConfidenceScore", "risk", "color",
+  "sourceModule", "source", "sourceLabel", "origin", "originLabel", "bookmaker",
+  "result", "resultSource", "settlementVerificationVersion", "fixtureStatus", "status",
+  "finalScore", "liveScore", "liveMinute", "score", "notes", "addedAt", "savedAt",
+  "createdAt", "updatedAt", "lastCheckedAt", "resolvedAt", "trashed", "deletedAt",
+  "deletedPermanently", "restoredAt", "removedFromParlayAt", "restoredToParlayAt",
+  "purgedAt", "analysisTiming", "oddsMovement", "goalThreatScore"
+]);
+const PARLAY_SYNC_KEYS = new Set([
+  "id", "name", "createdAt", "updatedAt", "result", "notes", "collapsed",
+  "lastCheckedAt", "trashed", "deletedAt", "deletedPermanently", "restoredAt"
 ]);
 
 async function requestJson(path, { method = "GET", token = "", body } = {}) {
@@ -182,6 +204,47 @@ function compactNestedValue(value, depth = 0, { maxArray = 80, maxString = MAX_C
   return result;
 }
 
+function compactSyncString(value, maxString = MAX_COMPACT_STRING) {
+  if (typeof value !== "string") return value;
+  return value.length > maxString ? `${value.slice(0, maxString)}...` : value;
+}
+
+function compactPickForSync(row = {}, { aggressive = false } = {}) {
+  if (!row || typeof row !== "object") return row;
+  const result = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (!PICK_SYNC_KEYS.has(key) || HEAVY_SYNC_KEYS.has(key)) continue;
+    const compacted = compactNestedValue(value, 0, { maxArray: aggressive ? 12 : 24, maxString: aggressive ? 500 : 1_000 });
+    if (compacted !== undefined) result[key] = compacted;
+  }
+  if (Array.isArray(row.supportingData)) {
+    result.supportingData = row.supportingData.slice(0, aggressive ? 4 : 8)
+      .map((item) => compactSyncString(String(item || ""), aggressive ? 180 : 300));
+  }
+  if (Array.isArray(row.contradictingData)) {
+    result.contradictingData = row.contradictingData.slice(0, aggressive ? 4 : 8)
+      .map((item) => compactSyncString(String(item || ""), aggressive ? 180 : 300));
+  }
+  result.compactedForCloudState = true;
+  return result;
+}
+
+function compactParlayForSync(row = {}, { aggressive = false } = {}) {
+  if (!row || typeof row !== "object") return row;
+  const result = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (!PARLAY_SYNC_KEYS.has(key) || HEAVY_SYNC_KEYS.has(key)) continue;
+    const compacted = compactNestedValue(value, 0, { maxArray: aggressive ? 12 : 24, maxString: aggressive ? 500 : 1_000 });
+    if (compacted !== undefined) result[key] = compacted;
+  }
+  result.legs = Array.isArray(row.legs) ? row.legs.slice(0, 12).map((leg) => compactPickForSync(leg, { aggressive })) : [];
+  if (Array.isArray(row.removedLegs)) {
+    result.removedLegs = row.removedLegs.slice(0, aggressive ? 50 : 150).map((leg) => compactPickForSync(leg, { aggressive }));
+  }
+  result.compactedForCloudState = true;
+  return result;
+}
+
 function compactResearchData(researchData) {
   if (!researchData || typeof researchData !== "object") return null;
   return {
@@ -232,12 +295,11 @@ export function prepareEvidenceSyncBatches(rows = [], batchSize = 10) {
 }
 
 export function compactCloudStateForSync(state = {}, { aggressive = false } = {}) {
-  const maxArray = aggressive ? 30 : 80;
   return {
     ...state,
     parlayDraft: compactNestedValue(state.parlayDraft || [], 0, { maxArray: 12, maxString: MAX_COMPACT_STRING }),
-    savedPicks: compactNestedValue(state.savedPicks || [], 0, { maxArray: 500, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
-    savedParlays: compactNestedValue(state.savedParlays || [], 0, { maxArray: 200, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
+    savedPicks: Array.isArray(state.savedPicks) ? state.savedPicks.slice(0, 500).map((row) => compactPickForSync(row, { aggressive })) : [],
+    savedParlays: Array.isArray(state.savedParlays) ? state.savedParlays.slice(0, 200).map((row) => compactParlayForSync(row, { aggressive })) : [],
     alerts: compactNestedValue(state.alerts || [], 0, { maxArray: 500, maxString: aggressive ? 1_500 : MAX_COMPACT_STRING }),
     evidenceSnapshots: []
   };

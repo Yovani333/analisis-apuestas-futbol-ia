@@ -6,6 +6,32 @@ import { byteLength, recordServiceInitiatedTraffic } from "./bandwidth-observabi
 const MAX_SYNC_BYTES = 1_500_000;
 const MAX_WATCHLIST_FIXTURES = 100;
 const MAX_AUTOMATIC_EVIDENCE_METADATA_ON_STATE = 100;
+const HEAVY_SYNC_KEYS = new Set([
+  "raw", "rawData", "dataset", "matchData", "fullDataset", "debug", "logs",
+  "apiResponse", "response", "scoreMatrix", "goalMatrix", "matrix",
+  "snapshot", "evidence", "evidenceSnapshot", "fixtureAnalysisData", "analysisDetails",
+  "calculationDetails", "calculation", "modelDetails", "diagnostics", "diagnostic",
+  "explanationLong", "rawOdds", "allOdds", "availableOdds", "markets", "players",
+  "statistics", "events", "lineups", "injuries", "weather", "researchData", "modules"
+]);
+const PICK_SYNC_KEYS = new Set([
+  "id", "fixtureId", "matchId", "league", "leagueId", "league_id", "leagueSlug",
+  "competition", "season", "home", "away", "homeTeam", "awayTeam", "teamName",
+  "opponentName", "teamId", "playerId", "playerName", "date", "fixtureDate",
+  "market", "selection", "marketCode", "selectionCode", "decimalOdds", "originalOdds",
+  "updatedOdds", "impliedProbability", "modelProbability", "estimatedProbability",
+  "expectedValue", "confidence", "effectiveConfidenceScore", "risk", "color",
+  "sourceModule", "source", "sourceLabel", "origin", "originLabel", "bookmaker",
+  "result", "resultSource", "settlementVerificationVersion", "fixtureStatus", "status",
+  "finalScore", "liveScore", "liveMinute", "score", "notes", "addedAt", "savedAt",
+  "createdAt", "updatedAt", "lastCheckedAt", "resolvedAt", "trashed", "deletedAt",
+  "deletedPermanently", "restoredAt", "removedFromParlayAt", "restoredToParlayAt",
+  "purgedAt", "analysisTiming", "oddsMovement", "goalThreatScore"
+]);
+const PARLAY_SYNC_KEYS = new Set([
+  "id", "name", "createdAt", "updatedAt", "result", "notes", "collapsed",
+  "lastCheckedAt", "trashed", "deletedAt", "deletedPermanently", "restoredAt"
+]);
 
 function configured() {
   return Boolean(env.supabaseUrl && env.supabasePublishableKey);
@@ -116,6 +142,69 @@ function mergeNormalizedState(existing = {}, incoming = {}) {
   return merged;
 }
 
+function compactSyncValue(value, depth = 0, { maxArray = 80, maxString = 1_000 } = {}) {
+  if (value === null || value === undefined || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") return value.length > maxString ? `${value.slice(0, maxString)}...` : value;
+  if (depth >= 5) return undefined;
+  if (Array.isArray(value)) {
+    return value.slice(0, maxArray)
+      .map((item) => compactSyncValue(item, depth + 1, { maxArray, maxString }))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value !== "object") return undefined;
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (HEAVY_SYNC_KEYS.has(key)) continue;
+    const compacted = compactSyncValue(item, depth + 1, { maxArray, maxString });
+    if (compacted !== undefined) result[key] = compacted;
+  }
+  return result;
+}
+
+function compactPickForCloudState(row = {}) {
+  if (!row || typeof row !== "object") return row;
+  const result = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (!PICK_SYNC_KEYS.has(key) || HEAVY_SYNC_KEYS.has(key)) continue;
+    const compacted = compactSyncValue(value, 0, { maxArray: 24, maxString: 1_000 });
+    if (compacted !== undefined) result[key] = compacted;
+  }
+  if (Array.isArray(row.supportingData)) {
+    result.supportingData = row.supportingData.slice(0, 8).map((item) => String(item || "").slice(0, 300));
+  }
+  if (Array.isArray(row.contradictingData)) {
+    result.contradictingData = row.contradictingData.slice(0, 8).map((item) => String(item || "").slice(0, 300));
+  }
+  result.compactedForCloudState = true;
+  return result;
+}
+
+function compactParlayForCloudState(row = {}) {
+  if (!row || typeof row !== "object") return row;
+  const result = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (!PARLAY_SYNC_KEYS.has(key) || HEAVY_SYNC_KEYS.has(key)) continue;
+    const compacted = compactSyncValue(value, 0, { maxArray: 24, maxString: 1_000 });
+    if (compacted !== undefined) result[key] = compacted;
+  }
+  result.legs = Array.isArray(row.legs) ? row.legs.slice(0, 12).map(compactPickForCloudState) : [];
+  if (Array.isArray(row.removedLegs)) result.removedLegs = row.removedLegs.slice(0, 150).map(compactPickForCloudState);
+  result.compactedForCloudState = true;
+  return result;
+}
+
+function compactStateRows(state = {}) {
+  return {
+    ...(state || {}),
+    preferences: state?.preferences && typeof state.preferences === "object" && !Array.isArray(state.preferences) ? state.preferences : {},
+    analysis_usage: state?.analysis_usage && typeof state.analysis_usage === "object" && !Array.isArray(state.analysis_usage) ? state.analysis_usage : {},
+    parlay_draft: Array.isArray(state?.parlay_draft) ? state.parlay_draft.slice(0, 12).map(compactPickForCloudState) : [],
+    saved_picks: Array.isArray(state?.saved_picks) ? state.saved_picks.slice(0, 500).map(compactPickForCloudState) : [],
+    saved_parlays: Array.isArray(state?.saved_parlays) ? state.saved_parlays.slice(0, 200).map(compactParlayForCloudState) : [],
+    alerts: Array.isArray(state?.alerts) ? state.alerts.slice(0, 500).map((row) => compactSyncValue(row, 0, { maxArray: 24, maxString: 1_000 })) : []
+  };
+}
+
 async function supabaseRequest(path, { method = "GET", token = "", body, prefer = "" } = {}) {
   if (!configured()) throw new AppError("La sincronizacion en linea no esta configurada.", 503, "CLOUD_NOT_CONFIGURED");
   const bodyText = body === undefined ? undefined : JSON.stringify(body);
@@ -195,8 +284,9 @@ function mergeEvidenceSnapshots(manualRows, automaticRows) {
 }
 
 function compactCloudStateResponse(state = {}, evidenceSummary = {}) {
+  const compactState = compactStateRows(state || {});
   return {
-    ...(state || { preferences: {}, parlay_draft: [], saved_picks: [], saved_parlays: [], alerts: [], analysis_usage: {} }),
+    ...compactState,
     evidence_snapshots: [],
     evidence_sync_summary: {
       compacted: true,
@@ -335,7 +425,7 @@ export async function saveCloudState(authorization, input) {
   const existing = Array.isArray(existingRows) ? existingRows[0] || {} : {};
   const merged = mergeNormalizedState(existing, state);
   const { evidence_snapshots: _evidenceSnapshots, ...mergedWithoutEvidence } = merged;
-  const payload = { user_id: userId, ...mergedWithoutEvidence, updated_at: new Date().toISOString() };
+  const payload = { user_id: userId, ...compactStateRows(mergedWithoutEvidence), updated_at: new Date().toISOString() };
   try {
     await supabaseRequest("/rest/v1/user_sync_state?on_conflict=user_id", {
       method: "POST", token, body: payload, prefer: "resolution=merge-duplicates,return=minimal"
