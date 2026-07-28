@@ -39,7 +39,8 @@ async function supabaseAdminRequest(path, { method = "GET", body, prefer = "" } 
     service: "supabase-fixture-cache",
     endpoint: path.split("?")[0],
     requestBytes: byteLength(bodyText),
-    responseBytes: byteLength(responseText)
+    responseBytes: byteLength(responseText),
+    error: !response.ok
   });
   const payload = responseText ? (() => { try { return JSON.parse(responseText); } catch { return null; } })() : null;
   if (!response.ok) {

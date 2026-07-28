@@ -17,7 +17,13 @@ export const env = Object.freeze({
   supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || "",
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY || "",
   evidenceAutomationSecret: process.env.EVIDENCE_AUTOMATION_SECRET || "",
-  evidenceAutomationIntervalMs: Math.max(60_000, Number(process.env.EVIDENCE_AUTOMATION_INTERVAL_MS || 300_000))
+  evidenceAutomationIntervalMs: Math.max(60_000, Number(process.env.EVIDENCE_AUTOMATION_INTERVAL_MS || 300_000)),
+  bandwidthAdminSecret: process.env.BANDWIDTH_ADMIN_SECRET || process.env.EVIDENCE_AUTOMATION_SECRET || "",
+  bandwidthFlushIntervalMs: Math.max(60_000, Number(process.env.BANDWIDTH_FLUSH_INTERVAL_MS || 900_000)),
+  bandwidthRetentionDays: Math.max(1, Number(process.env.BANDWIDTH_RETENTION_DAYS || 30)),
+  bandwidthDailyAlertBytes: Math.max(0, Number(process.env.BANDWIDTH_DAILY_ALERT_BYTES || 150_000_000)),
+  bandwidthLargeResponseBytes: Math.max(1_000, Number(process.env.BANDWIDTH_LARGE_RESPONSE_BYTES || 750_000)),
+  bandwidthHighRouteCount: Math.max(10, Number(process.env.BANDWIDTH_HIGH_ROUTE_COUNT || 250))
 });
 
 export function requireLiveConfiguration() {

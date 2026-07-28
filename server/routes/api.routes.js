@@ -17,6 +17,7 @@ import { buildOutcomeScenarios } from "../services/outcome-scenarios.service.js"
 import { buildSpecificMarkets } from "../services/specific-markets.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 import { getBandwidthObservability } from "../services/bandwidth-observability.service.js";
+import { buildBandwidthReport } from "../services/bandwidth-reporting.service.js";
 import { resolvePendingAuditError, runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
 import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
@@ -46,6 +47,11 @@ const requireLiveMode = (req, res, next) => {
 };
 const validAutomationSecret = (value) => {
   const expected = Buffer.from(String(env.evidenceAutomationSecret || ""));
+  const received = Buffer.from(String(value || ""));
+  return expected.length > 0 && expected.length === received.length && timingSafeEqual(expected, received);
+};
+const validBandwidthAdminSecret = (value) => {
+  const expected = Buffer.from(String(env.bandwidthAdminSecret || ""));
   const received = Buffer.from(String(value || ""));
   return expected.length > 0 && expected.length === received.length && timingSafeEqual(expected, received);
 };
@@ -87,6 +93,11 @@ apiRouter.put("/cloud/state", asyncRoute(async (req, res) => res.json({ state: a
 apiRouter.post("/cloud/evidence/sync", asyncRoute(async (req, res) => res.json(await saveCloudEvidenceSnapshots(req.headers.authorization, req.body || {}))));
 apiRouter.get("/cloud/evidence/status", asyncRoute(async (req, res) => res.json(await getEvidenceAutomationStatus(req.headers.authorization))));
 apiRouter.post("/cloud/evidence/watch", asyncRoute(async (req, res) => res.json(await registerEvidenceWatchlist(req.headers.authorization, req.body || {}))));
+
+apiRouter.get("/admin/bandwidth-report", asyncRoute(async (req, res) => {
+  if (!validBandwidthAdminSecret(req.headers["x-bandwidth-admin-secret"])) throw new AppError("Reporte de ancho de banda no autorizado.", 401, "BANDWIDTH_REPORT_UNAUTHORIZED");
+  res.json(await buildBandwidthReport());
+}));
 
 const automationLimiter = rateLimit({ windowMs: 60 * 1000, limit: 3, standardHeaders: "draft-8", legacyHeaders: false });
 apiRouter.post("/automation/evidence/run", requireLiveMode, automationLimiter, asyncRoute(async (req, res) => {

@@ -49,7 +49,14 @@ async function requestJson(url, fetchImpl) {
       return "weather-provider";
     }
   })();
-  if (!response.ok) throw new Error(`Open-Meteo HTTP ${response.status}`);
+  if (!response.ok) {
+    recordServiceInitiatedTraffic({
+      service: endpoint.includes("nominatim") ? "openstreetmap-nominatim" : "open-meteo",
+      endpoint,
+      error: true
+    });
+    throw new Error(`Open-Meteo HTTP ${response.status}`);
+  }
   const text = typeof response.text === "function"
     ? await response.text()
     : JSON.stringify(await response.json());

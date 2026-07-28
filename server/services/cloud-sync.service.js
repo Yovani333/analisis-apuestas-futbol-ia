@@ -138,7 +138,8 @@ async function supabaseRequest(path, { method = "GET", token = "", body, prefer 
     service: "supabase",
     endpoint: path.split("?")[0],
     requestBytes: byteLength(bodyText),
-    responseBytes: byteLength(responseText)
+    responseBytes: byteLength(responseText),
+    error: !response.ok
   });
   const payload = responseText ? (() => { try { return JSON.parse(responseText); } catch { return null; } })() : null;
   if (!response.ok) {
@@ -174,7 +175,8 @@ async function supabaseAdminRequest(path, { method = "GET", body, prefer = "" } 
     service: "supabase-admin",
     endpoint: path.split("?")[0],
     requestBytes: byteLength(bodyText),
-    responseBytes: byteLength(responseText)
+    responseBytes: byteLength(responseText),
+    error: !response.ok
   });
   const payload = responseText ? (() => { try { return JSON.parse(responseText); } catch { return null; } })() : null;
   if (!response.ok) {

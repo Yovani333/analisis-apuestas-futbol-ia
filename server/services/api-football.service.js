@@ -204,14 +204,16 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
   recordApiFootballCacheMiss({ endpoint: url.pathname });
 
   const request = (async () => {
-  const parseApiFootballPayload = async (responseToParse) => {
+  const parseApiFootballPayload = async (responseToParse, { retry = false, error = false } = {}) => {
     const text = typeof responseToParse.text === "function"
       ? await responseToParse.text()
       : JSON.stringify(await responseToParse.json());
     recordServiceInitiatedTraffic({
       service: "api-football",
       endpoint: url.pathname,
-      responseBytes: byteLength(text)
+      responseBytes: byteLength(text),
+      retry,
+      error
     });
     return text ? JSON.parse(text) : {};
   };
@@ -222,11 +224,13 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
       signal: AbortSignal.timeout(12000)
     });
   } catch {
+    recordServiceInitiatedTraffic({ service: "api-football", endpoint: url.pathname, error: true });
     recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_NETWORK_ERROR" });
     throw new AppError("No fue posible conectar con API-Football.", 502, "API_FOOTBALL_NETWORK_ERROR");
   }
   recordApiFootballResponse({ endpoint: url.pathname, headers: response.headers });
   if (!response.ok) {
+    await parseApiFootballPayload(response, { error: true }).catch(() => {});
     const rateLimited = response.status === 429;
     const code = rateLimited ? "API_FOOTBALL_RATE_LIMIT" : "API_FOOTBALL_HTTP_ERROR";
     recordApiFootballFailure({ endpoint: url.pathname, code, headers: response.headers });
@@ -250,7 +254,7 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
         });
         recordApiFootballResponse({ endpoint: url.pathname, headers: retryResponse.headers });
         if (retryResponse.ok) {
-          payload = await parseApiFootballPayload(retryResponse);
+          payload = await parseApiFootballPayload(retryResponse, { retry: true });
           providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
           if (!providerErrors?.length) {
             const retryValue = payload.response || [];
@@ -259,6 +263,8 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
             negativeRequestCache.delete(cacheKey);
             return retryValue;
           }
+        } else {
+          await parseApiFootballPayload(retryResponse, { retry: true, error: true }).catch(() => {});
         }
       } catch {
         recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_PROVIDER_RETRY_ERROR" });
@@ -274,7 +280,7 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
           });
           recordApiFootballResponse({ endpoint: url.pathname, headers: retryResponse.headers });
           if (retryResponse.ok) {
-            payload = await parseApiFootballPayload(retryResponse);
+            payload = await parseApiFootballPayload(retryResponse, { retry: true });
             providerErrors = payload.errors && (Array.isArray(payload.errors) ? payload.errors : Object.values(payload.errors));
             if (!providerErrors?.length) {
               const retryValue = payload.response || [];
@@ -283,6 +289,8 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
               negativeRequestCache.delete(cacheKey);
               return retryValue;
             }
+          } else {
+            await parseApiFootballPayload(retryResponse, { retry: true, error: true }).catch(() => {});
           }
         } catch {
           recordApiFootballFailure({ endpoint: url.pathname, code: "API_FOOTBALL_PROVIDER_RETRY_ERROR" });
