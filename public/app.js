@@ -394,11 +394,15 @@ async function registerAutomaticEvidence(fixtures = state.fixtures) {
 function applyCloudState(remoteState) {
   state.cloudApplying = true;
   try {
+    const compactRemoteEvidence = remoteState?.evidence_sync_summary?.compacted === true;
+    const mergedEvidence = compactRemoteEvidence
+      ? filterValidEvidenceSnapshots(state.evidenceSnapshots)
+      : filterValidEvidenceSnapshots(remoteState.evidenceSnapshots || state.evidenceSnapshots || []);
     state.preferences = { ...state.preferences, ...(remoteState.preferences || {}) };
     state.parlayDraft = remoteState.parlayDraft || [];
     state.savedPicks = remoteState.savedPicks || [];
     state.savedParlays = remoteState.savedParlays || [];
-    state.evidenceSnapshots = filterValidEvidenceSnapshots(remoteState.evidenceSnapshots || []);
+    state.evidenceSnapshots = mergedEvidence;
     state.alerts = remoteState.alerts || [];
     saveParlayDraft(state.parlayDraft);
     saveSavedPicks(state.savedPicks);
@@ -491,6 +495,7 @@ function clearLocalAccountData() {
     state.savedPicks = [];
     state.savedParlays = [];
     state.evidenceSnapshots = [];
+    state.evidenceLibrary = [];
     state.alerts = [];
     state.preferences = { theme: state.preferences.theme || "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true };
     saveParlayDraft([]);
@@ -3900,6 +3905,11 @@ function selectedAuditEvidence() {
 }
 
 async function loadEvidenceLibrary() {
+  if (!cloudSyncClient.session?.accessToken) {
+    state.evidenceLibrary = [];
+    renderAuditFixtureOptions();
+    return;
+  }
   if (state.evidenceLibrary.length || state.isLoadingEvidenceLibrary) return;
   state.isLoadingEvidenceLibrary = true;
   try {
@@ -3921,15 +3931,9 @@ function renderAuditFixtureOptions() {
     const evaluated = Boolean(snapshot.auditMetadata?.auditedAt && snapshot.auditSummary?.completed === true);
     available.set(String(fixture.id), { ...fixture, hasEvidence: true, evaluated, evidenceStatus: evaluated ? "evaluated" : "pending" });
   }
-  for (const fixture of state.fixtures.filter((item) => item.status === "finished")) {
-    const id = String(fixture.id);
-    const evidence = latestEvidenceForFixture(snapshots, id);
-    const evaluated = Boolean(evidence?.auditMetadata?.auditedAt && evidence?.auditSummary?.completed === true);
-    available.set(id, { ...available.get(id), ...fixture, hasEvidence: Boolean(evidence), evaluated, evidenceStatus: evidence ? (evaluated ? "evaluated" : "pending") : "missing" });
-  }
   const fixtures = [...available.values()].sort((a, b) => String(b.utcDateTime || b.date || "").localeCompare(String(a.utcDateTime || a.date || "")));
   elements.auditFixture.innerHTML = fixtures.length
-    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}" class="${fixture.evidenceStatus === "evaluated" ? "audit-option--evaluated" : fixture.evidenceStatus === "pending" ? "audit-option--pending" : ""}">${fixture.evidenceStatus === "evaluated" ? "● Evaluada · " : fixture.evidenceStatus === "pending" ? "● Pendiente · " : ""}${escapeHtml(fixture.leagueName || "Liga no disponible")} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · ${fixture.hasEvidence ? "Evidencia prepartido" : "Sin snapshot"}</option>`).join("")}`
+    ? `<option value="">Selecciona una evidencia</option>${fixtures.map((fixture) => `<option value="${escapeHtml(fixture.id)}" class="${fixture.evidenceStatus === "evaluated" ? "audit-option--evaluated" : fixture.evidenceStatus === "pending" ? "audit-option--pending" : ""}">${fixture.evidenceStatus === "evaluated" ? "● Evaluada · " : fixture.evidenceStatus === "pending" ? "● Pendiente · " : ""}${escapeHtml(fixture.leagueName || "Liga no disponible")} · ${escapeHtml(formatDate(fixture.date))} · ${escapeHtml(fixture.home)} vs ${escapeHtml(fixture.away)} · Evidencia prepartido</option>`).join("")}`
     : '<option value="">No hay evidencias prepartido guardadas</option>';
   elements.runAudit.disabled = true;
   elements.viewAuditEvidence.disabled = true;
