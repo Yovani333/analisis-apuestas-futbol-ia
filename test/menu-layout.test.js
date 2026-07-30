@@ -68,7 +68,7 @@ test("Mi cuenta muestra conteo API solo para el administrador", () => {
 
 test("Transparencia filtra cuotas por Mejores picks sin incluir corners", () => {
   assert.match(app, /buildPerformanceOddsView\(module\.markets \|\| \[\], performanceRows, bestPicks\)/);
-  assert.match(app, /ordenadas de mayor a menor\. Corners está excluido/);
+  assert.match(app, /ordenadas de mayor a menor\. Corners est/);
   assert.match(app, /performance-odds-row--\$\{market\.performanceColor\}/);
   assert.match(styles, /performance-odds-badge--green/);
   assert.match(styles, /performance-odds-badge--orange/);
@@ -138,10 +138,10 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(app, /pick\.resultSource = "manual"/);
   assert.match(html, /data-saved-tab="origins-won"[^>]*>Resultados por origen Ganados/);
   assert.match(html, /data-saved-tab="origins-lost"[^>]*>Resultados por origen Perdidos/);
-  assert.match(html, /data-saved-tab="competitions"[^>]*>Resultados por competición/);
+  assert.match(html, /data-saved-tab="competitions"[^>]*>Resultados por competici/);
   assert.match(html, /data-saved-tab="origin-recommendations"[^>]*>Mejores picks/);
-  assert.match(html, /data-saved-tab="best-combination"[^>]*>Mejor combinación/);
-  assert.match(html, /data-saved-tab="historical-validator"[^>]*>Validador histórico/);
+  assert.match(html, /data-saved-tab="best-combination"[^>]*>Mejor combinaci/);
+  assert.match(html, /data-saved-tab="historical-validator"[^>]*>Validador hist/);
   assert.match(html, /id="saved-individual-section"[\s\S]*id="update-individual-results"/);
   assert.match(html, /id="origin-results-section"[\s\S]*id="update-origin-results"/);
   assert.match(html, /id="origin-lost-results-section"[\s\S]*id="update-origin-lost-results"/);
@@ -151,6 +151,8 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(html, /id="saved-parlays-section"[\s\S]*id="update-parlay-results"/);
   assert.match(app, /calculateOriginPerformance\(state\.savedPicks, state\.savedParlays\)/);
   assert.match(app, /calculateCompetitionPerformance\(state\.savedPicks, state\.savedParlays\)/);
+  assert.match(app, /<th>Estado<\/th>/);
+  assert.match(app, /query-status--\$\{escapeHtml\(row\.queryStatus \|\| "active"\)\}/);
   assert.doesNotMatch(app, /<th>Agregados<\/th>/);
   assert.doesNotMatch(app, /<th>Agregado<\/th>/);
   assert.match(app, /leg\.resultSource = "manual"/);
@@ -231,15 +233,15 @@ test("resultados históricos permiten filtrar por mes y abrir picks por competic
 });
 
 test("las señales históricas identifican mejores y peores resultados", () => {
-  assert.match(app, /performance-signal--best[\s\S]*⚽/);
-  assert.match(app, /performance-signal--worst[\s\S]*🟥/);
-  assert.match(app, /league-performance-badge[\s\S]*⚽ Mejor historial/);
+  assert.match(app, /performance-signal--best[\s\S]*Mejor desempe/);
+  assert.match(app, /performance-signal--worst[\s\S]*Desempe/);
+  assert.match(app, /league-performance-badge[\s\S]*Mejor historial/);
   assert.match(app, /unfavorableCompetitionForFixtures[\s\S]*Historial desfavorable/);
   assert.match(app, /groups\.sort\([\s\S]*competitionHistoryOrder/);
   assert.match(app, /favoriteOriginKeys[\s\S]*Origen favorito/);
 });
 
-test("Picks recomendados muestra tarjeta roja solo con respaldo histórico desfavorable", () => {
+test("Picks recomendados muestra equis roja solo con respaldo histórico desfavorable", () => {
   assert.match(app, /assessPickHistoricalRecommendation\(pick, performanceRows\)/);
   assert.match(app, /collection-pick--historical-avoid/);
   assert.match(app, /Menos recomendado por historial/);

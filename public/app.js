@@ -801,6 +801,21 @@ function competitionLeagues(value = elements.competition.value) {
   return selectedLeagueSlugs();
 }
 
+function disabledCompetitionQuerySlugs() {
+  const competitionRows = calculateCompetitionPerformance(state.savedPicks, state.savedParlays);
+  const disabledNames = new Set(competitionRows
+    .filter((row) => row.queryStatus === "disabled")
+    .map((row) => normalizedCompetitionName(row.competition)));
+  return new Set(ALLOWED_LEAGUES
+    .filter((league) => league.slug === "world-cup" || disabledNames.has(normalizedCompetitionName(league.name)))
+    .map((league) => league.slug));
+}
+
+function activeCompetitionLeaguesForSearch(leagues = competitionLeagues()) {
+  const disabledSlugs = disabledCompetitionQuerySlugs();
+  return leagues.filter((slug) => !disabledSlugs.has(slug));
+}
+
 function applyCompetitionMetadataFilters() {
   const country = elements.competitionCountry.value;
   const confederation = elements.competitionConfederation.value;
@@ -1286,7 +1301,7 @@ function renderMatches() {
     return `
     <section class="league-group" aria-labelledby="league-${escapeHtml(league.slug)}">
       <header class="league-group__header">
-        <div class="league-group__identity"><h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span>${positiveHistory ? `<span class="league-performance-badge" title="${escapeHtml(`${positiveHistory.winRate}% de acierto en ${positiveHistory.evaluated} picks evaluados`)}">⚽ Mejor historial</span>` : unfavorableHistory ? `<span class="league-performance-badge league-performance-badge--worst" title="${escapeHtml(`${unfavorableHistory.winRate}% de acierto en ${unfavorableHistory.evaluated} picks evaluados`)}">🟥 Historial desfavorable</span>` : ""}<small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>${originLeadersHtml}</div>
+        <div class="league-group__identity"><h3 id="league-${escapeHtml(league.slug)}"><span class="league-code">${escapeHtml(league.code)}</span><span>${escapeHtml(league.name)} · ${escapeHtml(league.country)}</span>${positiveHistory ? `<span class="league-performance-badge" title="${escapeHtml(`${positiveHistory.winRate}% de acierto en ${positiveHistory.evaluated} picks evaluados`)}">⚽ Mejor historial</span>` : unfavorableHistory ? `<span class="league-performance-badge league-performance-badge--worst" title="${escapeHtml(`${unfavorableHistory.winRate}% de acierto en ${unfavorableHistory.evaluated} picks evaluados`)}">❌ Historial desfavorable</span>` : ""}<small>${fixtures.length} ${fixtures.length === 1 ? "encuentro" : "encuentros"}</small></h3>${originLeadersHtml}</div>
         <button class="league-group__toggle" type="button" data-toggle-league="${escapeHtml(league.slug)}" aria-expanded="${expanded}" aria-controls="league-matches-${escapeHtml(league.slug)}" aria-label="${expanded ? "Ocultar" : "Mostrar"} encuentros de ${escapeHtml(league.name)}" title="${expanded ? "Ocultar encuentros" : "Mostrar encuentros"}">${expanded ? "−" : "+"}</button>
       </header>
       <div id="league-matches-${escapeHtml(league.slug)}" class="league-group__matches" ${expanded ? "" : "hidden"}>
@@ -3046,7 +3061,7 @@ function updatePerformanceMonthStatus() {
 function performanceSignalBadge(winRate, evaluated) {
   if (Number(evaluated) < 3 || !Number.isFinite(Number(winRate))) return "";
   if (Number(winRate) >= 60) return '<span class="performance-signal performance-signal--best" title="Mejor desempeño observado" aria-label="Mejor desempeño observado">⚽</span>';
-  if (Number(winRate) < 50) return '<span class="performance-signal performance-signal--worst" title="Desempeño desfavorable observado" aria-label="Desempeño desfavorable observado">🟥</span>';
+  if (Number(winRate) < 50) return '<span class="performance-signal performance-signal--worst" title="Desempeño desfavorable observado" aria-label="Desempeño desfavorable observado">❌</span>';
   return "";
 }
 
@@ -3153,7 +3168,7 @@ function renderOriginPerformance() {
   const noStoredPicks = state.savedPicks.length === 0 && state.savedParlays.length === 0;
   [elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateCompetitionResults].forEach((button) => { button.disabled = noStoredPicks; });
   elements.competitionPerformance.innerHTML = competitionRows.length
-    ? `<header><div><span>Balance por torneo · ${escapeHtml(performanceMonthLabel())}</span><h3>Resultados por competición</h3></div><small>Selecciona un número para consultar sus picks.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Competición</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th></tr></thead><tbody>${competitionRows.map((row, index) => `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`competition:${row.key}`, index + 1)}</td><td data-label="Competición"><div class="competition-result-name"><span><strong>${escapeHtml(row.competition)}</strong>${performanceSignalBadge(row.winRate, row.evaluated)}</span>${row.active ? '<span class="active-pick-badge">Pick Activo</span>' : ""}</div></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive"><button class="performance-count-link" type="button" data-view-competition-picks="${escapeHtml(row.key)}" data-competition-result="won" aria-label="Ver ${row.won} picks ganados de ${escapeHtml(row.competition)}">${row.won}</button></td><td data-label="Perdidos" class="value-negative"><button class="performance-count-link" type="button" data-view-competition-picks="${escapeHtml(row.key)}" data-competition-result="lost" aria-label="Ver ${row.lost} picks perdidos de ${escapeHtml(row.competition)}">${row.lost}</button></td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${row.winRate === null ? "—" : `${displayValue(row.winRate)}%`}</strong></td></tr>`).join("")}</tbody></table></div>`
+    ? `<header><div><span>Balance por torneo · ${escapeHtml(performanceMonthLabel())}</span><h3>Resultados por competición</h3></div><small>Selecciona un número para consultar sus picks.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Competición</th><th>Estado</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th></tr></thead><tbody>${competitionRows.map((row, index) => `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`competition:${row.key}`, index + 1)}</td><td data-label="Competición"><div class="competition-result-name"><span><strong>${escapeHtml(row.competition)}</strong>${performanceSignalBadge(row.winRate, row.evaluated)}</span>${row.active ? '<span class="active-pick-badge">Pick Activo</span>' : ""}</div></td><td data-label="Estado"><span class="query-status query-status--${escapeHtml(row.queryStatus || "active")}" title="${escapeHtml(row.queryStatusReason || "")}">${escapeHtml(row.queryStatusLabel || "Activo")}</span></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive"><button class="performance-count-link" type="button" data-view-competition-picks="${escapeHtml(row.key)}" data-competition-result="won" aria-label="Ver ${row.won} picks ganados de ${escapeHtml(row.competition)}">${row.won}</button></td><td data-label="Perdidos" class="value-negative"><button class="performance-count-link" type="button" data-view-competition-picks="${escapeHtml(row.key)}" data-competition-result="lost" aria-label="Ver ${row.lost} picks perdidos de ${escapeHtml(row.competition)}">${row.lost}</button></td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${row.winRate === null ? "—" : `${displayValue(row.winRate)}%`}</strong></td></tr>`).join("")}</tbody></table></div>`
     : '<div class="saved-empty"><h3>Sin resultados por competición</h3><p>El conteo aparecerá cuando existan picks concluidos como ganados o perdidos.</p></div>';
   const renderPickTypes = (result) => {
     const filtered = pickTypeRows.filter((row) => row[result] > 0)
@@ -3183,7 +3198,7 @@ function renderOriginPerformance() {
   elements.originLostPerformance.innerHTML = renderResult("lost");
 
   const recommendations = calculateOriginRecommendations(allRows);
-  const recommendationCards = (items, type) => items.map((item) => `<article class="origin-recommendation origin-recommendation--${type}"><span>${type === "recommended" ? "⚽ Mejor desempeño" : type === "avoid" ? "🟥 No recomendado" : "Muestra en observación"}</span><h4>${escapeHtml(item.category)}</h4><p><strong>Origen:</strong> ${escapeHtml(item.originLabel || pickOriginLabel(item.originModule || item.origin))}</p><div><b>${item.won} ganados</b><b>${item.lost} perdidos</b><b>${displayValue(item.winRate)}% acierto</b></div><small>${type === "recommended" ? "Historial favorable con al menos 3 picks evaluados." : type === "avoid" ? "Balance desfavorable con al menos 3 picks evaluados." : "Aún no existe volumen o diferencia suficiente para recomendar o descartar."}</small></article>`).join("");
+  const recommendationCards = (items, type) => items.map((item) => `<article class="origin-recommendation origin-recommendation--${type}"><span>${type === "recommended" ? "⚽ Mejor desempeño" : type === "avoid" ? "❌ No recomendado" : "Muestra en observación"}</span><h4>${escapeHtml(item.category)}</h4><p><strong>Origen:</strong> ${escapeHtml(item.originLabel || pickOriginLabel(item.originModule || item.origin))}</p><div><b>${item.won} ganados</b><b>${item.lost} perdidos</b><b>${displayValue(item.winRate)}% acierto</b></div><small>${type === "recommended" ? "Historial favorable con al menos 3 picks evaluados." : type === "avoid" ? "Balance desfavorable con al menos 3 picks evaluados." : "Aún no existe volumen o diferencia suficiente para recomendar o descartar."}</small></article>`).join("");
   elements.originRecommendations.innerHTML = `<div class="origin-recommendations__notice"><strong>Lectura responsable</strong><span>Esta clasificación resume resultados pasados; no modifica fórmulas ni garantiza el siguiente pick.</span></div><div class="origin-recommendations__columns"><section><header><h3>Mejores picks</h3><span>${recommendations.recommended.length}</span></header>${recommendationCards(recommendations.recommended, "recommended") || '<p class="muted-text">Todavía no hay picks con al menos 3 evaluados y 60% de acierto.</p>'}</section><section><header><h3>No recomendados</h3><span>${recommendations.notRecommended.length}</span></header>${recommendationCards(recommendations.notRecommended, "avoid") || '<p class="muted-text">No hay picks con balance claramente desfavorable.</p>'}</section></div>${recommendations.observing.length ? `<section class="origin-recommendations__observing"><header><h3>En observación</h3><span>${recommendations.observing.length}</span></header><div>${recommendationCards(recommendations.observing, "observing")}</div></section>` : ""}`;
 }
 
@@ -5054,6 +5069,7 @@ async function refreshLiveDataNow() {
 
 function validateFilters() {
   if (!competitionLeagues().length) return "Selecciona al menos una liga.";
+  if (!activeCompetitionLeaguesForSearch().length) return "Las competiciones seleccionadas están desactivadas por historial. Elige otra competición activa.";
   if (!elements.dateFrom.value || !elements.dateTo.value) return "Selecciona las fechas desde y hasta.";
   if (elements.dateFrom.value && elements.dateTo.value && elements.dateFrom.value > elements.dateTo.value) return "La fecha inicial no puede ser posterior a la fecha final.";
   return "";
@@ -5076,8 +5092,11 @@ async function searchFixtures(event) {
   elements.searchFeedback.textContent = "Buscando partidos…";
 
   try {
+    const selectedLeagues = competitionLeagues();
+    const queryLeagues = activeCompetitionLeaguesForSearch(selectedLeagues);
+    const omittedCount = selectedLeagues.length - queryLeagues.length;
     const filters = {
-      leagues: competitionLeagues(),
+      leagues: queryLeagues,
       season: elements.season.value,
       dateFrom: elements.dateFrom.value,
       dateTo: elements.dateTo.value,
@@ -5089,7 +5108,8 @@ async function searchFixtures(event) {
     purgeInvalidEvidenceSnapshots({ sync: true, render: false });
     const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
     const validCount = state.fixtures.length;
-    elements.searchFeedback.textContent = `${validCount} ${validCount === 1 ? "encuentro válido" : "encuentros válidos"} desde ${source} · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
+    const omittedLabel = omittedCount > 0 ? ` · ${omittedCount} ${omittedCount === 1 ? "competición desactivada omitida" : "competiciones desactivadas omitidas"}` : "";
+    elements.searchFeedback.textContent = `${validCount} ${validCount === 1 ? "encuentro válido" : "encuentros válidos"} desde ${source}${omittedLabel} · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
     elements.filterError.hidden = true;
     elements.filterError.textContent = "";
     renderMatches();

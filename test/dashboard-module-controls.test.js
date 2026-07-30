@@ -156,3 +156,15 @@ test("la busqueda muestra solo encuentros validos sin exponer errores de ligas v
   assert.doesNotMatch(searchBody, /Datos no disponibles en la API/);
   assert.match(searchBody, /elements\.filterError\.hidden = true/);
 });
+
+test("la busqueda omite competiciones desactivadas por historial", () => {
+  const searchBody = app.match(/async function searchFixtures\(event\)[\s\S]+?function handleFilterChange/)[0];
+  assert.match(app, /function disabledCompetitionQuerySlugs/);
+  assert.match(app, /league\.slug === "world-cup"/);
+  assert.match(app, /row\.queryStatus === "disabled"/);
+  assert.match(app, /function activeCompetitionLeaguesForSearch/);
+  assert.match(searchBody, /const selectedLeagues = competitionLeagues\(\)/);
+  assert.match(searchBody, /const queryLeagues = activeCompetitionLeaguesForSearch\(selectedLeagues\)/);
+  assert.match(searchBody, /leagues: queryLeagues/);
+  assert.match(searchBody, /competiciones desactivadas omitidas/);
+});

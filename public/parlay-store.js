@@ -437,6 +437,16 @@ export function assessPickHistoricalRecommendation(pick = {}, performanceRows = 
 
 export function calculateCompetitionPerformance(picks = [], parlays = []) {
   const groups = new Map();
+  const queryStatusForCompetition = (row = {}) => {
+    const name = String(row.competition || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (name.includes("copa mundial fifa") || String(row.leagueId || "") === "1") {
+      return { queryStatus: "disabled", queryStatusLabel: "Desactivado", queryStatusReason: "Competición cerrada para nuevas consultas automáticas." };
+    }
+    if (Number(row.evaluated || 0) > 0 && Number(row.winRate) < 30) {
+      return { queryStatus: "disabled", queryStatusLabel: "Desactivado", queryStatusReason: "Acierto histórico menor al 30%." };
+    }
+    return { queryStatus: "active", queryStatusLabel: "Activo", queryStatusReason: "Competición habilitada para consultas." };
+  };
   const normalizeCompetition = (value) => String(value || "Competición no disponible").trim()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/\b(uefa|conmebol|clasificacion|qualification|qualifying)\b/g, " ")
@@ -506,7 +516,9 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
     groups.set(key, current);
   }
 
-  return [...groups.values()].sort((a, b) => (b.winRate ?? -1) - (a.winRate ?? -1) || b.evaluated - a.evaluated || a.competition.localeCompare(b.competition));
+  return [...groups.values()]
+    .map((row) => ({ ...row, ...queryStatusForCompetition(row) }))
+    .sort((a, b) => (b.winRate ?? -1) - (a.winRate ?? -1) || b.evaluated - a.evaluated || a.competition.localeCompare(b.competition));
 }
 
 export function calculateCompetitionOriginLeaders(picks = [], parlays = [], { leagueIds = [], competitions = [], limit = 2 } = {}) {

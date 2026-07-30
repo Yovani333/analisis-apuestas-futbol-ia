@@ -9,6 +9,21 @@ test("calcula el porcentaje ganado de un parlay aunque el resultado general sea 
   assert.deepEqual(calculateParlayWinProgress([]), { won: 0, total: 0, percentage: 0 });
 });
 
+test("resultados por competicion marca estado activo o desactivado sin borrar historico", () => {
+  const rows = calculateCompetitionPerformance([
+    { league: "Copa Mundial FIFA", leagueId: 1, result: "won" },
+    { league: "Liga Riesgo", result: "lost" },
+    { league: "Liga Sano", result: "won" }
+  ]);
+  const worldCup = rows.find((row) => row.leagueId === 1);
+  const risky = rows.find((row) => row.competition === "Liga Riesgo");
+  const healthy = rows.find((row) => row.competition === "Liga Sano");
+  assert.deepEqual({ status: worldCup.queryStatus, evaluated: worldCup.evaluated, won: worldCup.won }, { status: "disabled", evaluated: 1, won: 1 });
+  assert.equal(risky.queryStatus, "disabled");
+  assert.equal(risky.queryStatusReason, "Acierto histórico menor al 30%.");
+  assert.equal(healthy.queryStatus, "active");
+});
+
 test("mejor combinación usa solo resultados concluidos y evita muestras desfavorables", () => {
   const picks = [
     ...Array.from({ length: 3 }, (_, index) => ({ id: `a${index}`, league: "Liga A", sourceModule: "h2h", market: "Total", selection: "Más de 1.5", result: "won" })),

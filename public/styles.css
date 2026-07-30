@@ -679,6 +679,9 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .origin-performance__table tbody tr:last-child td { border-bottom: 0; }
 .origin-performance__table td:last-child strong { color: var(--success); }
 .competition-result-name { display: grid; justify-items: start; gap: 5px; }
+.query-status { display: inline-flex; align-items: center; width: max-content; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: .62rem; font-weight: 900; text-transform: uppercase; }
+.query-status--active { color: #087a55; background: #e7f8ef; border-color: #9ddcbd; }
+.query-status--disabled { color: #a51d32; background: #fff0f2; border-color: #f1a4b0; }
 .active-pick-badge { display: inline-flex; align-items: center; padding: 3px 7px; color: #fff; background: #c72f45; border: 1px solid #ef6376; border-radius: 4px; font-size: .58rem; font-weight: 800; text-transform: uppercase; }
 .pick-type-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; }
 .pick-type-summary__item { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-left: 4px solid var(--success); border-radius: 7px; }
@@ -1791,6 +1794,8 @@ body {
 :root[data-theme="dark"] .app-notice { color: var(--text); background: var(--surface); border-color: var(--border); }
 :root[data-theme="dark"] .league-performance-badge { color: #b9fbef; background: rgb(16 185 129 / 15%); border-color: rgb(52 211 153 / 32%); }
 :root[data-theme="dark"] .league-performance-badge--worst { color: #fecdd3; background: rgb(225 29 72 / 16%); border-color: rgb(251 113 133 / 38%); }
+:root[data-theme="dark"] .query-status--active { color: #b9fbef; background: rgb(16 185 129 / 15%); border-color: rgb(52 211 153 / 32%); }
+:root[data-theme="dark"] .query-status--disabled { color: #fecdd3; background: rgb(225 29 72 / 16%); border-color: rgb(251 113 133 / 38%); }
 :root[data-theme="dark"] .favorite-origin-badge { color: #b9fbef; background: rgb(16 185 129 / 15%); border-color: rgb(52 211 153 / 32%); }
 
 @media (max-width: 900px) {
