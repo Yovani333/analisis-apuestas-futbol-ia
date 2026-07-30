@@ -29,4 +29,6 @@ test("sincronizacion de cuenta solo muestra resumen y no hidrata snapshots compl
   assert.match(appSource, /Resumen liviano de Supabase/);
   assert.match(appSource, /Total recolectadas/);
   assert.match(appSource, /Resguardadas sin cargar/);
+  assert.match(appSource, /status\.automaticAvailable/);
+  assert.match(appSource, /if \(cloudCollected > 0\) \{\s*elements\.evidenceReadinessList\.innerHTML = cloudSummaryCard;\s*return;/);
 });

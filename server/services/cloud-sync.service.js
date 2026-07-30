@@ -396,6 +396,22 @@ function compactCloudStateResponse(state = {}, evidenceSummary = {}) {
   };
 }
 
+async function getCloudEvidenceSummary(token) {
+  let automaticMetadataRows = [];
+  let automaticEvidenceCount = 0;
+  try {
+    automaticEvidenceCount = await supabaseCountRequest("/rest/v1/automatic_evidence_snapshots?select=fixture_id", { token });
+    const payload = await supabaseRequest("/rest/v1/automatic_evidence_snapshots?select=fixture_id,captured_at&order=captured_at.desc&limit=1", { token });
+    automaticMetadataRows = Array.isArray(payload) ? payload : [];
+  } catch (error) {
+    if (!/automatic_evidence_snapshots|schema cache|could not find|does not exist|PGRST205/i.test(providerMessage(error))) throw error;
+  }
+  return {
+    automaticAvailable: automaticEvidenceCount || automaticMetadataRows.length,
+    latestAutomaticCapturedAt: automaticMetadataRows[0]?.captured_at || null
+  };
+}
+
 export async function saveCloudEvidenceSnapshots(authorization, input = {}) {
   const token = bearerToken(authorization);
   const userId = userIdFromToken(token);
@@ -524,20 +540,9 @@ export async function getCloudState(authorization) {
     throw error;
   }
   const state = Array.isArray(rows) ? rows[0] || null : null;
-  let automaticMetadataRows = [];
-  let automaticEvidenceCount = 0;
-  try {
-    automaticEvidenceCount = await supabaseCountRequest("/rest/v1/automatic_evidence_snapshots?select=fixture_id", { token });
-    const payload = await supabaseRequest(`/rest/v1/automatic_evidence_snapshots?select=fixture_id,captured_at&order=captured_at.desc&limit=1`, { token });
-    automaticMetadataRows = Array.isArray(payload) ? payload : [];
-  } catch (error) {
-    if (!/automatic_evidence_snapshots|schema cache|could not find|does not exist|PGRST205/i.test(providerMessage(error))) throw error;
-  }
-  if (!state && !automaticMetadataRows.length) return null;
-  return compactCloudStateResponse(state, {
-    automaticAvailable: automaticEvidenceCount || automaticMetadataRows.length,
-    latestAutomaticCapturedAt: automaticMetadataRows[0]?.captured_at || null
-  });
+  const evidenceSummary = await getCloudEvidenceSummary(token);
+  if (!state && !evidenceSummary.automaticAvailable) return null;
+  return compactCloudStateResponse(state, evidenceSummary);
 }
 
 export async function saveCloudState(authorization, input) {
@@ -676,6 +681,7 @@ export async function getEvidenceAutomationStatus(authorization, extra = {}) {
   }
   const watched = Array.isArray(rows) ? rows : [];
   const counts = watched.reduce((result, row) => ({ ...result, [row.status]: (result[row.status] || 0) + 1 }), {});
+  const evidenceSummary = await getCloudEvidenceSummary(token);
   return {
     configured: evidenceAutomationConfigured(),
     leadMinutes: 60,
@@ -683,6 +689,8 @@ export async function getEvidenceAutomationStatus(authorization, extra = {}) {
     scheduled: counts.scheduled || 0,
     captured: counts.captured || 0,
     failed: counts.failed || 0,
+    automaticAvailable: evidenceSummary.automaticAvailable,
+    latestAutomaticCapturedAt: evidenceSummary.latestAutomaticCapturedAt,
     ...extra
   };
 }

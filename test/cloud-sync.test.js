@@ -330,6 +330,12 @@ test("el estado compacto consulta solo conteo liviano de evidencias automaticas"
   assert.match(cloudSyncServiceSource, /limit=1/);
 });
 
+test("el estado de automatizacion expone el resumen liviano de evidencias", () => {
+  assert.match(cloudSyncServiceSource, /const evidenceSummary = await getCloudEvidenceSummary\(token\);/);
+  assert.match(cloudSyncServiceSource, /automaticAvailable: evidenceSummary\.automaticAvailable/);
+  assert.match(cloudSyncServiceSource, /latestAutomaticCapturedAt: evidenceSummary\.latestAutomaticCapturedAt/);
+});
+
 test("el respaldo del servidor combina filas existentes y entrantes sin borrar", () => {
   const merged = cloudSyncInternals.mergeNormalizedState(
     { saved_parlays: [{ id: "remote" }, { id: "same", notes: "old" }], saved_picks: [{ id: "remote-pick" }] },

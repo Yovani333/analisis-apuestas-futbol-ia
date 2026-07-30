@@ -503,11 +503,18 @@ function automaticEvidenceFixtures(fixtures = state.fixtures) {
 
 function applyEvidenceAutomationStatus(status) {
   if (!status) return;
+  if (status.automaticAvailable !== undefined || status.latestAutomaticCapturedAt !== undefined) {
+    state.cloud.evidenceSummary = {
+      automaticAvailable: Number(status.automaticAvailable || 0),
+      latestAutomaticCapturedAt: status.latestAutomaticCapturedAt || null
+    };
+  }
   state.cloud.watchedFixtures = Number(status.watched || 0);
   state.cloud.scheduledEvidence = Number(status.scheduled || 0);
   state.cloud.capturedEvidence = Math.max(Number(status.captured || 0), Number(state.cloud.evidenceSummary?.automaticAvailable || 0));
   state.cloud.evidenceFailures = Number(status.failed || 0);
   renderCloudAccount();
+  renderEvidenceReadiness();
 }
 
 async function registerAutomaticEvidence(fixtures = state.fixtures) {
@@ -4004,6 +4011,10 @@ function renderEvidenceReadiness() {
       </article>`;
     })()
     : "";
+  if (cloudCollected > 0) {
+    elements.evidenceReadinessList.innerHTML = cloudSummaryCard;
+    return;
+  }
   if (!groups.length) {
     if (cloudCollected > 0) {
       const level = cloudCollected >= 100
