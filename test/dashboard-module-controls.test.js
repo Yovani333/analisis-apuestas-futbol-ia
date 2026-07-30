@@ -99,6 +99,15 @@ test("Datos del partido resume confianza y permite agregar los tres picks contex
   assert.match(app, /metricLabel: "respaldo"/);
 });
 
+test("Estadisticas/Forma muestra la division del rival en partidos recientes", () => {
+  const statsFormBody = app.match(/moduleKey === "statsForm"[\s\S]+?moduleKey === "injuriesSuspensions"/)[0];
+  assert.match(statsFormBody, /const matchDivision/);
+  assert.match(statsFormBody, /match\?\.competition/);
+  assert.match(statsFormBody, /match\?\.leagueName/);
+  assert.match(statsFormBody, /\["Equipo", "Fecha", "Rival", "División", "Sede", "Marcador", "Resultado"\]/);
+  assert.match(statsFormBody, /displayValue\(matchDivision\(match\)\)/);
+});
+
 test("Transparencia muestra cuotas normalizadas si la respuesta cruda viene vacia", () => {
   assert.match(app, /function renderNormalizedOddsDetail\(module\)/);
   assert.match(app, /function renderOddsDetail\(data, normalizedModule = null\)/);
