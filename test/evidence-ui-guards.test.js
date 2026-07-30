@@ -22,3 +22,9 @@ test("sincronizacion compacta no borra evidencias locales", () => {
   assert.match(appSource, /const compactRemoteEvidence = remoteState\?\.evidence_sync_summary\?\.compacted === true;/);
   assert.match(appSource, /compactRemoteEvidence\s*\?\s*filterValidEvidenceSnapshots\(state\.evidenceSnapshots\)/);
 });
+
+test("sincronizacion de cuenta solo muestra resumen y no hidrata snapshots completos", () => {
+  assert.doesNotMatch(appSource, /cloudSyncClient\.loadEvidenceSnapshots\(/);
+  assert.match(appSource, /state\.cloud\.evidenceSummary/);
+  assert.match(appSource, /Resumen liviano de Supabase/);
+});

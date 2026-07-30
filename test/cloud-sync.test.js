@@ -322,6 +322,13 @@ test("la respuesta compacta del estado no transporta evidencias completas", () =
   assert.equal(response.evidence_sync_summary.latestAutomaticCapturedAt, "2026-07-20T10:00:00Z");
 });
 
+test("el estado compacto consulta solo conteo liviano de evidencias automaticas", () => {
+  assert.match(cloudSyncServiceSource, /method: "HEAD"/);
+  assert.match(cloudSyncServiceSource, /Prefer: "count=exact"/);
+  assert.match(cloudSyncServiceSource, /automatic_evidence_snapshots\?select=fixture_id/);
+  assert.match(cloudSyncServiceSource, /limit=1/);
+});
+
 test("el respaldo del servidor combina filas existentes y entrantes sin borrar", () => {
   const merged = cloudSyncInternals.mergeNormalizedState(
     { saved_parlays: [{ id: "remote" }, { id: "same", notes: "old" }], saved_picks: [{ id: "remote-pick" }] },

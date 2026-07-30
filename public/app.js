@@ -97,7 +97,8 @@ const state = {
   simulationCompetitionOptionByValue: new Map(),
   cloud: {
     enabled: false, ready: false, syncing: false, dirty: false, lastSyncedAt: null, error: "", notice: "",
-    automaticEvidence: false, watchedFixtures: 0, scheduledEvidence: 0, capturedEvidence: 0, evidenceFailures: 0
+    automaticEvidence: false, watchedFixtures: 0, scheduledEvidence: 0, capturedEvidence: 0, evidenceFailures: 0,
+    evidenceSummary: { automaticAvailable: 0, latestAutomaticCapturedAt: null }
   },
   cloudApplying: false
 };
@@ -504,7 +505,7 @@ function applyEvidenceAutomationStatus(status) {
   if (!status) return;
   state.cloud.watchedFixtures = Number(status.watched || 0);
   state.cloud.scheduledEvidence = Number(status.scheduled || 0);
-  state.cloud.capturedEvidence = Number(status.captured || 0);
+  state.cloud.capturedEvidence = Math.max(Number(status.captured || 0), Number(state.cloud.evidenceSummary?.automaticAvailable || 0));
   state.cloud.evidenceFailures = Number(status.failed || 0);
   renderCloudAccount();
 }
@@ -533,6 +534,13 @@ function applyCloudState(remoteState) {
   state.cloudApplying = true;
   try {
     const compactRemoteEvidence = remoteState?.evidence_sync_summary?.compacted === true;
+    if (remoteState?.evidence_sync_summary) {
+      state.cloud.evidenceSummary = {
+        automaticAvailable: Number(remoteState.evidence_sync_summary.automaticAvailable || 0),
+        latestAutomaticCapturedAt: remoteState.evidence_sync_summary.latestAutomaticCapturedAt || null
+      };
+      state.cloud.capturedEvidence = Math.max(state.cloud.capturedEvidence, state.cloud.evidenceSummary.automaticAvailable);
+    }
     const mergedEvidence = compactRemoteEvidence
       ? filterValidEvidenceSnapshots(state.evidenceSnapshots)
       : filterValidEvidenceSnapshots(remoteState.evidenceSnapshots || state.evidenceSnapshots || []);
@@ -573,12 +581,8 @@ async function connectCloudAccount() {
   renderCloudAccount();
   try {
     const remote = await cloudSyncClient.loadState();
-    const remoteEvidence = await cloudSyncClient.loadEvidenceSnapshots().catch((error) => {
-      state.cloud.notice = `La cuenta se sincronizara, pero la biblioteca de evidencias quedo pendiente: ${error.message}`;
-      return { snapshots: [] };
-    });
     const userId = session.user?.id || "";
-    const nextState = mergeCloudState(localCloudState(), { ...(remote || {}), evidence_snapshots: remoteEvidence.snapshots || [] });
+    const nextState = mergeCloudState(localCloudState(), remote || {});
     applyCloudState(nextState);
     const saved = await cloudSyncClient.saveState(nextState);
     state.cloud.lastSyncedAt = saved?.updated_at || nextState.updatedAt || new Date().toISOString();
@@ -604,11 +608,7 @@ async function syncCloudState({ announce = false, refreshFirst = false } = {}) {
   renderCloudAccount();
   try {
     const remote = await cloudSyncClient.loadState();
-    const remoteEvidence = await cloudSyncClient.loadEvidenceSnapshots().catch((error) => {
-      state.cloud.notice = `La sincronizacion continua, pero no se pudo recuperar la biblioteca de evidencias: ${error.message}`;
-      return { snapshots: [] };
-    });
-    const merged = mergeCloudState(localCloudState(), { ...(remote || {}), evidence_snapshots: remoteEvidence.snapshots || [] });
+    const merged = mergeCloudState(localCloudState(), remote || {});
     applyCloudState(merged);
     const saved = await cloudSyncClient.saveState(merged);
     state.cloud.lastSyncedAt = saved?.updated_at || new Date().toISOString();
@@ -3982,9 +3982,27 @@ function renderEvidenceReadiness() {
   const groups = summarizeEvidenceByCompetition(allEvidenceSnapshots());
   const collected = groups.reduce((sum, group) => sum + group.collected, 0);
   const evaluated = groups.reduce((sum, group) => sum + group.evaluated, 0);
-  elements.evidenceReadinessTotal.textContent = `${collected} recolectada${collected === 1 ? "" : "s"} · ${evaluated} evaluada${evaluated === 1 ? "" : "s"}`;
-  elements.evidenceReadinessTotal.className = `status-badge status-badge--${evaluated >= 100 ? "available" : evaluated >= 30 ? "partial" : "unavailable"}`;
+  const cloudCollected = Number(state.cloud.evidenceSummary?.automaticAvailable || 0);
+  const displayCollected = Math.max(collected, cloudCollected);
+  const latestCloudCapture = state.cloud.evidenceSummary?.latestAutomaticCapturedAt || null;
+  elements.evidenceReadinessTotal.textContent = `${displayCollected} recolectada${displayCollected === 1 ? "" : "s"} · ${evaluated} evaluada${evaluated === 1 ? "" : "s"}`;
+  elements.evidenceReadinessTotal.className = `status-badge status-badge--${displayCollected >= 100 ? "available" : displayCollected >= 30 ? "partial" : "unavailable"}`;
   if (!groups.length) {
+    if (cloudCollected > 0) {
+      const level = cloudCollected >= 100
+        ? { label: "Evidencia suficiente", color: "green", text: "Ya existe volumen suficiente para solicitar una auditoría backend bajo demanda sin cargar todos los snapshots en la página." }
+        : cloudCollected >= 30
+          ? { label: "Evidencia media", color: "orange", text: "Hay volumen útil para diagnóstico preliminar. Conviene seguir evaluando antes de recalibrar." }
+          : { label: "Evidencia baja", color: "red", text: "Continúa recolectando antes de usarla para mejoras del sistema." };
+      elements.evidenceReadinessList.innerHTML = `<article class="evidence-readiness-card evidence-readiness-card--${escapeHtml(level.color)}">
+        <header><span class="evidence-light evidence-light--${escapeHtml(level.color)}" aria-hidden="true"></span><div><h3>Biblioteca de evidencias en línea</h3><p>Resumen liviano de Supabase · no carga snapshots completos</p></div><strong>${escapeHtml(level.label)}</strong></header>
+        <div class="evidence-readiness-counts"><div><span>Recolectadas</span><strong>${escapeHtml(cloudCollected)}</strong></div><div><span>Última captura</span><strong>${escapeHtml(latestCloudCapture ? formatUpdatedAt(latestCloudCapture) : "No disponible")}</strong></div></div>
+        <div class="evidence-readiness-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(Math.min(100, cloudCollected))}" aria-label="Progreso hacia cien evidencias recolectadas"><i style="width:${Math.min(100, cloudCollected)}%"></i></div>
+        <p>${escapeHtml(level.text)}</p>
+        <small>Para analizar o mejorar, el backend debe leer las evidencias completas directamente desde Supabase bajo demanda.</small>
+      </article>`;
+      return;
+    }
     elements.evidenceReadinessList.innerHTML = '<div class="research-empty"><strong>Sin evidencias prepartido</strong><p>Las evidencias aparecerán aquí al guardarlas manual o automáticamente.</p></div>';
     return;
   }

@@ -343,6 +343,35 @@ async function supabaseAdminRequest(path, { method = "GET", body, prefer = "" } 
   return payload;
 }
 
+async function supabaseCountRequest(path, { token = "" } = {}) {
+  if (!configured()) throw new AppError("La sincronizacion en linea no esta configurada.", 503, "CLOUD_NOT_CONFIGURED");
+  let response;
+  try {
+    response = await fetch(`${baseUrl()}${path}`, {
+      method: "HEAD",
+      headers: {
+        apikey: env.supabasePublishableKey,
+        "Content-Type": "application/json",
+        Prefer: "count=exact",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+  } catch {
+    throw new AppError("No fue posible conectar con la base en linea.", 503, "CLOUD_UNREACHABLE");
+  }
+  recordServiceInitiatedTraffic({
+    service: "supabase",
+    endpoint: path.split("?")[0],
+    requestBytes: 0,
+    responseBytes: 0,
+    error: !response.ok
+  });
+  if (!response.ok) throw new AppError("Supabase rechazo el conteo de evidencias.", response.status, "CLOUD_PROVIDER_ERROR");
+  const range = response.headers.get("content-range") || "";
+  const total = Number(range.split("/").pop());
+  return Number.isFinite(total) ? total : 0;
+}
+
 function mergeEvidenceSnapshots(manualRows, automaticRows) {
   const rows = new Map();
   for (const row of Array.isArray(manualRows) ? manualRows : []) if (row?.id) rows.set(String(row.id), row);
@@ -495,15 +524,17 @@ export async function getCloudState(authorization) {
   }
   const state = Array.isArray(rows) ? rows[0] || null : null;
   let automaticMetadataRows = [];
+  let automaticEvidenceCount = 0;
   try {
-    const payload = await supabaseRequest(`/rest/v1/automatic_evidence_snapshots?select=fixture_id,captured_at&order=captured_at.desc&limit=${MAX_AUTOMATIC_EVIDENCE_METADATA_ON_STATE}`, { token });
+    automaticEvidenceCount = await supabaseCountRequest("/rest/v1/automatic_evidence_snapshots?select=fixture_id", { token });
+    const payload = await supabaseRequest(`/rest/v1/automatic_evidence_snapshots?select=fixture_id,captured_at&order=captured_at.desc&limit=1`, { token });
     automaticMetadataRows = Array.isArray(payload) ? payload : [];
   } catch (error) {
     if (!/automatic_evidence_snapshots|schema cache|could not find|does not exist|PGRST205/i.test(providerMessage(error))) throw error;
   }
   if (!state && !automaticMetadataRows.length) return null;
   return compactCloudStateResponse(state, {
-    automaticAvailable: automaticMetadataRows.length,
+    automaticAvailable: automaticEvidenceCount || automaticMetadataRows.length,
     latestAutomaticCapturedAt: automaticMetadataRows[0]?.captured_at || null
   });
 }
