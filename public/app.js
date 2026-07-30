@@ -26,6 +26,8 @@ const PREFERENCES_KEY = "football-ai.preferences.v1";
 const ANALYSIS_USAGE_KEY = "football-ai.analysis-usage.v1";
 const TEAM_PERFORMANCE_VISIBILITY_KEY = "football-ai.team-performance-visible.v1";
 const PICK_COLLECTION_CACHE_KEY = "football-ai.pick-collection-cache.v1";
+const ADMIN_API_USAGE_EMAIL = "yoyou@hotmail.es";
+const API_FOOTBALL_DAILY_LIMIT_FALLBACK = 7500;
 let cloudSyncTimer = null;
 const readLocalJson = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
@@ -251,7 +253,11 @@ Object.assign(elements, {
   cloudPasswordInput: document.querySelector("#cloud-password-input"), cloudSignIn: document.querySelector("#cloud-sign-in"),
   cloudSignUp: document.querySelector("#cloud-sign-up"), cloudSyncNow: document.querySelector("#cloud-sync-now"),
   cloudSignOut: document.querySelector("#cloud-sign-out"), cloudAccountMessage: document.querySelector("#cloud-account-message"),
-  automaticEvidenceStatus: document.querySelector("#automatic-evidence-status")
+  automaticEvidenceStatus: document.querySelector("#automatic-evidence-status"),
+  apiUsageAdminPanel: document.querySelector("#api-usage-admin-panel"),
+  apiUsageSummary: document.querySelector("#api-usage-summary"),
+  apiUsageTable: document.querySelector("#api-usage-table"),
+  refreshApiUsage: document.querySelector("#refresh-api-usage")
 });
 Object.assign(elements, {
   auditFixture: document.querySelector("#audit-fixture"), runAudit: document.querySelector("#run-audit"), auditResults: document.querySelector("#audit-results"),
@@ -302,9 +308,78 @@ function localCloudState() {
   };
 }
 
+function isApiUsageAdmin() {
+  const email = cloudSyncClient.session?.user?.email || "";
+  return String(email).trim().toLowerCase() === ADMIN_API_USAGE_EMAIL;
+}
+
+function updateApiUsageAdminVisibility() {
+  if (!elements.apiUsageAdminPanel) return false;
+  const visible = state.cloud.enabled && Boolean(cloudSyncClient.session?.accessToken) && isApiUsageAdmin();
+  elements.apiUsageAdminPanel.hidden = !visible;
+  return visible;
+}
+
+function numberLabel(value, fallback = "—") {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toLocaleString("es-MX") : fallback;
+}
+
+function renderApiUsageAdmin(runtime = null, { loading = false, error = "" } = {}) {
+  if (!updateApiUsageAdminVisibility()) return;
+  const observability = runtime?.providers?.apiFootball?.observability || {};
+  const rateLimit = observability.rateLimit || {};
+  const dailyLimit = Number.isFinite(Number(rateLimit.dailyLimit)) ? Number(rateLimit.dailyLimit) : API_FOOTBALL_DAILY_LIMIT_FALLBACK;
+  const dailyRemaining = Number.isFinite(Number(rateLimit.dailyRemaining)) ? Number(rateLimit.dailyRemaining) : null;
+  const officialDailyUsed = dailyRemaining !== null ? Math.max(0, dailyLimit - dailyRemaining) : null;
+  const displayedUsed = officialDailyUsed ?? Number(observability.networkRequests || 0);
+  const limitSource = officialDailyUsed !== null ? "Header oficial API-Football" : "Proceso actual";
+  const cacheHitRate = Number(observability.cacheHitRatePct || 0);
+  const endpointRows = Object.entries(observability.endpoints || {})
+    .sort(([, left], [, right]) => Number(right.networkRequests || 0) - Number(left.networkRequests || 0))
+    .slice(0, 12);
+  const lastRequest = observability.lastRequestAt ? formatSiteRelease(observability.lastRequestAt) : "Sin solicitudes registradas";
+  elements.apiUsageSummary.innerHTML = `
+    <article><span>Solicitudes usadas</span><strong>${numberLabel(displayedUsed)}</strong><small>${escapeHtml(limitSource)}</small></article>
+    <article><span>Límite diario</span><strong>${numberLabel(dailyLimit)}</strong><small>${dailyRemaining !== null ? `${numberLabel(dailyRemaining)} restantes` : "Restante no reportado"}</small></article>
+    <article><span>Cache hit rate</span><strong>${displayValue(cacheHitRate)}%</strong><small>${numberLabel(observability.cacheHits, "0")} hits</small></article>
+    <article><span>Fallos</span><strong>${numberLabel(observability.failures, "0")}</strong><small>${escapeHtml(observability.lastErrorCode || "Sin error reciente")}</small></article>
+    <article><span>Última solicitud</span><strong>${escapeHtml(lastRequest)}</strong><small>${escapeHtml(observability.lastEndpoint || "Sin endpoint")}</small></article>
+  `;
+  elements.apiUsageTable.innerHTML = `
+    <p class="account-note">${loading ? "Actualizando conteo..." : error ? escapeHtml(error) : "Conteo por endpoint del proceso activo. No ejecuta consultas nuevas a API-Football."}</p>
+    ${endpointRows.length ? `<div class="api-usage-table__scroll"><table>
+      <thead><tr><th>Endpoint</th><th>API</th><th>Cache</th><th>Miss</th><th>Pendientes</th><th>Fallos</th></tr></thead>
+      <tbody>${endpointRows.map(([endpoint, metrics]) => `<tr>
+        <td>${escapeHtml(endpoint)}</td>
+        <td>${numberLabel(metrics.networkRequests, "0")}</td>
+        <td>${numberLabel(metrics.cacheHits, "0")}</td>
+        <td>${numberLabel(metrics.cacheMisses, "0")}</td>
+        <td>${numberLabel(metrics.pendingHits, "0")}</td>
+        <td>${numberLabel(metrics.failures, "0")}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>` : `<div class="saved-empty"><strong>Sin solicitudes registradas</strong><p>Cuando el backend consulte API-Football, el conteo aparecerá aquí.</p></div>`}
+  `;
+}
+
+async function refreshApiUsageAdmin({ quiet = false } = {}) {
+  if (!updateApiUsageAdminVisibility()) return;
+  if (elements.refreshApiUsage) elements.refreshApiUsage.disabled = true;
+  if (!quiet) renderApiUsageAdmin(null, { loading: true });
+  try {
+    const runtime = await footballDataService.getRuntime();
+    renderApiUsageAdmin(runtime);
+  } catch (error) {
+    renderApiUsageAdmin(null, { error: `No se pudo leer /api/health: ${error.message}` });
+  } finally {
+    if (elements.refreshApiUsage) elements.refreshApiUsage.disabled = false;
+  }
+}
+
 function renderCloudAccount() {
   const session = cloudSyncClient.session;
   const connected = Boolean(session?.accessToken);
+  updateApiUsageAdminVisibility();
   elements.cloudAuthFields.hidden = connected || !state.cloud.enabled;
   elements.cloudConnected.hidden = !connected;
   elements.cloudSignIn.disabled = state.cloud.syncing;
@@ -3311,6 +3386,7 @@ function switchView(view) {
   }
   if (view === "team-goal-insights") renderTeamGoalInsights();
   if (view === "favorite-teams") renderFavoriteTeams();
+  if (view === "account") void refreshApiUsageAdmin({ quiet: true });
   if (view === "audit") { renderAuditFixtureOptions(); void loadEvidenceLibrary(); }
   if (view === "simulation") refreshSimulationPickers();
   if (view === "markets") {
@@ -5532,6 +5608,7 @@ async function handleCloudCredentials(mode) {
 
 elements.cloudSignIn.addEventListener("click", () => void handleCloudCredentials("sign-in"));
 elements.cloudSignUp.addEventListener("click", () => void handleCloudCredentials("sign-up"));
+elements.refreshApiUsage?.addEventListener("click", () => void refreshApiUsageAdmin());
 elements.cloudPasswordInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void handleCloudCredentials("sign-in"); }
 });

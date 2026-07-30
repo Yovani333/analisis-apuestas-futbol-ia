@@ -48,6 +48,21 @@ test("Mis apuestas no actualiza al entrar y conserva el control manual", () => {
   assert.match(styles, /\.saved-pick \.final-score \{ color: var\(--success\); font-weight: 800; \}/);
 });
 
+test("Mi cuenta muestra conteo API solo para el administrador", () => {
+  assert.match(html, /id="api-usage-admin-panel"[^>]+hidden/);
+  assert.match(html, /id="refresh-api-usage"[\s\S]*Actualizar conteo/);
+  assert.match(html, /id="api-usage-summary"/);
+  assert.match(html, /id="api-usage-table"/);
+  assert.match(app, /const ADMIN_API_USAGE_EMAIL = "yoyou@hotmail\.es"/);
+  assert.match(app, /function isApiUsageAdmin\(\)/);
+  assert.match(app, /cloudSyncClient\.session\?\.user\?\.email/);
+  assert.match(app, /runtime\?\.providers\?\.apiFootball\?\.observability/);
+  assert.match(app, /footballDataService\.getRuntime\(\)/);
+  assert.match(app, /No ejecuta consultas nuevas a API-Football/);
+  assert.match(styles, /\.account-api-usage/);
+  assert.match(styles, /\.api-usage-summary/);
+});
+
 test("Transparencia filtra cuotas por Mejores picks sin incluir corners", () => {
   assert.match(app, /buildPerformanceOddsView\(module\.markets \|\| \[\], performanceRows, bestPicks\)/);
   assert.match(app, /ordenadas de mayor a menor\. Corners está excluido/);

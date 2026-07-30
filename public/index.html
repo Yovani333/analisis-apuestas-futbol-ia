@@ -569,6 +569,18 @@
         <p id="cloud-account-message" class="account-note" role="status">La copia local permanece disponible cuando no hay conexión.</p>
         <p id="automatic-evidence-status" class="account-note account-note--automation">Evidencia automática: comprobando configuración.</p>
       </section>
+      <section id="api-usage-admin-panel" class="panel account-api-usage" hidden>
+        <div class="account-api-usage__heading">
+          <div>
+            <p class="eyebrow">Administración API-Football</p>
+            <h3>Conteo diario de solicitudes</h3>
+            <p>Control visible solo para administrador. Usa los contadores ya registrados por el backend.</p>
+          </div>
+          <button id="refresh-api-usage" class="button button--secondary" type="button">Actualizar conteo</button>
+        </div>
+        <div id="api-usage-summary" class="api-usage-summary"></div>
+        <div id="api-usage-table" class="api-usage-table"></div>
+      </section>
       <form id="account-form" class="account-grid">
         <section class="panel"><h3>Perfil</h3><label>Nombre visible<input id="account-name" type="text" maxlength="50" placeholder="Tu nombre" /></label><label>Zona horaria<input type="text" value="Hora del Pacífico (America/Tijuana)" disabled /></label></section>
         <section class="panel"><h3>Preferencias</h3><label><input id="account-dark-mode" type="checkbox" /> Usar modo oscuro</label><p class="account-note">Los datos en vivo se actualizan manualmente desde el botón "Actualizar ahora" para reducir consumo de API.</p><label>Límite responsable diario<select id="account-daily-limit"><option value="none">Sin configurar</option><option value="1">1 análisis</option><option value="3">3 análisis</option><option value="5">5 análisis</option></select></label></section>

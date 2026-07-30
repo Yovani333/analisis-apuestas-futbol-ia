@@ -642,6 +642,20 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .account-cloud__connected strong { font-size: .84rem; overflow-wrap: anywhere; }
 .account-cloud__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .account-note--automation { padding: 9px 10px; color: var(--text); background: var(--primary-soft); border: 1px solid var(--border); border-radius: 7px; }
+.account-api-usage { display: grid; gap: 12px; margin-bottom: 10px; }
+.account-api-usage__heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.account-api-usage__heading h3, .account-api-usage__heading p { margin: 0; }
+.account-api-usage__heading p:last-child { color: var(--muted); font-size: .72rem; }
+.api-usage-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.api-usage-summary article { display: grid; gap: 4px; min-width: 0; padding: 10px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 8px; }
+.api-usage-summary span, .api-usage-summary small { color: var(--muted); font-size: .64rem; }
+.api-usage-summary strong { color: var(--text); font-size: .88rem; overflow-wrap: anywhere; }
+.api-usage-table { display: grid; gap: 8px; }
+.api-usage-table__scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+.api-usage-table table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: .7rem; }
+.api-usage-table th, .api-usage-table td { padding: 8px 9px; text-align: left; border-bottom: 1px solid var(--border); }
+.api-usage-table th { color: var(--muted); background: var(--surface-subtle); text-transform: uppercase; letter-spacing: .03em; }
+.api-usage-table td:not(:first-child) { font-variant-numeric: tabular-nums; }
 .account-grid .panel { display: grid; gap: 12px; }
 .account-grid h3 { margin: 0; }
 .account-grid label { display: grid; gap: 5px; }
@@ -1628,6 +1642,8 @@ body {
 
 @media (max-width: 520px) {
   .app-header { background: #0f1d32; }
+  .account-api-usage__heading { align-items: stretch; flex-direction: column; }
+  .api-usage-summary { grid-template-columns: 1fr; }
   .match-card { grid-template-columns: 1fr; }
   .match-card__topline, .match-card__teams, .match-card__meta, .match-card__actions { grid-column: 1; }
   .match-card__teams { grid-template-columns: minmax(0, 1fr) 42px minmax(0, 1fr); gap: 7px; }
