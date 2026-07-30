@@ -88,6 +88,13 @@ test("Auditoria aprovecha el ancho y permite continuar el scroll de pagina", () 
   assert.match(styles, /#audit-fixture option\.audit-option--pending/);
 });
 
+test("Auditoria no expone evidencias locales cuando la nube requiere sesion", () => {
+  assert.match(app, /function auditEvidenceRequiresSession/);
+  assert.match(app, /state\.cloud\.enabled && !cloudSyncClient\.session\?\.accessToken/);
+  assert.match(app, /Inicia sesion para ver evidencias/);
+  assert.match(app, /Auditoria protegida/);
+});
+
 test("la Guia conserva el orden Cobertura, Ataque, Poisson, Mercado y Decision", () => {
   const ids = ["guide-coverage-module", "guide-team-goals-module", "guide-poisson-module", "guide-odds-module", "guide-data-picks-module"];
   const positions = ids.map((id) => html.indexOf(`id="${id}"`));

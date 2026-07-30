@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { CloudSyncClient, compactCloudStateForSync, mergeCloudState, prepareEvidenceSyncBatches } from "../public/cloud-sync.js";
 import { cloudSyncInternals } from "../server/services/cloud-sync.service.js";
+
+const cloudSyncServiceSource = readFileSync(new URL("../server/services/cloud-sync.service.js", import.meta.url), "utf8");
 
 function token(payload) {
   return `x.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.x`;
@@ -275,6 +278,14 @@ test("detecta schema faltante de sincronizacion con mensajes de Supabase", () =>
 test("detecta tablas opcionales de evidencia faltantes sin romper sincronizacion", () => {
   assert.equal(cloudSyncInternals.isMissingEvidenceSchema(new Error("Could not find the table 'public.evidence_watchlist' in the schema cache")), true);
   assert.equal(cloudSyncInternals.isMissingEvidenceSchema(new Error("relation public.automatic_evidence_snapshots does not exist")), true);
+});
+
+test("la vigilancia de evidencia actualiza horarios reprogramados sin reabrir capturadas", () => {
+  assert.match(cloudSyncServiceSource, /select=fixture_id,fixture_date,capture_due_at/);
+  assert.match(cloudSyncServiceSource, /changedScheduledFixtures/);
+  assert.match(cloudSyncServiceSource, /status=eq\.scheduled/);
+  assert.match(cloudSyncServiceSource, /capture_due_at: fixture\.capture_due_at/);
+  assert.match(cloudSyncServiceSource, /refreshed: changedScheduledFixtures\.length/);
 });
 
 test("detecta RPC faltante o falla de timestamp para usar respaldo seguro", () => {

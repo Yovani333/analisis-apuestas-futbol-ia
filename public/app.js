@@ -482,6 +482,10 @@ async function registerAutomaticEvidence(fixtures = state.fixtures) {
       ? await cloudSyncClient.watchEvidence(scheduled)
       : await cloudSyncClient.evidenceAutomationStatus();
     applyEvidenceAutomationStatus(status);
+    if (scheduled.length && Number(status?.registered || 0) === 0 && Number(status?.watched || 0) === 0) {
+      state.cloud.notice = "No se programo evidencia automatica: los encuentros encontrados no tienen horario futuro valido.";
+      renderCloudAccount();
+    }
     return status;
   } catch (error) {
     state.cloud.notice = `Evidencia automática pendiente: ${error.message}`;
@@ -3848,6 +3852,10 @@ function allEvidenceSnapshots() {
   });
 }
 
+function auditEvidenceRequiresSession() {
+  return Boolean(state.cloud.enabled && !cloudSyncClient.session?.accessToken);
+}
+
 function purgeInvalidEvidenceSnapshots({ sync = false, render = true, evidenceIds = [] } = {}) {
   const fixtureStatuses = new Map(state.fixtures.map((fixture) => [String(fixture.id), fixture.statusShort || fixture.status]));
   const requestedIds = new Set([
@@ -3884,6 +3892,12 @@ function purgeInvalidEvidenceSnapshots({ sync = false, render = true, evidenceId
 
 function renderEvidenceReadiness() {
   if (!elements.evidenceReadinessList) return;
+  if (auditEvidenceRequiresSession()) {
+    elements.evidenceReadinessTotal.textContent = "Inicia sesion";
+    elements.evidenceReadinessTotal.className = "status-badge status-badge--partial";
+    elements.evidenceReadinessList.innerHTML = '<div class="research-empty"><strong>Inicia sesion para ver evidencias</strong><p>La auditoria muestra unicamente evidencias asociadas a tu cuenta en linea. La copia local se conserva, pero no se expone sin sesion.</p></div>';
+    return;
+  }
   const groups = summarizeEvidenceByCompetition(allEvidenceSnapshots());
   const collected = groups.reduce((sum, group) => sum + group.collected, 0);
   const evaluated = groups.reduce((sum, group) => sum + group.evaluated, 0);
@@ -4065,6 +4079,14 @@ async function loadEvidenceLibrary() {
 }
 
 function renderAuditFixtureOptions() {
+  if (auditEvidenceRequiresSession()) {
+    elements.auditFixture.innerHTML = '<option value="">Inicia sesion para cargar evidencias</option>';
+    elements.runAudit.disabled = true;
+    elements.viewAuditEvidence.disabled = true;
+    elements.auditResults.innerHTML = '<div class="saved-empty"><h3>Auditoria protegida</h3><p>Inicia sesion para consultar las evidencias recolectadas de tu cuenta.</p></div>';
+    renderEvidenceReadiness();
+    return;
+  }
   const available = new Map();
   const snapshots = allEvidenceSnapshots();
   const evidenceFixtureIds = new Set(snapshots.map((snapshot) => String(snapshot?.fixture?.id || "")).filter(Boolean));

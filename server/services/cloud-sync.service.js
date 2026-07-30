@@ -516,7 +516,7 @@ export async function registerEvidenceWatchlist(authorization, input = {}) {
   const future = encodeURIComponent(now.toISOString());
   let activeRows;
   try {
-    activeRows = await supabaseRequest(`/rest/v1/evidence_watchlist?select=fixture_id&status=eq.scheduled&fixture_date=gt.${future}&limit=${MAX_WATCHLIST_FIXTURES}`, { token });
+    activeRows = await supabaseRequest(`/rest/v1/evidence_watchlist?select=fixture_id,fixture_date,capture_due_at&status=eq.scheduled&fixture_date=gt.${future}&limit=${MAX_WATCHLIST_FIXTURES}`, { token });
   } catch (error) {
     if (isMissingEvidenceSchema(error)) {
       return {
@@ -533,7 +533,8 @@ export async function registerEvidenceWatchlist(authorization, input = {}) {
     }
     throw error;
   }
-  const activeIds = new Set((Array.isArray(activeRows) ? activeRows : []).map((row) => String(row.fixture_id)));
+  const activeById = new Map((Array.isArray(activeRows) ? activeRows : []).map((row) => [String(row.fixture_id), row]));
+  const activeIds = new Set(activeById.keys());
   let availableSlots = Math.max(0, MAX_WATCHLIST_FIXTURES - activeIds.size);
   const fixtures = requestedFixtures.filter((fixture) => {
     if (activeIds.has(fixture.fixture_id)) return true;
@@ -564,8 +565,26 @@ export async function registerEvidenceWatchlist(authorization, input = {}) {
       };
     }
   }
+  const changedScheduledFixtures = fixtures.filter((fixture) => {
+    const current = activeById.get(String(fixture.fixture_id));
+    return current && (current.fixture_date !== fixture.fixture_date || current.capture_due_at !== fixture.capture_due_at);
+  });
+  for (const fixture of changedScheduledFixtures.slice(0, 10)) {
+    await supabaseRequest(`/rest/v1/evidence_watchlist?fixture_id=eq.${encodeURIComponent(fixture.fixture_id)}&status=eq.scheduled`, {
+      method: "PATCH",
+      token,
+      body: {
+        fixture_date: fixture.fixture_date,
+        capture_due_at: fixture.capture_due_at,
+        fixture: fixture.fixture,
+        updated_at: now.toISOString()
+      },
+      prefer: "return=minimal"
+    });
+  }
   return getEvidenceAutomationStatus(authorization, {
     registered: fixtures.length,
+    refreshed: changedScheduledFixtures.length,
     ignoredByLimit: Math.max(0, requestedFixtures.length - fixtures.length)
   });
 }
