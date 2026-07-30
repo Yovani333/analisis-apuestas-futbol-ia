@@ -64,6 +64,15 @@ test("el cupon agregado se abre minimizado y solo el FAB lo maximiza", () => {
   assert.match(app, /parlayFab\.addEventListener\("click", \(\) => renderParlayDraft\(true, false\)\)/);
 });
 
+test("guardar desde el cupon permanece en la vista actual", () => {
+  const saveCurrentParlay = app.slice(app.indexOf("function saveCurrentParlay()"), app.indexOf("function oddsUpdateHtml"));
+  assert.match(saveCurrentParlay, /renderSavedPicks\(\)/);
+  assert.match(saveCurrentParlay, /renderSavedParlays\(\)/);
+  assert.doesNotMatch(saveCurrentParlay, /switchView\("saved"\)/);
+  assert.match(saveCurrentParlay, /showNotice\("Pick agregado a individuales\."\)/);
+  assert.match(saveCurrentParlay, /showNotice\("Parlay guardado\. Ya puedes registrar sus resultados\."\)/);
+});
+
 test("Dashboard prioriza la calidad canonica y no convierte datos ausentes en cero", () => {
   const qualityBody = app.match(/function fixtureQualityView[\s\S]+?function renderMatches/)[0];
   assert.match(qualityBody, /const score = baseScore \?\? researchScore/);

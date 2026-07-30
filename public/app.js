@@ -2868,7 +2868,6 @@ function saveCurrentParlay() {
     renderSavedPicks();
     renderOriginPerformance();
     refreshActivePickIndicators();
-    switchView("saved");
     showNotice("Pick agregado a individuales.");
     return;
   }
@@ -2880,7 +2879,6 @@ function saveCurrentParlay() {
   renderParlayDraft();
   renderSavedParlays();
   refreshActivePickIndicators();
-  switchView("saved");
   showNotice("Parlay guardado. Ya puedes registrar sus resultados.");
 }
 
