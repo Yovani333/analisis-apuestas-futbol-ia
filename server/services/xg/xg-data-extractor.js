@@ -10,6 +10,7 @@ const STAT_KEYS = Object.freeze({
   "shots outside box": "shotsOutsideBox",
   "blocked shots": "blockedShots",
   "corner kicks": "cornerKicks",
+  "yellow cards": "yellowCards",
   "ball possession": "ballPossession",
   "goalkeeper saves": "goalkeeperSaves",
   "big chances": "bigChances",

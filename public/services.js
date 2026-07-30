@@ -218,6 +218,13 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/corners${query}`, { method: "POST" });
   },
 
+  async getYellowCardsModel(fixture, refresh = false) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", warning: "Tarjetas amarillas requiere estadísticas históricas oficiales." };
+    const query = refresh ? "?refresh=true" : "";
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/yellow-cards${query}`, { method: "POST" });
+  },
+
   async getSpecificMarkets(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", groups: [], warnings: ["Los mercados específicos requieren datos reales normalizados."] };

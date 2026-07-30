@@ -185,6 +185,10 @@ async function buildTeamHistory({
         shotsOnGoal: teamStats.shotsOnGoal,
         blockedShots: teamStats.blockedShots
       },
+      cardStats: {
+        yellowCardsFor: teamStats.yellowCards,
+        yellowCardsAgainst: opponentStats.yellowCards
+      },
       missingFields: confidence.missingFields,
       optionalMissingFields: confidence.optionalMissingFields,
       eventsAvailable: !eventsResult.failed,

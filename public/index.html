@@ -265,6 +265,11 @@
           <div id="corners-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para revisar corners oficiales históricos.</div></div>
         </section>
 
+        <section id="yellow-cards-panel" class="panel yellow-cards-panel advanced-module-panel" aria-labelledby="yellow-cards-title">
+          <div class="panel-heading"><div><p class="eyebrow">Disciplina esperada</p><h2 id="yellow-cards-title">Tarjetas amarillas</h2></div><div class="panel-actions"><button id="refresh-yellow-cards" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button><button id="show-yellow-cards" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="yellow-cards-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+          <div id="yellow-cards-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para estimar posibles tarjetas amarillas con historial oficial.</div></div>
+        </section>
+
         <section id="team-performance-panel" class="panel team-performance-panel" aria-labelledby="team-performance-title">
           <div class="panel-heading">
             <div>
@@ -658,6 +663,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260725-coverage-picks-v1"></script>
+    <script type="module" src="app.js?v=20260729-yellow-cards-v1"></script>
   </body>
 </html>

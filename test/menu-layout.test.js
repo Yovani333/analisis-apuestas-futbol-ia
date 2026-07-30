@@ -112,6 +112,15 @@ test("Corners permanece en Dashboard y el Catalogo conserva picks por intencion 
   assert.match(html, /id="specific-markets-content" aria-live="polite">/);
 });
 
+test("Dashboard incluye tarjetas amarillas con actualizacion manual", () => {
+  const dashboard = html.slice(html.indexOf('data-view-panel="dashboard"'), html.indexOf('data-view-panel="transparency"'));
+  assert.match(dashboard, /id="yellow-cards-panel"/);
+  assert.match(html, /id="refresh-yellow-cards"[\s\S]*Actualizar datos/);
+  assert.match(html, /id="show-yellow-cards"[\s\S]*Mostrar/);
+  assert.match(app, /getYellowCardsModel\(fixture, forceRefresh\)/);
+  assert.match(app, /refreshYellowCards\.addEventListener\("click", \(\) => loadYellowCards\(true\)\)/);
+});
+
 test("Transparencia siempre visible y En vivo contienen sus modulos correctos", () => {
   const transparency = html.slice(html.indexOf('data-view-panel="transparency"'), html.indexOf('data-view-panel="guide"'));
   assert.match(transparency, /transparency-coverage-slot/);

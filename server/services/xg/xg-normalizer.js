@@ -15,6 +15,7 @@ export function emptyEstimatedXgStats() {
     shotsOutsideBox: null,
     blockedShots: null,
     cornerKicks: null,
+    yellowCards: null,
     ballPossession: null,
     goalkeeperSaves: null,
     penalties: 0,

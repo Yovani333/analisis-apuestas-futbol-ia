@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260712-expanded-competitions-v1";
-import { footballDataService } from "./services.js?v=20260718-evidence-batch-v1";
+import { footballDataService } from "./services.js?v=20260729-yellow-cards-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, createSavedParlay, createSavedPick,
@@ -47,6 +47,7 @@ const state = {
   poissonByFixture: new Map(),
   teamGoalsByFixture: new Map(),
   cornersByFixture: new Map(),
+  yellowCardsByFixture: new Map(),
   specificMarketsByFixture: new Map(),
   teamPerformanceByFixture: new Map(),
   playerGoalByFixture: new Map(),
@@ -76,6 +77,7 @@ const state = {
   isLoadingTeamGoals: false,
   isUpdatingSavedResults: false,
   isLoadingCorners: false,
+  isLoadingYellowCards: false,
   isLoadingSpecificMarkets: false,
   isLoadingSimulation: false,
   isLoadingAdvancedSimulation: false,
@@ -151,6 +153,7 @@ const elements = {
   teamGoalsStatus: document.querySelector("#team-goals-status"),
   teamGoalsContent: document.querySelector("#team-goals-content"),
   showCorners: document.querySelector("#show-corners"), refreshCorners: document.querySelector("#refresh-corners"), cornersStatus: document.querySelector("#corners-status"), cornersContent: document.querySelector("#corners-content"),
+  showYellowCards: document.querySelector("#show-yellow-cards"), refreshYellowCards: document.querySelector("#refresh-yellow-cards"), yellowCardsStatus: document.querySelector("#yellow-cards-status"), yellowCardsContent: document.querySelector("#yellow-cards-content"),
   showSpecificMarkets: document.querySelector("#show-specific-markets"), specificMarketsStatus: document.querySelector("#specific-markets-status"), specificMarketsContent: document.querySelector("#specific-markets-content"),
   teamPerformanceTitle: document.querySelector("#team-performance-title"), teamPerformanceStatus: document.querySelector("#team-performance-status"),
   teamPerformanceContent: document.querySelector("#team-performance-content"), toggleTeamPerformance: document.querySelector("#toggle-team-performance"), refreshTeamPerformance: document.querySelector("#refresh-team-performance"),
@@ -772,7 +775,7 @@ function resetAnalysisGuide() {
     details: document.querySelectorAll("#analysis-guide-content details.guide-module"),
     parts: Object.values(guideModuleParts),
     extraContents: [elements.analysisContent, elements.playerGoalContent, elements.teamPerformanceContent, elements.cornersContent, elements.specificMarketsContent],
-    extraButtons: [elements.toggleAnalysis, elements.togglePlayerGoal, elements.toggleTeamPerformance, elements.showCorners]
+    extraButtons: [elements.toggleAnalysis, elements.togglePlayerGoal, elements.toggleTeamPerformance, elements.showCorners, elements.showYellowCards]
   });
   if (elements.specificMarketsContent) elements.specificMarketsContent.hidden = false;
   if (elements.refreshOutcome) elements.refreshOutcome.disabled = !selectedFixture();
@@ -1491,6 +1494,14 @@ function renderFixtureData() {
   if (savedCorners) renderCorners(savedCorners);
   else { elements.cornersStatus.className = "status-badge status-badge--unavailable"; elements.cornersStatus.textContent = "No disponible"; elements.cornersContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar datos” para analizar corners oficiales; después usa Mostrar u Ocultar.</div>'; }
   elements.cornersContent.hidden = true;
+  elements.refreshYellowCards.disabled = false;
+  elements.showYellowCards.disabled = state.isLoadingYellowCards;
+  const savedYellowCards = state.yellowCardsByFixture.get(fixture.id);
+  if (savedYellowCards) renderYellowCards(savedYellowCards);
+  else { elements.yellowCardsStatus.className = "status-badge status-badge--unavailable"; elements.yellowCardsStatus.textContent = "No disponible"; elements.yellowCardsContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar datos” para estimar posibles tarjetas amarillas oficiales; después usa Mostrar u Ocultar.</div>'; }
+  elements.yellowCardsContent.hidden = true;
+  if (savedYellowCards) { elements.showYellowCards.textContent = "Mostrar"; elements.showYellowCards.classList.remove("button--ready"); }
+  elements.showYellowCards.setAttribute("aria-expanded", "false");
   if (savedCorners) { elements.showCorners.textContent = "Mostrar"; elements.showCorners.classList.remove("button--ready"); }
   elements.showCorners.setAttribute("aria-expanded", "false");
   elements.showSpecificMarkets.disabled = state.isLoadingSpecificMarkets;
@@ -4536,6 +4547,50 @@ function renderCorners(result) {
   decoratePickSignals(elements.cornersContent, ".poisson-market", additionalPicks);
 }
 
+function renderYellowCards(result = {}) {
+  const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
+  elements.yellowCardsStatus.className = `status-badge status-badge--${statusClass(status)}`;
+  elements.yellowCardsStatus.textContent = status;
+  if (result.status === "not_available") {
+    elements.yellowCardsContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warning || "Tarjetas amarillas no disponible.")}</div>`;
+    return;
+  }
+  const team = (data, label) => `<article class="corner-team"><div><small>${escapeHtml(label)}</small><h3>${displayValue(data.yellowCardsForAvg)} amarillas</h3></div><div class="team-goal-kpis"><span>A favor<strong>${displayValue(data.yellowCardsForAvg)}</strong></span><span>Rivales reciben<strong>${displayValue(data.yellowCardsAgainstAvg)}</strong></span><span>Muestra<strong>${displayValue(data.useful, 0)}</strong></span></div><small>${displayValue(data.useful, 0)} oficiales usados · ${displayValue(data.excludedFriendlies, 0)} amistosos excluidos</small><small>${escapeHtml(data.competitions?.join(" · ") || "Competición no informada")}</small></article>`;
+  const projection = result.projection || {};
+  const sampleRows = [
+    ...(result.teams?.home?.fixturesUsed || []).map((row) => [selectedFixture()?.home || "Local", row.date, row.opponent, row.venue, row.yellowCardsFor, row.yellowCardsAgainst]),
+    ...(result.teams?.away?.fixturesUsed || []).map((row) => [selectedFixture()?.away || "Visitante", row.date, row.opponent, row.venue, row.yellowCardsFor, row.yellowCardsAgainst])
+  ];
+  elements.yellowCardsContent.innerHTML = `<div class="corner-summary"><strong>Posibles amarillas: ${displayValue(projection.expectedTotal)}</strong><span>Rango sugerido ${escapeHtml(projection.suggestedRange || "No disponible")} · Confianza ${displayValue(result.confidenceScore, 0)}/100</span></div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="corner-grid">${team(result.teams?.home || {}, selectedFixture()?.home || "Local")}${team(result.teams?.away || {}, selectedFixture()?.away || "Visitante")}</div><div class="detail-note detail-note--info"><strong>Uso responsable</strong><span>Estimación contextual basada en tarjetas amarillas históricas oficiales. No es pick automático ni reemplaza árbitro, fase, marcador o alineaciones.</span></div>${sampleRows.length ? `<section class="detail-section"><h3>Muestra usada</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "Amarillas", "Rival amarillas"], sampleRows)}</section>` : ""}`;
+}
+
+async function loadYellowCards(forceRefresh = false) {
+  const fixture = selectedFixture(); if (!fixture || state.isLoadingYellowCards) return;
+  if (!forceRefresh && state.yellowCardsByFixture.has(fixture.id)) return showModuleReady(elements.showYellowCards, elements.yellowCardsContent);
+  const wasHidden = elements.yellowCardsContent.hidden;
+  state.isLoadingYellowCards = true;
+  elements.refreshYellowCards.disabled = true;
+  elements.showYellowCards.disabled = true;
+  elements.yellowCardsStatus.className = "status-badge status-badge--processing";
+  elements.yellowCardsStatus.textContent = forceRefresh ? "Actualizando" : "Procesando";
+  try {
+    const result = await footballDataService.getYellowCardsModel(fixture, forceRefresh);
+    state.yellowCardsByFixture.set(fixture.id, result);
+    renderYellowCards(result);
+    if (forceRefresh) elements.yellowCardsContent.hidden = wasHidden;
+    else showModuleReady(elements.showYellowCards, elements.yellowCardsContent);
+    if (forceRefresh) showNotice("Tarjetas amarillas actualizadas.");
+  } catch (error) {
+    renderYellowCards({ status: "not_available", warning: error.message });
+    elements.yellowCardsContent.hidden = forceRefresh ? wasHidden : false;
+  } finally {
+    state.isLoadingYellowCards = false;
+    elements.showYellowCards.disabled = !selectedFixture();
+    elements.refreshYellowCards.disabled = !selectedFixture();
+    elements.showYellowCards.textContent = elements.yellowCardsContent.hidden ? "Mostrar" : "Ocultar";
+  }
+}
+
 async function loadCorners(forceRefresh = false) {
   const fixture = selectedFixture(); if (!fixture || state.isLoadingCorners) return;
   if (!forceRefresh && state.cornersByFixture.has(fixture.id)) return showModuleReady(elements.showCorners, elements.cornersContent);
@@ -5240,6 +5295,7 @@ elements.refreshOutcome.addEventListener("click", () => loadOutcomeScenarios(tru
 elements.refreshPlayerGoal.addEventListener("click", () => loadPlayerGoalCandidates(selectedFixture(), true, true));
 elements.refreshTeamPerformance.addEventListener("click", () => loadTeamPerformance(selectedFixture(), true, true));
 elements.refreshCorners.addEventListener("click", () => loadCorners(true));
+elements.refreshYellowCards.addEventListener("click", () => loadYellowCards(true));
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.refreshLiveNow.addEventListener("click", refreshLiveDataNow);
 elements.collectPickInfo.addEventListener("click", collectPickInformation);
@@ -5282,6 +5338,7 @@ elements.teamGoalsContent.addEventListener("click", (event) => {
   if (saveButton) saveTeamGoalPick(saveButton.dataset.saveTeamGoal);
 });
 elements.showCorners.addEventListener("click", () => toggleReadyModule(elements.showCorners, elements.cornersContent));
+elements.showYellowCards.addEventListener("click", () => toggleReadyModule(elements.showYellowCards, elements.yellowCardsContent));
 elements.cornersContent.addEventListener("click", (event) => { const add = event.target.closest("[data-add-corners]"); const save = event.target.closest("[data-save-corners]"); const addExpected = event.target.closest("[data-add-expected-corners]"); const saveExpected = event.target.closest("[data-save-expected-corners]"); if (add) addCornerPick(add.dataset.addCorners); if (save) saveCornerPick(save.dataset.saveCorners); if (addExpected) addExpectedCornersPick(); if (saveExpected) saveExpectedCornersPick(); });
 elements.showSpecificMarkets.addEventListener("click", () => loadSpecificMarkets(true));
 elements.specificMarketsContent.addEventListener("click", (event) => {
