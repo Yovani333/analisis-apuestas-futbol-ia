@@ -562,18 +562,23 @@ function compactPlayerTeam(entry = {}) {
 }
 
 export function getPlayerPerformanceData(dataset) {
+  const live = dataset.fixture?.status === "live";
   if (dataset.advancedFailures?.players) {
-    return { ...moduleBase(DATA_STATUS.FAILED, dataset.fetchedAt, SOURCE, "API-Football no pudo entregar el rendimiento de jugadores."), analysisUse: "post_match_audit_only", teams: [] };
+    return { ...moduleBase(DATA_STATUS.FAILED, dataset.fetchedAt, SOURCE, "API-Football no pudo entregar el rendimiento de jugadores."), analysisUse: live ? "live_match_context_only" : "post_match_audit_only", teams: [] };
   }
   const rows = Array.isArray(dataset.confirmed?.players) ? dataset.confirmed.players : [];
   const teams = rows.map(compactPlayerTeam).filter((entry) => entry.players.length);
   const homeAvailable = teams.some((entry) => entry.teamId === dataset.fixture.homeTeamId);
   const awayAvailable = teams.some((entry) => entry.teamId === dataset.fixture.awayTeamId);
   const status = statusForSides(homeAvailable, awayAvailable);
+  const message = teams.length
+    ? live
+      ? "Rendimiento durante el partido; se usa solo como contexto en vivo y no como evidencia prepartido."
+      : "Rendimiento posterior al partido; disponible solo para evaluacion retrospectiva."
+    : "No hay estadisticas de jugadores publicadas para este fixture.";
   return {
-    ...moduleBase(status, dataset.fetchedAt, SOURCE,
-      teams.length ? "Rendimiento posterior al partido; disponible solo para evaluación retrospectiva." : "No hay estadísticas de jugadores publicadas para este fixture."),
-    analysisUse: "post_match_audit_only", teams
+    ...moduleBase(status, dataset.fetchedAt, SOURCE, message),
+    analysisUse: live ? "live_match_context_only" : "post_match_audit_only", teams
   };
 }
 

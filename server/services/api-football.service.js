@@ -347,11 +347,11 @@ export async function getFixtureEvents(fixtureId) {
   });
 }
 
-export async function getFixturePlayers(fixtureId) {
-  return apiRequest("/fixtures/players", { fixture: fixtureId }, HISTORICAL_CACHE_TTL, {
+export async function getFixturePlayers(fixtureId, { cacheTtl = HISTORICAL_CACHE_TTL } = {}) {
+  return apiRequest("/fixtures/players", { fixture: fixtureId }, cacheTtl, {
     providerErrorRetry: true,
     providerErrorRetryDelayMs: 500,
-    emptyTtl: CACHE_TTL,
+    emptyTtl: Math.min(cacheTtl, CACHE_TTL),
     hasUsableData: (rows) => Array.isArray(rows) && rows.some((row) => Array.isArray(row?.players) && row.players.length)
   });
 }
@@ -1000,6 +1000,7 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
   const loadCurrentFixtureData = shouldLoadCurrentFixtureData(base.fixture.status?.short);
   const coverage = leagueConfig.seasons?.find((item) => Number(item.year) === Number(season))?.coverage || null;
   const allows = (path, fallback = true) => isCoverageAvailable(coverage, path, fallback);
+  const allowsPlayerStatistics = allows("fixtures.statistics_players", false) || allows("players", false);
   const unavailableByCoverage = [
     ["Clasificación", "standings"], ["Lesiones", "injuries"], ["Alineaciones", "fixtures.lineups"],
     ["Cuotas", "odds"], ["Estadísticas de fixture", "fixtures.statistics_fixtures"],
@@ -1025,7 +1026,9 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
     }) : Promise.resolve({ endpoint: "/odds", mode: "not_available", cacheTtl: CACHE_TTL, rows: [] }),
     queryFixtureScopedData && allows("predictions") ? safe(apiRequest("/predictions", { fixture: fixtureId }, PREDICTION_CACHE_TTL)) : Promise.resolve([]),
     loadCurrentFixtureData && allows("fixtures.events") ? safeAdvanced(apiRequest("/fixtures/events", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
-    loadCurrentFixtureData && allows("fixtures.statistics_players") ? safeAdvanced(apiRequest("/fixtures/players", { fixture: fixtureId })) : Promise.resolve({ data: [], failed: false }),
+    loadCurrentFixtureData && allowsPlayerStatistics ? safeAdvanced(getFixturePlayers(fixtureId, {
+      cacheTtl: fixtureLifecycle === "live" ? LIVE_CACHE_TTL : HISTORICAL_CACHE_TTL
+    })) : Promise.resolve({ data: [], failed: false }),
     queryFixtureScopedData && allows("fixtures.statistics_fixtures") ? safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: homeId, date: statisticsCutoffDate })) : Promise.resolve({ data: null, failed: false }),
     queryFixtureScopedData && allows("fixtures.statistics_fixtures") ? safeAdvanced(apiRequest("/teams/statistics", { league: base.league.id, season, team: awayId, date: statisticsCutoffDate })) : Promise.resolve({ data: null, failed: false })
   ]);

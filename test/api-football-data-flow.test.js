@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { preserveValidFixtureDataset } from "../server/services/api-football.service.js";
 import { fixtureDatasetPersistenceInternals } from "../server/services/fixture-dataset-persistence.service.js";
+
+const apiFootballSource = readFileSync(new URL("../server/services/api-football.service.js", import.meta.url), "utf8");
 
 test("merge seguro conserva datos validos cuando llega una respuesta parcial vacia", () => {
   const previous = {
@@ -93,4 +96,10 @@ test("cache persistente no reemplaza snapshot programado mejor por una respuesta
     dataQuality: { score: 40 }
   };
   assert.equal(fixtureDatasetPersistenceInternals.shouldKeepExistingSnapshot(existing, incoming), true);
+});
+
+test("En vivo puede cargar rendimiento de jugadores con cobertura players o statistics_players", () => {
+  assert.match(apiFootballSource, /const allowsPlayerStatistics = allows\("fixtures\.statistics_players", false\) \|\| allows\("players", false\)/);
+  assert.match(apiFootballSource, /loadCurrentFixtureData && allowsPlayerStatistics \? safeAdvanced\(getFixturePlayers\(fixtureId/);
+  assert.match(apiFootballSource, /cacheTtl: fixtureLifecycle === "live" \? LIVE_CACHE_TTL : HISTORICAL_CACHE_TTL/);
 });

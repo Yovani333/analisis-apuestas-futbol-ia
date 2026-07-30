@@ -97,6 +97,15 @@ test("normaliza datos disponibles y conserva faltantes explícitos", () => {
   assert.equal(normalized.analysisStatus, ANALYSIS_STATUS.COMPLETE);
 });
 
+test("rendimiento de jugadores en vivo se etiqueta como contexto del partido", () => {
+  const dataset = datasetFixture();
+  dataset.fixture.status = "live";
+  const normalized = normalizeMatchResearchData(dataset);
+  assert.equal(normalized.supportingData.playerPerformance.status, DATA_STATUS.PARTIAL);
+  assert.equal(normalized.supportingData.playerPerformance.analysisUse, "live_match_context_only");
+  assert.match(normalized.supportingData.playerPerformance.message, /contexto en vivo/);
+});
+
 test("bajas vigentes no se acumulan y conservan fecha de inicio solo si existe", () => {
   const dataset = datasetFixture();
   dataset.confirmed.injuries.push({ ...dataset.confirmed.injuries[0], startDate: "2026-06-18T00:00:00Z" });
