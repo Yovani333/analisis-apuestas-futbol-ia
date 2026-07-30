@@ -14,6 +14,7 @@ import { calculatePoissonModel } from "../services/poisson-model.service.js";
 import { calculateTeamGoalProbability } from "../services/team-goal-probability.service.js";
 import { calculateCornersModel } from "../services/corners-model.service.js";
 import { calculateYellowCardsModel } from "../services/yellow-cards-model.service.js";
+import { calculateGoalHalfModel } from "../services/goal-half-model.service.js";
 import { buildOutcomeScenarios } from "../services/outcome-scenarios.service.js";
 import { buildSpecificMarkets } from "../services/specific-markets.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
@@ -362,6 +363,16 @@ apiRouter.post("/fixtures/:fixtureId/models/yellow-cards", requireLiveMode, asyn
   const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
   const dataset = await getFixtureDataset(fixtureId, { forceRefresh, includeHistorical: true });
   res.json(calculateYellowCardsModel(dataset));
+}));
+
+apiRouter.post("/fixtures/:fixtureId/models/goal-half", requireLiveMode, asyncRoute(async (req, res) => {
+  const fixtureId = parseFixtureId(req.params.fixtureId);
+  const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
+  res.json(await calculateGoalHalfModel(dataset.fixture, {
+    getPreviousFixtures: getPreviousFixturesForTeam,
+    getFixtureEvents
+  }));
 }));
 
 apiRouter.post("/fixtures/:fixtureId/picks/collection", requireLiveMode, asyncRoute(async (req, res) => {

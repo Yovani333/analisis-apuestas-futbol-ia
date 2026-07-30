@@ -225,6 +225,13 @@ export const footballDataService = {
     return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/yellow-cards${query}`, { method: "POST" });
   },
 
+  async getGoalHalfModel(fixture, refresh = false) {
+    const runtime = await this.getRuntime();
+    if (runtime.mode !== "live") return { status: "not_available", warning: "Gol por mitad requiere eventos oficiales de partidos previos." };
+    const query = refresh ? "?refresh=true" : "";
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixture.id)}/models/goal-half${query}`, { method: "POST" });
+  },
+
   async getSpecificMarkets(fixture, refresh = false) {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") return { status: "not_available", groups: [], warnings: ["Los mercados específicos requieren datos reales normalizados."] };
