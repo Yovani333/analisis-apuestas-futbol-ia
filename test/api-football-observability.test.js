@@ -8,7 +8,8 @@ import {
   recordApiFootballNegativeCacheHit,
   recordApiFootballPendingHit,
   recordApiFootballResponse,
-  resetApiFootballObservability
+  resetApiFootballObservability,
+  resolveApiFootballUsageWindow
 } from "../server/services/api-football-observability.service.js";
 
 function headers(values = {}) {
@@ -66,4 +67,28 @@ test("registra fallos con código sanitizado", () => {
   assert.equal(metrics.endpoints["/fixtures/events"].failures, 1);
   assert.equal(metrics.lastErrorCode, "API_FOOTBALL_RATE_LIMIT");
   assert.equal(metrics.rateLimit.dailyRemaining, 0);
+});
+
+test("conteo diario usa ventana operativa de 5 p.m. hora del Pacifico", () => {
+  const beforeReset = resolveApiFootballUsageWindow(new Date("2026-07-29T23:59:00.000Z"));
+  const afterReset = resolveApiFootballUsageWindow(new Date("2026-07-30T00:00:00.000Z"));
+  assert.equal(beforeReset.windowKey, "2026-07-28");
+  assert.equal(beforeReset.windowStartLocal, "2026-07-28 17:00 PT");
+  assert.equal(beforeReset.windowEndLocal, "2026-07-29 17:00 PT");
+  assert.equal(afterReset.windowKey, "2026-07-29");
+  assert.equal(afterReset.windowStartLocal, "2026-07-29 17:00 PT");
+  assert.equal(afterReset.windowEndLocal, "2026-07-30 17:00 PT");
+});
+
+test("observabilidad expone solicitudes diarias sin depender de recargar la pagina", () => {
+  resetApiFootballObservability();
+  recordApiFootballResponse({ endpoint: "/fixtures", headers: headers({}) });
+  recordApiFootballFailure({ endpoint: "/fixtures/events", code: "API_FOOTBALL_NETWORK_ERROR" });
+  const metrics = getApiFootballObservability();
+  assert.equal(metrics.daily.resetHourPacific, 17);
+  assert.equal(metrics.daily.networkRequests, 2);
+  assert.equal(metrics.daily.failures, 1);
+  assert.equal(metrics.daily.endpoints["/fixtures"].networkRequests, 1);
+  assert.equal(metrics.daily.endpoints["/fixtures/events"].networkRequests, 1);
+  assert.equal(metrics.daily.endpoints["/fixtures/events"].failures, 1);
 });

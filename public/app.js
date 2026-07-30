@@ -329,25 +329,25 @@ function renderApiUsageAdmin(runtime = null, { loading = false, error = "" } = {
   if (!updateApiUsageAdminVisibility()) return;
   const observability = runtime?.providers?.apiFootball?.observability || {};
   const rateLimit = observability.rateLimit || {};
+  const daily = observability.daily || {};
   const dailyLimit = Number.isFinite(Number(rateLimit.dailyLimit)) ? Number(rateLimit.dailyLimit) : API_FOOTBALL_DAILY_LIMIT_FALLBACK;
   const dailyRemaining = Number.isFinite(Number(rateLimit.dailyRemaining)) ? Number(rateLimit.dailyRemaining) : null;
-  const officialDailyUsed = dailyRemaining !== null ? Math.max(0, dailyLimit - dailyRemaining) : null;
-  const displayedUsed = officialDailyUsed ?? Number(observability.networkRequests || 0);
-  const limitSource = officialDailyUsed !== null ? "Header oficial API-Football" : "Proceso actual";
+  const displayedUsed = Number(daily.networkRequests ?? observability.networkRequests ?? 0);
+  const dailyWindow = daily.windowStartLocal && daily.windowEndLocal ? `${daily.windowStartLocal} a ${daily.windowEndLocal}` : "Ventana diaria pendiente";
   const cacheHitRate = Number(observability.cacheHitRatePct || 0);
-  const endpointRows = Object.entries(observability.endpoints || {})
+  const endpointRows = Object.entries(daily.endpoints || observability.endpoints || {})
     .sort(([, left], [, right]) => Number(right.networkRequests || 0) - Number(left.networkRequests || 0))
     .slice(0, 12);
   const lastRequest = observability.lastRequestAt ? formatSiteRelease(observability.lastRequestAt) : "Sin solicitudes registradas";
   elements.apiUsageSummary.innerHTML = `
-    <article><span>Solicitudes usadas</span><strong>${numberLabel(displayedUsed)}</strong><small>${escapeHtml(limitSource)}</small></article>
+    <article><span>Solicitudes usadas</span><strong>${numberLabel(displayedUsed)}</strong><small>Día operativo 5 p.m. PT</small></article>
     <article><span>Límite diario</span><strong>${numberLabel(dailyLimit)}</strong><small>${dailyRemaining !== null ? `${numberLabel(dailyRemaining)} restantes` : "Restante no reportado"}</small></article>
     <article><span>Cache hit rate</span><strong>${displayValue(cacheHitRate)}%</strong><small>${numberLabel(observability.cacheHits, "0")} hits</small></article>
-    <article><span>Fallos</span><strong>${numberLabel(observability.failures, "0")}</strong><small>${escapeHtml(observability.lastErrorCode || "Sin error reciente")}</small></article>
+    <article><span>Fallos del día</span><strong>${numberLabel(daily.failures ?? observability.failures, "0")}</strong><small>${escapeHtml(observability.lastErrorCode || "Sin error reciente")}</small></article>
     <article><span>Última solicitud</span><strong>${escapeHtml(lastRequest)}</strong><small>${escapeHtml(observability.lastEndpoint || "Sin endpoint")}</small></article>
   `;
   elements.apiUsageTable.innerHTML = `
-    <p class="account-note">${loading ? "Actualizando conteo..." : error ? escapeHtml(error) : "Conteo por endpoint del proceso activo. No ejecuta consultas nuevas a API-Football."}</p>
+    <p class="account-note">${loading ? "Actualizando conteo..." : error ? escapeHtml(error) : `Conteo diario por endpoint: ${escapeHtml(dailyWindow)}. No ejecuta consultas nuevas a API-Football.`}</p>
     ${endpointRows.length ? `<div class="api-usage-table__scroll"><table>
       <thead><tr><th>Endpoint</th><th>API</th><th>Cache</th><th>Miss</th><th>Pendientes</th><th>Fallos</th></tr></thead>
       <tbody>${endpointRows.map(([endpoint, metrics]) => `<tr>
