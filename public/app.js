@@ -436,6 +436,31 @@ async function refreshApiUsageAdmin({ quiet = false } = {}) {
   }
 }
 
+let apiUsageRefreshTimer = null;
+let apiUsageRefreshInFlight = false;
+let apiUsageRefreshQueued = false;
+
+function scheduleApiUsageAdminRefresh() {
+  if (!updateApiUsageAdminVisibility()) return;
+  window.clearTimeout(apiUsageRefreshTimer);
+  apiUsageRefreshTimer = window.setTimeout(async () => {
+    if (apiUsageRefreshInFlight) {
+      apiUsageRefreshQueued = true;
+      return;
+    }
+    apiUsageRefreshInFlight = true;
+    try {
+      await refreshApiUsageAdmin({ quiet: true });
+    } finally {
+      apiUsageRefreshInFlight = false;
+      if (apiUsageRefreshQueued) {
+        apiUsageRefreshQueued = false;
+        scheduleApiUsageAdminRefresh();
+      }
+    }
+  }, 1200);
+}
+
 function renderCloudAccount() {
   const session = cloudSyncClient.session;
   const connected = Boolean(session?.accessToken);
@@ -5511,6 +5536,7 @@ elements.dataDialog.addEventListener("cancel", (event) => {
 window.addEventListener("popstate", () => {
   if (elements.dataDialog.open) elements.dataDialog.close();
 });
+window.addEventListener("football-api-request-complete", scheduleApiUsageAdminRefresh);
 elements.analysisContent.addEventListener("click", (event) => {
   const analysis = state.analysisByFixture.get(state.selectedFixtureId);
   const addButton = event.target.closest("[data-add-market]");

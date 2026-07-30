@@ -1,6 +1,27 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260712-expanded-competitions-v1";
 
 const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+const API_REQUEST_COMPLETE_EVENT = "football-api-request-complete";
+
+function shouldNotifyApiRequestComplete(url) {
+  const path = new URL(url, window.location.origin).pathname;
+  return path.startsWith("/api/")
+    && path !== "/api/health"
+    && !path.startsWith("/api/cloud/")
+    && !path.startsWith("/api/admin/");
+}
+
+function notifyApiRequestComplete(url, response) {
+  if (!shouldNotifyApiRequestComplete(url)) return;
+  window.dispatchEvent(new CustomEvent(API_REQUEST_COMPLETE_EVENT, {
+    detail: {
+      url,
+      status: response.status,
+      ok: response.ok,
+      at: new Date().toISOString()
+    }
+  }));
+}
 
 function fixtureTeamLogos(payload) {
   const rows = [
@@ -329,6 +350,7 @@ export const footballDataService = {
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...options.headers } });
+  notifyApiRequestComplete(url, response);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(payload.error?.message || "No fue posible completar la solicitud.");

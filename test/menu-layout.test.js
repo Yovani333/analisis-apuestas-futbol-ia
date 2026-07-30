@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const services = readFileSync(new URL("../public/services.js", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 
 test("el menu lateral agrupa las vistas en un orden profesional", () => {
@@ -62,6 +63,9 @@ test("Mi cuenta muestra conteo API solo para el administrador", () => {
   assert.match(app, /cloudSyncClient\.session\?\.user\?\.email/);
   assert.match(app, /runtime\?\.providers\?\.apiFootball\?\.observability/);
   assert.match(app, /footballDataService\.getRuntime\(\{ includeUsage: true \}\)/);
+  assert.match(app, /function scheduleApiUsageAdminRefresh\(\)/);
+  assert.match(app, /window\.addEventListener\("football-api-request-complete", scheduleApiUsageAdminRefresh\)/);
+  assert.match(services, /window\.dispatchEvent\(new CustomEvent\(API_REQUEST_COMPLETE_EVENT/);
   assert.match(app, /El boton solo lee el contador; no consume API-Football/);
   assert.match(app, /API-Football reales/);
   assert.match(styles, /\.account-api-usage/);
