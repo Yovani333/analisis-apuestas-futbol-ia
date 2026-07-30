@@ -28,6 +28,16 @@ test("seleccionar un encuentro difiere los modulos historicos pesados hasta most
   assert.match(app, /!state\.playerGoalByFixture\.has\(fixture\.id\)[\s\S]+?loadPlayerGoalCandidates\(fixture, false, true\)/);
 });
 
+test("la busqueda del dia oculta encuentros finalizados o programados ya pasados", () => {
+  const searchBody = app.match(/async function searchFixtures\(event\)[\s\S]+?function handleFilterChange/)[0];
+  assert.match(app, /function filterPastTodayFixtures/);
+  assert.match(app, /fixture\.status === "live"/);
+  assert.match(app, /fixture\.status === "finished"/);
+  assert.match(app, /fixtureKickoffTime\(fixture\)/);
+  assert.match(searchBody, /const filteredResults = filterPastTodayFixtures\(searchResults, filters\)/);
+  assert.match(searchBody, /state\.fixtures = filteredResults\.fixtures/);
+});
+
 test("Catálogo de mercados se actualiza solo mediante su botón manual", () => {
   assert.match(app, /showSpecificMarkets\.addEventListener\("click", \(\) => loadSpecificMarkets\(true\)\)/);
   assert.match(app, /showSpecificMarkets\.textContent = "Actualizar mercados"/);

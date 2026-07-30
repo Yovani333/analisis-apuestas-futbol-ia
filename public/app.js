@@ -903,6 +903,32 @@ function pacificToday() {
   }).format(new Date());
 }
 
+function isSameDayPacificSearch(dateFrom, dateTo) {
+  const today = pacificToday();
+  return dateFrom === today && dateTo === today;
+}
+
+function fixtureKickoffTime(fixture = {}) {
+  const value = fixture.utcDateTime || (fixture.date && fixture.time ? `${fixture.date}T${fixture.time}:00` : "");
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
+function filterPastTodayFixtures(fixtures = [], { dateFrom = "", dateTo = "", status = "all", now = new Date() } = {}) {
+  if (!isSameDayPacificSearch(dateFrom, dateTo) || !["all", "scheduled"].includes(String(status || "all"))) {
+    return { fixtures, removed: 0 };
+  }
+  const nowMs = now.getTime();
+  const filtered = fixtures.filter((fixture) => {
+    if (fixture.status === "live") return true;
+    if (fixture.status === "finished") return false;
+    if (fixture.status !== "scheduled") return false;
+    const kickoff = fixtureKickoffTime(fixture);
+    return kickoff === null || kickoff >= nowMs;
+  });
+  return { fixtures: filtered, removed: fixtures.length - filtered.length };
+}
+
 function shiftIsoDate(date, days) {
   const value = new Date(`${date}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);
@@ -5050,13 +5076,16 @@ async function searchFixtures(event) {
   elements.searchFeedback.textContent = "Buscando partidos…";
 
   try {
-    state.fixtures = await footballDataService.searchFixtures({
+    const filters = {
       leagues: competitionLeagues(),
       season: elements.season.value,
       dateFrom: elements.dateFrom.value,
       dateTo: elements.dateTo.value,
       status: elements.status.value
-    });
+    };
+    const searchResults = await footballDataService.searchFixtures(filters);
+    const filteredResults = filterPastTodayFixtures(searchResults, filters);
+    state.fixtures = filteredResults.fixtures;
     purgeInvalidEvidenceSnapshots({ sync: true, render: false });
     const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
     const validCount = state.fixtures.length;
