@@ -573,8 +573,12 @@ async function connectCloudAccount() {
   renderCloudAccount();
   try {
     const remote = await cloudSyncClient.loadState();
+    const remoteEvidence = await cloudSyncClient.loadEvidenceSnapshots().catch((error) => {
+      state.cloud.notice = `La cuenta se sincronizara, pero la biblioteca de evidencias quedo pendiente: ${error.message}`;
+      return { snapshots: [] };
+    });
     const userId = session.user?.id || "";
-    const nextState = mergeCloudState(localCloudState(), remote || {});
+    const nextState = mergeCloudState(localCloudState(), { ...(remote || {}), evidence_snapshots: remoteEvidence.snapshots || [] });
     applyCloudState(nextState);
     const saved = await cloudSyncClient.saveState(nextState);
     state.cloud.lastSyncedAt = saved?.updated_at || nextState.updatedAt || new Date().toISOString();
@@ -600,7 +604,11 @@ async function syncCloudState({ announce = false, refreshFirst = false } = {}) {
   renderCloudAccount();
   try {
     const remote = await cloudSyncClient.loadState();
-    const merged = mergeCloudState(localCloudState(), remote || {});
+    const remoteEvidence = await cloudSyncClient.loadEvidenceSnapshots().catch((error) => {
+      state.cloud.notice = `La sincronizacion continua, pero no se pudo recuperar la biblioteca de evidencias: ${error.message}`;
+      return { snapshots: [] };
+    });
+    const merged = mergeCloudState(localCloudState(), { ...(remote || {}), evidence_snapshots: remoteEvidence.snapshots || [] });
     applyCloudState(merged);
     const saved = await cloudSyncClient.saveState(merged);
     state.cloud.lastSyncedAt = saved?.updated_at || new Date().toISOString();

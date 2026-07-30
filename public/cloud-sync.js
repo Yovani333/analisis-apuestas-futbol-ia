@@ -421,6 +421,32 @@ export class CloudSyncClient {
     return (await requestJson("/api/cloud/state", { token })).state;
   }
 
+  async loadEvidenceSnapshots({ limit = 200, max = 500 } = {}) {
+    const token = await this.accessToken();
+    if (!token) return { snapshots: [], count: 0 };
+    const rows = [];
+    let offset = 0;
+    const pageLimit = Math.max(1, Math.min(200, Number(limit) || 200));
+    const maxRows = Math.max(1, Math.min(500, Number(max) || 500));
+    while (offset !== null && rows.length < maxRows) {
+      const page = await requestJson(`/api/cloud/evidence/snapshots?limit=${pageLimit}&offset=${offset}`, { token });
+      const snapshots = Array.isArray(page.snapshots) ? page.snapshots : [];
+      rows.push(...snapshots);
+      offset = page.nextOffset === null || page.nextOffset === undefined ? null : Number(page.nextOffset);
+      if (!snapshots.length) break;
+    }
+    const unique = new Map();
+    for (const snapshot of filterValidEvidenceSnapshots(rows)) {
+      if (!snapshot?.id) continue;
+      const current = unique.get(String(snapshot.id));
+      if (!current || rowTimestamp(snapshot) >= rowTimestamp(current)) unique.set(String(snapshot.id), snapshot);
+    }
+    return {
+      snapshots: [...unique.values()].slice(0, maxRows),
+      count: unique.size
+    };
+  }
+
   async saveState(state) {
     const token = await this.accessToken();
     if (!token) return null;

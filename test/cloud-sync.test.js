@@ -349,6 +349,62 @@ test("la biblioteca en linea conserva mas de cincuenta evidencias unicas", () =>
   assert.equal(rows.length, 81);
 });
 
+test("el cliente recupera evidencias de la biblioteca en linea por paginas", async () => {
+  const storage = new Map();
+  const fakeStorage = {
+    getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+    setItem(key, value) { storage.set(key, value); },
+    removeItem(key) { storage.delete(key); }
+  };
+  const client = new CloudSyncClient(fakeStorage);
+  client.session = { accessToken: "token", refreshToken: "refresh", expiresAt: Math.floor(Date.now() / 1000) + 3600, user: { id: "user-1" } };
+  const previousFetch = globalThis.fetch;
+  const makeSnapshot = (index) => ({
+    version: 3,
+    id: `remote-ev-${index}`,
+    capturedAt: new Date(Date.UTC(2026, 6, 1, 0, index)).toISOString(),
+    fixture: {
+      id: String(10_000 + index),
+      home: `Local ${index}`,
+      away: `Visitante ${index}`,
+      status: "scheduled",
+      utcDateTime: new Date(Date.UTC(2026, 6, 1, 2, index)).toISOString(),
+      leagueName: index % 2 ? "MLS" : "Clasificacion Conference League",
+      leagueId: index % 2 ? 253 : 848
+    }
+  });
+  const pages = [
+    Array.from({ length: 200 }, (_, index) => makeSnapshot(index)),
+    Array.from({ length: 30 }, (_, index) => makeSnapshot(index + 200))
+  ];
+  const requestedOffsets = [];
+  globalThis.fetch = async (url) => {
+    requestedOffsets.push(Number(new URL(url, "https://local.test").searchParams.get("offset") || 0));
+    const pageIndex = requestedOffsets.length - 1;
+    return {
+      ok: true,
+      json: async () => ({
+        snapshots: pages[pageIndex] || [],
+        nextOffset: pageIndex === 0 ? 200 : null
+      })
+    };
+  };
+  try {
+    const result = await client.loadEvidenceSnapshots({ limit: 200, max: 500 });
+    assert.equal(result.snapshots.length, 230);
+    assert.deepEqual(requestedOffsets, [0, 200]);
+    assert.equal(result.snapshots[0].fixture.leagueName, "Clasificacion Conference League");
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("la ruta autenticada de biblioteca de evidencias esta registrada", () => {
+  const routesSource = readFileSync(new URL("../server/routes/api.routes.js", import.meta.url), "utf8");
+  assert.match(routesSource, /apiRouter\.get\("\/cloud\/evidence\/snapshots"/);
+  assert.match(routesSource, /listCloudEvidenceSnapshots/);
+});
+
 test("la revision mas reciente del cupon permite borrar picks antiguos", () => {
   const merged = mergeCloudState(
     { preferences: { parlayDraftUpdatedAt: "2026-07-13T12:00:00Z" }, parlayDraft: [] },

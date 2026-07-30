@@ -6,6 +6,8 @@ import { byteLength, recordServiceInitiatedTraffic } from "./bandwidth-observabi
 const MAX_SYNC_BYTES = 1_500_000;
 const MAX_WATCHLIST_FIXTURES = 100;
 const MAX_AUTOMATIC_EVIDENCE_METADATA_ON_STATE = 100;
+const MAX_EVIDENCE_LIBRARY_PAGE = 200;
+const MAX_EVIDENCE_LIBRARY_TOTAL = 500;
 const HEAVY_SYNC_KEYS = new Set([
   "raw", "rawData", "dataset", "matchData", "fullDataset", "debug", "logs",
   "apiResponse", "response", "scoreMatrix", "goalMatrix", "matrix",
@@ -387,6 +389,37 @@ export async function saveCloudEvidenceSnapshots(authorization, input = {}) {
     prefer: "resolution=ignore-duplicates,return=minimal"
   });
   return { received: payload.length };
+}
+
+export async function listCloudEvidenceSnapshots(authorization, input = {}) {
+  const token = bearerToken(authorization);
+  const limit = Math.max(1, Math.min(MAX_EVIDENCE_LIBRARY_PAGE, Number(input.limit) || MAX_EVIDENCE_LIBRARY_PAGE));
+  const offset = Math.max(0, Number(input.offset) || 0);
+  if (offset >= MAX_EVIDENCE_LIBRARY_TOTAL) return { snapshots: [], count: 0, offset, limit, nextOffset: null };
+  const safeLimit = Math.min(limit, MAX_EVIDENCE_LIBRARY_TOTAL - offset);
+  let rows = [];
+  try {
+    const payload = await supabaseRequest(
+      `/rest/v1/automatic_evidence_snapshots?select=fixture_id,captured_at,snapshot&order=captured_at.desc&limit=${safeLimit}&offset=${offset}`,
+      { token }
+    );
+    rows = Array.isArray(payload) ? payload : [];
+  } catch (error) {
+    if (isMissingEvidenceSchema(error)) {
+      return { snapshots: [], count: 0, offset, limit: safeLimit, nextOffset: null, disabledReason: "Ejecuta la migracion 002_automatic_evidence.sql para activar evidencias automaticas." };
+    }
+    throw error;
+  }
+  const snapshots = mergeEvidenceSnapshots([], rows);
+  const nextOffset = rows.length >= safeLimit && offset + safeLimit < MAX_EVIDENCE_LIBRARY_TOTAL ? offset + safeLimit : null;
+  return {
+    snapshots,
+    count: snapshots.length,
+    offset,
+    limit: safeLimit,
+    nextOffset,
+    latestCapturedAt: rows[0]?.captured_at || null
+  };
 }
 
 function normalizeWatchedFixture(fixture, userId, now = new Date()) {
