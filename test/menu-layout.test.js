@@ -54,10 +54,13 @@ test("Mi cuenta muestra conteo API solo para el administrador", () => {
   assert.match(html, /id="api-usage-summary"/);
   assert.match(html, /id="api-usage-table"/);
   assert.match(app, /const ADMIN_API_USAGE_EMAIL = "yoyou@hotmail\.es"/);
+  assert.match(app, /const ADMIN_API_USAGE_CACHE_KEY/);
   assert.match(app, /function isApiUsageAdmin\(\)/);
+  assert.match(app, /function resolveStableApiUsageDaily/);
+  assert.match(app, /daily\.persisted/);
   assert.match(app, /cloudSyncClient\.session\?\.user\?\.email/);
   assert.match(app, /runtime\?\.providers\?\.apiFootball\?\.observability/);
-  assert.match(app, /footballDataService\.getRuntime\(\)/);
+  assert.match(app, /footballDataService\.getRuntime\(\{ includeUsage: true \}\)/);
   assert.match(app, /No ejecuta consultas nuevas a API-Football/);
   assert.match(styles, /\.account-api-usage/);
   assert.match(styles, /\.api-usage-summary/);

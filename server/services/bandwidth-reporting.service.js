@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import { getBandwidthObservability, snapshotAndResetBandwidthObservability } from "./bandwidth-observability.service.js";
 import { loadBandwidthWindows, pruneBandwidthWindows, saveBandwidthWindow } from "./bandwidth-report-store.service.js";
+import { resolveApiFootballUsageWindow } from "./api-football-observability.service.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const pendingWindows = [];
@@ -168,6 +169,45 @@ function summarizeWindows(windows = [], now = new Date()) {
   };
 }
 
+function mergeApiFootballUsage(target, service = {}) {
+  const count = number(service.count);
+  const errors = number(service.errors);
+  target.networkRequests += count;
+  target.failures += errors;
+  for (const [endpoint, metrics] of entries(service.endpoints)) {
+    const key = endpoint || "unknown";
+    target.endpoints[key] ||= { networkRequests: 0, failures: 0 };
+    target.endpoints[key].networkRequests += number(metrics.count);
+    target.endpoints[key].failures += number(metrics.errors);
+  }
+}
+
+export function summarizeApiFootballDailyUsage(windows = [], { now = new Date(), currentBandwidth = null } = {}) {
+  const usageWindow = resolveApiFootballUsageWindow(now);
+  const summary = {
+    ...usageWindow,
+    networkRequests: 0,
+    failures: 0,
+    endpoints: Object.create(null),
+    source: "bandwidth_persisted_daily_window"
+  };
+  for (const row of windows || []) {
+    const windowStart = row?.window_start || row?.windowStart;
+    if (!windowStart || resolveApiFootballUsageWindow(new Date(windowStart)).windowKey !== usageWindow.windowKey) continue;
+    mergeApiFootballUsage(summary, row.service_summary?.services?.["api-football"]);
+  }
+  mergeApiFootballUsage(summary, currentBandwidth?.serviceInitiated?.services?.["api-football"]);
+  summary.endpoints = Object.fromEntries(Object.entries(summary.endpoints)
+    .sort(([, left], [, right]) => number(right.networkRequests) - number(left.networkRequests)));
+  return summary;
+}
+
+export async function buildApiFootballDailyUsageFromBandwidth({ now = new Date(), currentBandwidth = null } = {}) {
+  const since = new Date(now.getTime() - 36 * 60 * 60 * 1000);
+  const rows = await loadBandwidthWindows({ since, limit: 200 });
+  return summarizeApiFootballDailyUsage(rows, { now, currentBandwidth });
+}
+
 function recommendationsFromSummary(summary = {}) {
   const recommendations = [];
   const largestRoute = summary.topRoutesByBytes?.[0];
@@ -228,6 +268,7 @@ export const bandwidthReportingInternals = {
   flattenServices,
   pendingWindows,
   recommendationsFromSummary,
+  summarizeApiFootballDailyUsage,
   summarizeWindows,
   totalWindowBytes
 };

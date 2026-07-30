@@ -117,9 +117,9 @@ export const footballDataService = {
     return { ...buildMockAnalysis(fixture), _source: "mock" };
   },
 
-  async getRuntime() {
+  async getRuntime(options = {}) {
     try {
-      return await requestJson("/api/health");
+      return await requestJson(options.includeUsage ? "/api/health?includeUsage=1" : "/api/health");
     } catch {
       return { mode: "mock", liveReady: false };
     }

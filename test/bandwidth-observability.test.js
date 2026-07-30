@@ -36,6 +36,53 @@ test("registra trafico saliente por servicio y endpoint sin guardar URLs complet
   assert.equal(metrics.serviceInitiated.services["api-football"].endpoints["/fixtures"].responseBytes, 1500);
 });
 
+test("reconstruye el conteo diario de API-Football desde ventanas persistidas y memoria activa", () => {
+  const windows = [{
+    window_start: "2026-07-29T01:10:00.000Z",
+    service_summary: {
+      services: {
+        "api-football": {
+          count: 3,
+          errors: 1,
+          endpoints: {
+            "/fixtures": { count: 2, errors: 0 },
+            "/fixtures/events": { count: 1, errors: 1 }
+          }
+        }
+      }
+    }
+  }, {
+    window_start: "2026-07-28T20:00:00.000Z",
+    service_summary: {
+      services: {
+        "api-football": { count: 50, errors: 0, endpoints: { "/old": { count: 50, errors: 0 } } }
+      }
+    }
+  }];
+  const currentBandwidth = {
+    serviceInitiated: {
+      services: {
+        "api-football": {
+          count: 2,
+          errors: 0,
+          endpoints: { "/odds": { count: 2, errors: 0 } }
+        }
+      }
+    }
+  };
+  const summary = bandwidthReportingInternals.summarizeApiFootballDailyUsage(windows, {
+    now: new Date("2026-07-29T18:00:00.000Z"),
+    currentBandwidth
+  });
+  assert.equal(summary.windowKey, "2026-07-28");
+  assert.equal(summary.networkRequests, 5);
+  assert.equal(summary.failures, 1);
+  assert.equal(summary.endpoints["/fixtures"].networkRequests, 2);
+  assert.equal(summary.endpoints["/fixtures/events"].failures, 1);
+  assert.equal(summary.endpoints["/odds"].networkRequests, 2);
+  assert.equal(summary.endpoints["/old"], undefined);
+});
+
 test("registra bytes de respuestas HTTP por ruta interna", () => {
   resetBandwidthObservability();
   recordHttpResponse({ method: "GET", path: "/api/fixtures/10?refresh=true", statusCode: 200, bytes: 512 });

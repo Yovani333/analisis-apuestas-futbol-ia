@@ -24,6 +24,7 @@ import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-perfo
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
 const ANALYSIS_USAGE_KEY = "football-ai.analysis-usage.v1";
+const ADMIN_API_USAGE_CACHE_KEY = "football-ai.admin-api-usage-cache.v1";
 const TEAM_PERFORMANCE_VISIBILITY_KEY = "football-ai.team-performance-visible.v1";
 const PICK_COLLECTION_CACHE_KEY = "football-ai.pick-collection-cache.v1";
 const ADMIN_API_USAGE_EMAIL = "yoyou@hotmail.es";
@@ -325,11 +326,34 @@ function numberLabel(value, fallback = "—") {
   return Number.isFinite(number) ? number.toLocaleString("es-MX") : fallback;
 }
 
+function resolveStableApiUsageDaily(observability = {}) {
+  const daily = observability.daily || {};
+  const persisted = daily.persisted || {};
+  const cached = readLocalJson(ADMIN_API_USAGE_CACHE_KEY, null);
+  const candidates = [daily, persisted, cached].filter(Boolean);
+  const best = candidates.reduce((winner, candidate) => (
+    Number(candidate?.networkRequests || 0) > Number(winner?.networkRequests || 0) ? candidate : winner
+  ), daily);
+  const normalized = {
+    ...daily,
+    ...best,
+    windowKey: best?.windowKey || daily.windowKey || persisted.windowKey || cached?.windowKey || "",
+    windowStartLocal: best?.windowStartLocal || daily.windowStartLocal || persisted.windowStartLocal || cached?.windowStartLocal || "",
+    windowEndLocal: best?.windowEndLocal || daily.windowEndLocal || persisted.windowEndLocal || cached?.windowEndLocal || "",
+    resetHourPacific: best?.resetHourPacific || daily.resetHourPacific || persisted.resetHourPacific || cached?.resetHourPacific || 17,
+    networkRequests: Number(best?.networkRequests || 0),
+    failures: Number(best?.failures || 0),
+    endpoints: best?.endpoints || daily.endpoints || persisted.endpoints || cached?.endpoints || {}
+  };
+  if (normalized.windowKey && normalized.networkRequests > 0) writeLocalJson(ADMIN_API_USAGE_CACHE_KEY, normalized);
+  return normalized;
+}
+
 function renderApiUsageAdmin(runtime = null, { loading = false, error = "" } = {}) {
   if (!updateApiUsageAdminVisibility()) return;
   const observability = runtime?.providers?.apiFootball?.observability || {};
   const rateLimit = observability.rateLimit || {};
-  const daily = observability.daily || {};
+  const daily = resolveStableApiUsageDaily(observability);
   const dailyLimit = Number.isFinite(Number(rateLimit.dailyLimit)) ? Number(rateLimit.dailyLimit) : API_FOOTBALL_DAILY_LIMIT_FALLBACK;
   const dailyRemaining = Number.isFinite(Number(rateLimit.dailyRemaining)) ? Number(rateLimit.dailyRemaining) : null;
   const displayedUsed = Number(daily.networkRequests ?? observability.networkRequests ?? 0);
@@ -367,7 +391,7 @@ async function refreshApiUsageAdmin({ quiet = false } = {}) {
   if (elements.refreshApiUsage) elements.refreshApiUsage.disabled = true;
   if (!quiet) renderApiUsageAdmin(null, { loading: true });
   try {
-    const runtime = await footballDataService.getRuntime();
+    const runtime = await footballDataService.getRuntime({ includeUsage: true });
     renderApiUsageAdmin(runtime);
   } catch (error) {
     renderApiUsageAdmin(null, { error: `No se pudo leer /api/health: ${error.message}` });

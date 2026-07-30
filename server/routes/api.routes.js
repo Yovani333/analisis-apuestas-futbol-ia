@@ -17,7 +17,7 @@ import { buildOutcomeScenarios } from "../services/outcome-scenarios.service.js"
 import { buildSpecificMarkets } from "../services/specific-markets.service.js";
 import { getApiFootballObservability } from "../services/api-football-observability.service.js";
 import { getBandwidthObservability } from "../services/bandwidth-observability.service.js";
-import { buildBandwidthReport } from "../services/bandwidth-reporting.service.js";
+import { buildApiFootballDailyUsageFromBandwidth, buildBandwidthReport } from "../services/bandwidth-reporting.service.js";
 import { resolvePendingAuditError, runFixtureBacktest, runSavedEvidenceBacktest } from "../services/audit/backtest-engine.service.js";
 import { getTeamPerformanceForFixture } from "../services/team-performance.service.js";
 import { buildTeamPerformancePicks } from "../services/team-performance-picks.service.js";
@@ -56,8 +56,15 @@ const validBandwidthAdminSecret = (value) => {
   return expected.length > 0 && expected.length === received.length && timingSafeEqual(expected, received);
 };
 
-apiRouter.get("/health", (req, res) => {
+apiRouter.get("/health", asyncRoute(async (req, res) => {
   const missing = requireLiveConfiguration();
+  const bandwidth = getBandwidthObservability();
+  const apiFootballObservability = getApiFootballObservability();
+  const includeUsage = ["1", "true"].includes(String(req.query.includeUsage || "").toLowerCase());
+  const persistedDaily = includeUsage ? await buildApiFootballDailyUsageFromBandwidth({ currentBandwidth: bandwidth }) : null;
+  const stableDaily = persistedDaily && persistedDaily.networkRequests > apiFootballObservability.daily.networkRequests
+    ? persistedDaily
+    : { ...apiFootballObservability.daily, ...(persistedDaily ? { persisted: persistedDaily } : {}) };
   res.json({
     status: "ok",
     mode: env.dataMode,
@@ -68,9 +75,15 @@ apiRouter.get("/health", (req, res) => {
     providers: {
       apiFootball: {
         configured: Boolean(env.apiFootballKey),
-        observability: getApiFootballObservability()
+        observability: {
+          ...apiFootballObservability,
+          daily: {
+            ...stableDaily,
+            ...(persistedDaily ? { persisted: persistedDaily } : {})
+          }
+        }
       },
-      bandwidth: getBandwidthObservability(),
+      bandwidth,
       cloudSync: {
         configured: Boolean(env.supabaseUrl && env.supabasePublishableKey),
         automaticEvidence: cloudConfiguration().automaticEvidence,
@@ -80,7 +93,7 @@ apiRouter.get("/health", (req, res) => {
     liveReady: missing.length === 0,
     missing
   });
-});
+}));
 
 const cloudAuthLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: "draft-8", legacyHeaders: false });
 apiRouter.get("/cloud/config", (req, res) => res.json(cloudConfiguration()));
