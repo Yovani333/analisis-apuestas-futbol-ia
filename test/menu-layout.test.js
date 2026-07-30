@@ -36,8 +36,11 @@ test("el menu lateral es fijo en escritorio y funciona como cajon accesible en m
   assert.match(app, /themeToggle\.querySelector\("\.nav-label"\)\.textContent/);
 });
 
-test("Mis apuestas actualiza estados al entrar y conserva el control manual", () => {
-  assert.match(app, /if \(view === "saved"\)[\s\S]*updateSavedParlayResults\(\{ automatic: true \}\)/);
+test("Mis apuestas no actualiza al entrar y conserva el control manual", () => {
+  const savedSwitch = app.slice(app.indexOf('if (view === "saved")'), app.indexOf('if (view === "team-goal-insights")'));
+  assert.doesNotMatch(savedSwitch, /updateSavedParlayResults/);
+  assert.match(app, /function savedLegsNeedingRefresh\(\)/);
+  assert.match(app, /elements\.updateParlayResults\.disabled = savedLegsNeedingRefresh\(\)\.length === 0/);
   assert.match(app, /needsFixtureStatusRefresh\(leg\) \|\| needsSettlementRefresh\(leg\)/);
   assert.match(html, /id="update-individual-results"[\s\S]*Actualizar datos/);
   assert.match(html, /id="update-parlay-results"[\s\S]*Actualizar datos/);
@@ -166,6 +169,7 @@ test("parlays pendientes aparecen primero, perdidos al final y muestran porcenta
   assert.match(app, /resultOrder = Object\.freeze\(\{ pending: 0, won: 1, void: 2, lost: 3 \}\)/);
   assert.match(app, /calculateParlayWinProgress\(parlay\.legs\)/);
   assert.match(app, /parlay-win-progress/);
+  assert.match(app, /state\.expandedParlays\.clear\(\)/);
 });
 
 test("En vivo permite scroll vertical interno y continuar en la pagina", () => {

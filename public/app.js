@@ -2840,6 +2840,11 @@ function activeSavedParlays() {
   return state.savedParlays.filter((parlay) => !parlay.trashed && !parlay.deletedPermanently);
 }
 
+function savedLegsNeedingRefresh() {
+  return [...activeSavedPicks(), ...activeSavedParlays().flatMap((parlay) => parlay.legs || [])]
+    .filter((leg) => needsFixtureStatusRefresh(leg) || needsSettlementRefresh(leg));
+}
+
 function updateSavedDateFilterStatus() {
   if (!elements.savedDateFilterStatus) return;
   elements.savedDateFilterStatus.textContent = state.savedDateFilter
@@ -3076,7 +3081,7 @@ function renderSavedParlays() {
     <article><span>Acierto</span><strong>${metrics.winRate === null ? "—" : `${metrics.winRate}%`}</strong></article>
     <article><span>Unidades teóricas</span><strong class="${metrics.theoreticalUnits >= 0 ? "value-positive" : "value-negative"}">${metrics.theoreticalUnits}</strong></article>`;
   renderOriginPerformance();
-  elements.updateParlayResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
+  elements.updateParlayResults.disabled = savedLegsNeedingRefresh().length === 0;
   if (!activeParlays.length) {
     elements.savedParlaysList.innerHTML = state.savedDateFilter && allActiveParlays.length
       ? '<div class="saved-empty"><h3>Sin parlays en esta fecha</h3><p>Prueba otra fecha o selecciona “Mostrar todas”.</p></div>'
@@ -3146,8 +3151,7 @@ async function updateSavedParlayResults({ automatic = false } = {}) {
     if (!automatic) showNotice("La actualizacion de Mis apuestas ya esta en curso.");
     return;
   }
-  const allSavedLegs = [...activeSavedPicks(), ...activeSavedParlays().flatMap((parlay) => parlay.legs || [])];
-  const legsToUpdate = allSavedLegs.filter((leg) => needsFixtureStatusRefresh(leg) || needsSettlementRefresh(leg));
+  const legsToUpdate = savedLegsNeedingRefresh();
   const fixtureIds = [...new Set(legsToUpdate.map((leg) => leg.fixtureId))];
   if (!fixtureIds.length) {
     if (!automatic) showNotice("No hay picks pendientes. Los resultados resueltos compatibles ya fueron verificados con el marcador reglamentario.");
@@ -3273,7 +3277,7 @@ async function updateSavedParlayResults({ automatic = false } = {}) {
     elements.updateOriginLostResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
     elements.updateOriginRecommendations.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
     elements.updateCompetitionResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
-    elements.updateParlayResults.disabled = state.savedParlays.length === 0;
+    elements.updateParlayResults.disabled = savedLegsNeedingRefresh().length === 0;
     updateButtons.forEach((button) => { button.textContent = "Actualizar datos"; });
   }
 }
@@ -3301,9 +3305,9 @@ function switchView(view) {
     if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   if (view === "saved") {
+    if (state.savedTab === "parlays") state.expandedParlays.clear();
     renderSavedPicks();
     renderSavedParlays();
-    void updateSavedParlayResults({ automatic: true });
   }
   if (view === "team-goal-insights") renderTeamGoalInsights();
   if (view === "favorite-teams") renderFavoriteTeams();
@@ -5348,6 +5352,7 @@ document.addEventListener("click", (event) => {
   const savedTab = event.target.closest("[data-saved-tab]");
   if (savedTab) {
     state.savedTab = savedTab.dataset.savedTab;
+    if (state.savedTab === "parlays") state.expandedParlays.clear();
     document.querySelectorAll("[data-saved-tab]").forEach((button) => button.classList.toggle("saved-tab--active", button === savedTab));
     elements.savedIndividualSection.hidden = state.savedTab !== "individual";
     elements.originResultsSection.hidden = state.savedTab !== "origins-won";
