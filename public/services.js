@@ -35,6 +35,14 @@ function mergeNonEmpty(previous, next) {
 
 function mergeFixtureData(previousFixture, nextFixture) {
   const merged = { ...previousFixture, ...nextFixture };
+  const nextIsFinal = ["finished", "postponed", "cancelled", "suspended"].includes(nextFixture?.status);
+  const nextIsActive = nextFixture?.status === "live";
+  if (previousFixture?.status === "live" && !nextIsActive && !nextIsFinal) {
+    merged.status = previousFixture.status;
+    merged.statusLabel = previousFixture.statusLabel || "En vivo";
+    merged.elapsed = previousFixture.elapsed ?? merged.elapsed;
+    merged.score = mergeNonEmpty(previousFixture.score, nextFixture.score) || previousFixture.score || merged.score;
+  }
   merged.confirmedData = mergeNonEmpty(previousFixture.confirmedData, nextFixture.confirmedData) || {};
   merged.preMatch = mergeNonEmpty(previousFixture.preMatch, nextFixture.preMatch) || null;
   merged.marketAnalysis = mergeNonEmpty(previousFixture.marketAnalysis, nextFixture.marketAnalysis) || [];

@@ -114,6 +114,15 @@ test("frontend conserva datos cargados cuando una respuesta nueva llega parcial"
   assert.match(services, /return mergeFixtureData\(fixture,/);
 });
 
+test("frontend conserva estado en vivo si el detalle llega programado o parcial", () => {
+  const mergeBody = services.match(/function mergeFixtureData[\s\S]+?function buildMockAnalysis/)[0];
+  assert.match(mergeBody, /previousFixture\?\.status === "live"/);
+  assert.match(mergeBody, /!nextIsActive && !nextIsFinal/);
+  assert.match(mergeBody, /merged\.status = previousFixture\.status/);
+  assert.match(mergeBody, /merged\.statusLabel = previousFixture\.statusLabel \|\| "En vivo"/);
+  assert.match(mergeBody, /nextIsFinal = \["finished", "postponed", "cancelled", "suspended"\]/);
+});
+
 test("Dashboard hidrata fixtures y modulos desde evidencia prepartido guardada", () => {
   assert.match(app, /function hydrateFixtureFromEvidence/);
   assert.match(app, /function hydrateModulesFromEvidence/);
