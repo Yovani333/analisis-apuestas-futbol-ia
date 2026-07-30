@@ -135,9 +135,12 @@ test("frontend conserva datos cargados cuando una respuesta nueva llega parcial"
 
 test("frontend conserva estado en vivo si el detalle llega programado o parcial", () => {
   const mergeBody = services.match(/function mergeFixtureData[\s\S]+?function buildMockAnalysis/)[0];
-  assert.match(mergeBody, /previousFixture\?\.status === "live"/);
+  assert.match(services, /function isLiveFixtureState/);
+  assert.match(services, /label\.includes\("en vivo"\)/);
+  assert.match(services, /Number\.isFinite\(elapsed\)/);
+  assert.match(mergeBody, /isLiveFixtureState\(previousFixture\)/);
   assert.match(mergeBody, /!nextIsActive && !nextIsFinal/);
-  assert.match(mergeBody, /merged\.status = previousFixture\.status/);
+  assert.match(mergeBody, /merged\.status = "live"/);
   assert.match(mergeBody, /merged\.statusLabel = previousFixture\.statusLabel \|\| "En vivo"/);
   assert.match(mergeBody, /nextIsFinal = \["finished", "postponed", "cancelled", "suspended"\]/);
 });
@@ -146,8 +149,20 @@ test("Dashboard hidrata fixtures y modulos desde evidencia prepartido guardada",
   assert.match(app, /function hydrateFixtureFromEvidence/);
   assert.match(app, /function hydrateModulesFromEvidence/);
   assert.match(app, /Evidencia prepartido disponible: se conserva snapshot/);
-  assert.match(app, /hydrateFixtureFromEvidence\(await footballDataService\.getFixtureData\(selectedFixture\(\)\)\)/);
+  assert.match(app, /hydrateFixtureFromEvidence\(await footballDataService\.getFixtureData\(fixtureBeforeDetail\)\)/);
   assert.match(app, /state\.dataPicksByFixture\.set\(fixture\.id, modules\.dataPicks\)/);
+});
+
+test("seleccionar partido conserva marcador y minuto en vivo aunque el detalle venga atrasado", () => {
+  const selectFixtureBody = app.match(/async function selectFixture[\s\S]+?async function analyzeSelectedFixture/)[0];
+  assert.match(app, /function fixtureLooksLive/);
+  assert.match(app, /function preserveSelectedLiveFixtureState/);
+  assert.match(app, /label\.includes\("en vivo"\)/);
+  assert.match(app, /status: "live"/);
+  assert.match(app, /elapsed: previousFixture\.elapsed \?\? nextFixture\.elapsed/);
+  assert.match(app, /score: previousFixture\.score \|\| nextFixture\.score/);
+  assert.match(selectFixtureBody, /const fixtureBeforeDetail = selectedFixture\(\)/);
+  assert.match(selectFixtureBody, /preserveSelectedLiveFixtureState\(\s*fixtureBeforeDetail,/);
 });
 
 test("la busqueda muestra solo encuentros validos sin exponer errores de ligas vacias", () => {

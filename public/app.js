@@ -1178,6 +1178,28 @@ function hydrateFixtureFromEvidence(fixture) {
   };
 }
 
+function fixtureLooksLive(fixture) {
+  const status = String(fixture?.status || "").toLowerCase();
+  const label = String(fixture?.statusLabel || "").toLowerCase();
+  const elapsed = Number(fixture?.elapsed);
+  return status === "live" || label.includes("en vivo") || label.includes("live") || Number.isFinite(elapsed);
+}
+
+function preserveSelectedLiveFixtureState(previousFixture, nextFixture) {
+  if (!fixtureLooksLive(previousFixture) || !nextFixture) return nextFixture;
+  const nextStatus = String(nextFixture.status || "").toLowerCase();
+  const nextIsFinal = ["finished", "postponed", "cancelled", "suspended"].includes(nextStatus);
+  if (fixtureLooksLive(nextFixture) || nextIsFinal) return nextFixture;
+  return {
+    ...nextFixture,
+    status: "live",
+    statusLabel: previousFixture.statusLabel || "En vivo",
+    statusShort: previousFixture.statusShort || nextFixture.statusShort,
+    elapsed: previousFixture.elapsed ?? nextFixture.elapsed,
+    score: previousFixture.score || nextFixture.score
+  };
+}
+
 function hydrateModulesFromEvidence(fixture) {
   const evidence = evidenceFixtureSnapshot(fixture);
   if (!fixture?.id || !evidence?.modules) return;
@@ -4875,7 +4897,11 @@ async function selectFixture(fixtureId, analysisMode = null) {
   const fixtureIndex = state.fixtures.findIndex((fixture) => fixture.id === fixtureId);
 
   try {
-    const detailedFixture = hydrateFixtureFromEvidence(await footballDataService.getFixtureData(selectedFixture()));
+    const fixtureBeforeDetail = selectedFixture();
+    const detailedFixture = preserveSelectedLiveFixtureState(
+      fixtureBeforeDetail,
+      hydrateFixtureFromEvidence(await footballDataService.getFixtureData(fixtureBeforeDetail))
+    );
     if (fixtureIndex >= 0) state.fixtures[fixtureIndex] = detailedFixture;
     renderMatches();
     renderFixtureData();

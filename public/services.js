@@ -33,13 +33,21 @@ function mergeNonEmpty(previous, next) {
   return next;
 }
 
+function isLiveFixtureState(fixture) {
+  const status = String(fixture?.status || "").toLowerCase();
+  const label = String(fixture?.statusLabel || "").toLowerCase();
+  const elapsed = Number(fixture?.elapsed);
+  return status === "live" || label.includes("en vivo") || label.includes("live") || Number.isFinite(elapsed);
+}
+
 function mergeFixtureData(previousFixture, nextFixture) {
   const merged = { ...previousFixture, ...nextFixture };
   const nextIsFinal = ["finished", "postponed", "cancelled", "suspended"].includes(nextFixture?.status);
-  const nextIsActive = nextFixture?.status === "live";
-  if (previousFixture?.status === "live" && !nextIsActive && !nextIsFinal) {
-    merged.status = previousFixture.status;
+  const nextIsActive = isLiveFixtureState(nextFixture);
+  if (isLiveFixtureState(previousFixture) && !nextIsActive && !nextIsFinal) {
+    merged.status = "live";
     merged.statusLabel = previousFixture.statusLabel || "En vivo";
+    merged.statusShort = previousFixture.statusShort || merged.statusShort;
     merged.elapsed = previousFixture.elapsed ?? merged.elapsed;
     merged.score = mergeNonEmpty(previousFixture.score, nextFixture.score) || previousFixture.score || merged.score;
   }
