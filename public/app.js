@@ -3987,6 +3987,23 @@ function renderEvidenceReadiness() {
   const latestCloudCapture = state.cloud.evidenceSummary?.latestAutomaticCapturedAt || null;
   elements.evidenceReadinessTotal.textContent = `${displayCollected} recolectada${displayCollected === 1 ? "" : "s"} · ${evaluated} evaluada${evaluated === 1 ? "" : "s"}`;
   elements.evidenceReadinessTotal.className = `status-badge status-badge--${displayCollected >= 100 ? "available" : displayCollected >= 30 ? "partial" : "unavailable"}`;
+  const cloudSummaryCard = cloudCollected > collected
+    ? (() => {
+      const level = cloudCollected >= 100
+        ? { label: "Evidencia suficiente", color: "green", text: "Ya existe volumen suficiente para solicitar una auditorÃ­a backend bajo demanda sin cargar todos los snapshots en la pÃ¡gina." }
+        : cloudCollected >= 30
+          ? { label: "Evidencia media", color: "orange", text: "Hay volumen Ãºtil para diagnÃ³stico preliminar. Conviene seguir evaluando antes de recalibrar." }
+          : { label: "Evidencia baja", color: "red", text: "ContinÃºa recolectando antes de usarla para mejoras del sistema." };
+      const hiddenCount = Math.max(0, cloudCollected - collected);
+      return `<article class="evidence-readiness-card evidence-readiness-card--${escapeHtml(level.color)}">
+        <header><span class="evidence-light evidence-light--${escapeHtml(level.color)}" aria-hidden="true"></span><div><h3>Biblioteca de evidencias en lÃ­nea</h3><p>Resumen liviano de Supabase Â· no carga snapshots completos</p></div><strong>${escapeHtml(level.label)}</strong></header>
+        <div class="evidence-readiness-counts"><div><span>Total recolectadas en lÃ­nea</span><strong>${escapeHtml(cloudCollected)}</strong></div><div><span>Cargadas en esta vista</span><strong>${escapeHtml(collected)}</strong></div><div><span>Resguardadas sin cargar</span><strong>${escapeHtml(hiddenCount)}</strong></div><div><span>Ãšltima captura</span><strong>${escapeHtml(latestCloudCapture ? formatUpdatedAt(latestCloudCapture) : "No disponible")}</strong></div></div>
+        <div class="evidence-readiness-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(Math.min(100, cloudCollected))}" aria-label="Progreso hacia cien evidencias recolectadas"><i style="width:${Math.min(100, cloudCollected)}%"></i></div>
+        <p>${escapeHtml(level.text)}</p>
+        <small>Los conteos por competiciÃ³n completos se calcularÃ¡n en backend cuando solicites auditar, sin traer todos los snapshots al navegador.</small>
+      </article>`;
+    })()
+    : "";
   if (!groups.length) {
     if (cloudCollected > 0) {
       const level = cloudCollected >= 100
@@ -4006,7 +4023,7 @@ function renderEvidenceReadiness() {
     elements.evidenceReadinessList.innerHTML = '<div class="research-empty"><strong>Sin evidencias prepartido</strong><p>Las evidencias aparecerán aquí al guardarlas manual o automáticamente.</p></div>';
     return;
   }
-  elements.evidenceReadinessList.innerHTML = groups.map((group) => {
+  elements.evidenceReadinessList.innerHTML = cloudSummaryCard + groups.map((group) => {
     const progress = state.evidenceEvaluationByCompetition.get(group.competitionKey);
     const running = Boolean(progress?.running);
     const buttonLabel = running

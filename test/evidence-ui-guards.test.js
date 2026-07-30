@@ -27,4 +27,6 @@ test("sincronizacion de cuenta solo muestra resumen y no hidrata snapshots compl
   assert.doesNotMatch(appSource, /cloudSyncClient\.loadEvidenceSnapshots\(/);
   assert.match(appSource, /state\.cloud\.evidenceSummary/);
   assert.match(appSource, /Resumen liviano de Supabase/);
+  assert.match(appSource, /Total recolectadas/);
+  assert.match(appSource, /Resguardadas sin cargar/);
 });

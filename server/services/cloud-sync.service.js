@@ -353,6 +353,7 @@ async function supabaseCountRequest(path, { token = "" } = {}) {
         apikey: env.supabasePublishableKey,
         "Content-Type": "application/json",
         Prefer: "count=exact",
+        Range: "0-0",
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       }
     });

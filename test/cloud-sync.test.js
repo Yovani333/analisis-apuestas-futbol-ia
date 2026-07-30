@@ -325,6 +325,7 @@ test("la respuesta compacta del estado no transporta evidencias completas", () =
 test("el estado compacto consulta solo conteo liviano de evidencias automaticas", () => {
   assert.match(cloudSyncServiceSource, /method: "HEAD"/);
   assert.match(cloudSyncServiceSource, /Prefer: "count=exact"/);
+  assert.match(cloudSyncServiceSource, /Range: "0-0"/);
   assert.match(cloudSyncServiceSource, /automatic_evidence_snapshots\?select=fixture_id/);
   assert.match(cloudSyncServiceSource, /limit=1/);
 });
