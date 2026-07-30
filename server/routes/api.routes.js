@@ -64,8 +64,8 @@ apiRouter.get("/health", asyncRoute(async (req, res) => {
   const apiFootballObservability = getApiFootballObservability();
   const includeUsage = ["1", "true"].includes(String(req.query.includeUsage || "").toLowerCase());
   const persistedDaily = includeUsage ? await buildApiFootballDailyUsageFromBandwidth({ currentBandwidth: bandwidth }) : null;
-  const stableDaily = persistedDaily && persistedDaily.networkRequests > apiFootballObservability.daily.networkRequests
-    ? persistedDaily
+  const stableDaily = persistedDaily?.networkRequests
+    ? { ...persistedDaily, persisted: persistedDaily }
     : { ...apiFootballObservability.daily, ...(persistedDaily ? { persisted: persistedDaily } : {}) };
   res.json({
     status: "ok",

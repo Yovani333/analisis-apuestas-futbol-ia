@@ -174,6 +174,19 @@ function mergeApiFootballUsage(target, service = {}) {
   const errors = number(service.errors);
   target.networkRequests += count;
   target.failures += errors;
+  target.providerReportedRequests = Math.max(
+    number(target.providerReportedRequests),
+    number(service.providerReportedRequests)
+  );
+  if (number(service.providerDailyLimit)) target.providerDailyLimit = number(service.providerDailyLimit);
+  if (service.providerDailyRemaining !== null && service.providerDailyRemaining !== undefined) {
+    const remaining = Number(service.providerDailyRemaining);
+    if (Number.isFinite(remaining) && remaining >= 0) {
+      target.providerDailyRemaining = target.providerDailyRemaining === undefined
+        ? remaining
+        : Math.min(target.providerDailyRemaining, remaining);
+    }
+  }
   for (const [endpoint, metrics] of entries(service.endpoints)) {
     const key = endpoint || "unknown";
     target.endpoints[key] ||= { networkRequests: 0, failures: 0 };
@@ -187,6 +200,9 @@ export function summarizeApiFootballDailyUsage(windows = [], { now = new Date(),
   const summary = {
     ...usageWindow,
     networkRequests: 0,
+    trackedNetworkRequests: 0,
+    providerReportedRequests: 0,
+    unattributedNetworkRequests: 0,
     failures: 0,
     endpoints: Object.create(null),
     source: "bandwidth_persisted_daily_window"
@@ -197,6 +213,12 @@ export function summarizeApiFootballDailyUsage(windows = [], { now = new Date(),
     mergeApiFootballUsage(summary, row.service_summary?.services?.["api-football"]);
   }
   mergeApiFootballUsage(summary, currentBandwidth?.serviceInitiated?.services?.["api-football"]);
+  summary.trackedNetworkRequests = summary.networkRequests;
+  summary.networkRequests = Math.max(summary.trackedNetworkRequests, summary.providerReportedRequests);
+  summary.unattributedNetworkRequests = Math.max(0, summary.networkRequests - summary.trackedNetworkRequests);
+  if (number(summary.providerDailyLimit) && summary.providerReportedRequests > 0) {
+    summary.providerDailyRemaining = Math.max(0, summary.providerDailyLimit - summary.providerReportedRequests);
+  }
   summary.endpoints = Object.fromEntries(Object.entries(summary.endpoints)
     .sort(([, left], [, right]) => number(right.networkRequests) - number(left.networkRequests)));
   return summary;

@@ -21,6 +21,7 @@ const state = {
     windowEndLocal: "",
     resetHourPacific: 17,
     networkRequests: 0,
+    providerReportedRequests: 0,
     failures: 0,
     endpoints: Object.create(null)
   }
@@ -85,8 +86,11 @@ function ensureDailyWindow(now = new Date()) {
     state.daily.windowEndLocal = window.windowEndLocal;
     state.daily.resetHourPacific = window.resetHourPacific;
     state.daily.networkRequests = 0;
+    state.daily.providerReportedRequests = 0;
     state.daily.failures = 0;
     state.daily.endpoints = Object.create(null);
+    state.rateLimit.dailyRemaining = null;
+    state.rateLimit.minuteRemaining = null;
   }
   return window;
 }
@@ -105,9 +109,31 @@ function updateRateLimit(headers) {
     minuteLimit: headerNumber(headers, "x-ratelimit-limit"),
     minuteRemaining: headerNumber(headers, "x-ratelimit-remaining")
   };
-  for (const [key, value] of Object.entries(values)) {
-    if (value !== null) state.rateLimit[key] = value;
+  if (values.dailyLimit !== null) state.rateLimit.dailyLimit = values.dailyLimit;
+  if (values.dailyRemaining !== null) {
+    state.rateLimit.dailyRemaining = state.rateLimit.dailyRemaining === null
+      ? values.dailyRemaining
+      : Math.min(state.rateLimit.dailyRemaining, values.dailyRemaining);
   }
+  if (values.minuteLimit !== null) state.rateLimit.minuteLimit = values.minuteLimit;
+  if (values.minuteRemaining !== null) state.rateLimit.minuteRemaining = values.minuteRemaining;
+  const dailyLimit = Number(state.rateLimit.dailyLimit);
+  const dailyRemaining = Number(state.rateLimit.dailyRemaining);
+  if (Number.isFinite(dailyLimit) && Number.isFinite(dailyRemaining) && dailyLimit >= dailyRemaining && dailyRemaining >= 0) {
+    state.daily.providerReportedRequests = Math.max(state.daily.providerReportedRequests, dailyLimit - dailyRemaining);
+  }
+}
+
+function providerReportedRequests() {
+  if (state.rateLimit.dailyLimit === null || state.rateLimit.dailyRemaining === null) {
+    return state.daily.providerReportedRequests > 0 ? state.daily.providerReportedRequests : null;
+  }
+  const limit = Number(state.rateLimit.dailyLimit);
+  const remaining = Number(state.rateLimit.dailyRemaining);
+  if (!Number.isFinite(limit) || !Number.isFinite(remaining) || limit < remaining || remaining < 0) {
+    return state.daily.providerReportedRequests > 0 ? state.daily.providerReportedRequests : null;
+  }
+  return Math.max(state.daily.providerReportedRequests, limit - remaining, 0);
 }
 
 export function recordApiFootballCacheHit({ endpoint } = {}) {
@@ -161,6 +187,8 @@ export function recordApiFootballFailure({ endpoint, code, headers }) {
 export function getApiFootballObservability() {
   ensureDailyWindow();
   const totalCacheLookups = state.cacheHits + state.cacheMisses;
+  const providerRequests = providerReportedRequests();
+  const trackedDailyRequests = state.daily.networkRequests;
   return {
     networkRequests: state.networkRequests,
     cacheHits: state.cacheHits,
@@ -178,7 +206,10 @@ export function getApiFootballObservability() {
       windowStartLocal: state.daily.windowStartLocal,
       windowEndLocal: state.daily.windowEndLocal,
       resetHourPacific: state.daily.resetHourPacific,
-      networkRequests: state.daily.networkRequests,
+      networkRequests: Math.max(trackedDailyRequests, providerRequests ?? 0),
+      trackedNetworkRequests: trackedDailyRequests,
+      providerReportedRequests: providerRequests,
+      unattributedNetworkRequests: providerRequests === null ? 0 : Math.max(0, providerRequests - trackedDailyRequests),
       failures: state.daily.failures,
       endpoints: Object.fromEntries(Object.entries(state.daily.endpoints).map(([endpoint, metrics]) => [endpoint, { ...metrics }]))
     },
@@ -204,6 +235,7 @@ export function resetApiFootballObservability() {
     windowEndLocal: window.windowEndLocal,
     resetHourPacific: window.resetHourPacific,
     networkRequests: 0,
+    providerReportedRequests: 0,
     failures: 0,
     endpoints: Object.create(null)
   });

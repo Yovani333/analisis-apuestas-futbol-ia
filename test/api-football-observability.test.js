@@ -53,6 +53,10 @@ test("conserva límites seguros reportados por API-Football", () => {
   assert.equal(metrics.endpoints["/fixtures/statistics"].networkRequests, 1);
   assert.equal(metrics.rateLimit.dailyRemaining, 7420);
   assert.equal(metrics.rateLimit.minuteRemaining, 288);
+  assert.equal(metrics.daily.networkRequests, 80);
+  assert.equal(metrics.daily.trackedNetworkRequests, 1);
+  assert.equal(metrics.daily.providerReportedRequests, 80);
+  assert.equal(metrics.daily.unattributedNetworkRequests, 79);
 });
 
 test("registra fallos con código sanitizado", () => {
@@ -91,4 +95,21 @@ test("observabilidad expone solicitudes diarias sin depender de recargar la pagi
   assert.equal(metrics.daily.endpoints["/fixtures"].networkRequests, 1);
   assert.equal(metrics.daily.endpoints["/fixtures/events"].networkRequests, 1);
   assert.equal(metrics.daily.endpoints["/fixtures/events"].failures, 1);
+});
+
+test("el total confirmado no disminuye si respuestas concurrentes llegan fuera de orden", () => {
+  resetApiFootballObservability();
+  recordApiFootballResponse({
+    endpoint: "/fixtures",
+    headers: headers({ "x-ratelimit-requests-limit": 7500, "x-ratelimit-requests-remaining": 6000 })
+  });
+  recordApiFootballResponse({
+    endpoint: "/leagues",
+    headers: headers({ "x-ratelimit-requests-limit": 7500, "x-ratelimit-requests-remaining": 6100 })
+  });
+  const metrics = getApiFootballObservability();
+  assert.equal(metrics.daily.providerReportedRequests, 1500);
+  assert.equal(metrics.daily.networkRequests, 1500);
+  assert.equal(metrics.daily.trackedNetworkRequests, 2);
+  assert.equal(metrics.rateLimit.dailyRemaining, 6000);
 });

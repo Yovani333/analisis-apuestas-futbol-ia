@@ -20,7 +20,11 @@ test("registra trafico saliente por servicio y endpoint sin guardar URLs complet
     service: "api-football",
     endpoint: "/fixtures",
     responseBytes: 1200,
-    requestBytes: 80
+    requestBytes: 80,
+    providerHeaders: { get: (name) => ({
+      "x-ratelimit-requests-limit": "7500",
+      "x-ratelimit-requests-remaining": "7420"
+    })[String(name).toLowerCase()] ?? null }
   });
   recordServiceInitiatedTraffic({
     service: "api-football",
@@ -34,6 +38,7 @@ test("registra trafico saliente por servicio y endpoint sin guardar URLs complet
   assert.equal(metrics.serviceInitiated.requestBytes, 100);
   assert.equal(metrics.serviceInitiated.services["api-football"].averageResponseBytes, 750);
   assert.equal(metrics.serviceInitiated.services["api-football"].endpoints["/fixtures"].responseBytes, 1500);
+  assert.equal(metrics.serviceInitiated.services["api-football"].providerReportedRequests, 80);
 });
 
 test("reconstruye el conteo diario de API-Football desde ventanas persistidas y memoria activa", () => {
@@ -44,6 +49,9 @@ test("reconstruye el conteo diario de API-Football desde ventanas persistidas y 
         "api-football": {
           count: 3,
           errors: 1,
+          providerDailyLimit: 7500,
+          providerDailyRemaining: 7420,
+          providerReportedRequests: 80,
           endpoints: {
             "/fixtures": { count: 2, errors: 0 },
             "/fixtures/events": { count: 1, errors: 1 }
@@ -75,7 +83,10 @@ test("reconstruye el conteo diario de API-Football desde ventanas persistidas y 
     currentBandwidth
   });
   assert.equal(summary.windowKey, "2026-07-28");
-  assert.equal(summary.networkRequests, 5);
+  assert.equal(summary.networkRequests, 80);
+  assert.equal(summary.trackedNetworkRequests, 5);
+  assert.equal(summary.providerReportedRequests, 80);
+  assert.equal(summary.unattributedNetworkRequests, 75);
   assert.equal(summary.failures, 1);
   assert.equal(summary.endpoints["/fixtures"].networkRequests, 2);
   assert.equal(summary.endpoints["/fixtures/events"].failures, 1);

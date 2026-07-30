@@ -68,6 +68,8 @@ test("Mi cuenta muestra conteo API solo para el administrador", () => {
   assert.match(services, /window\.dispatchEvent\(new CustomEvent\(API_REQUEST_COMPLETE_EVENT/);
   assert.match(app, /El boton solo lee el contador; no consume API-Football/);
   assert.match(app, /API-Football reales/);
+  assert.match(app, /Total confirmado por el proveedor/);
+  assert.match(app, /Cuenta API-Football \(sin ruta local\)/);
   assert.match(styles, /\.account-api-usage/);
   assert.match(styles, /\.api-usage-summary/);
 });

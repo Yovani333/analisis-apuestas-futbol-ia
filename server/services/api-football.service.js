@@ -213,7 +213,8 @@ async function apiRequest(path, params = {}, cacheTtl = CACHE_TTL, cachePolicy =
       endpoint: url.pathname,
       responseBytes: byteLength(text),
       retry,
-      error
+      error,
+      providerHeaders: responseToParse.headers
     });
     return text ? JSON.parse(text) : {};
   };

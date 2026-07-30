@@ -19,6 +19,13 @@ function number(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function headerNumber(headers, name) {
+  const value = headers?.get?.(name);
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function routeMetrics(container, key) {
   const safeKey = String(key || "unknown");
   container[safeKey] ||= {
@@ -82,7 +89,8 @@ export function recordServiceInitiatedTraffic({
   responseBytes = 0,
   requestBytes = 0,
   error = false,
-  retry = false
+  retry = false,
+  providerHeaders = null
 } = {}) {
   const responseAmount = number(responseBytes);
   const requestAmount = number(requestBytes);
@@ -95,6 +103,20 @@ export function recordServiceInitiatedTraffic({
   serviceRow.requestBytes += requestAmount;
   if (error) serviceRow.errors += 1;
   if (retry) serviceRow.retries += 1;
+  const providerDailyLimit = headerNumber(providerHeaders, "x-ratelimit-requests-limit");
+  const providerDailyRemaining = headerNumber(providerHeaders, "x-ratelimit-requests-remaining");
+  if (providerDailyLimit !== null) serviceRow.providerDailyLimit = providerDailyLimit;
+  if (providerDailyRemaining !== null) {
+    serviceRow.providerDailyRemaining = serviceRow.providerDailyRemaining === undefined
+      ? providerDailyRemaining
+      : Math.min(serviceRow.providerDailyRemaining, providerDailyRemaining);
+  }
+  if (providerDailyLimit !== null && providerDailyRemaining !== null && providerDailyLimit >= providerDailyRemaining) {
+    serviceRow.providerReportedRequests = Math.max(
+      number(serviceRow.providerReportedRequests),
+      providerDailyLimit - providerDailyRemaining
+    );
+  }
   serviceRow.averageResponseBytes = serviceRow.count ? Math.round(serviceRow.responseBytes / serviceRow.count) : 0;
   serviceRow.lastSeenAt = new Date().toISOString();
   endpointRow.count += 1;
@@ -124,6 +146,9 @@ function cloneServices(limit = 12) {
       averageResponseBytes: value.averageResponseBytes || (value.count ? Math.round(value.responseBytes / value.count) : 0),
       errors: value.errors || 0,
       retries: value.retries || 0,
+      providerDailyLimit: value.providerDailyLimit ?? null,
+      providerDailyRemaining: value.providerDailyRemaining ?? null,
+      providerReportedRequests: value.providerReportedRequests ?? null,
       lastSeenAt: value.lastSeenAt,
       endpoints: topRows(value.endpoints, limit)
     }]));
