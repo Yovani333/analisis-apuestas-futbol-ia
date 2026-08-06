@@ -39,6 +39,9 @@ import {
 } from "../services/cloud-sync.service.js";
 import { createServerEvidenceSnapshot, runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
 import { loadEvidenceLibrary } from "../services/audit/evidence-library.service.js";
+import { BEST_BETS_CONFIG } from "../config/best-bets.config.js";
+import { selectBestBets } from "../services/best-bets-selector.service.js";
+import { getBestBetsReport, latestBestBetsReport, saveBestBetsReport } from "../services/best-bets-store.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -269,6 +272,35 @@ const playerGoalDependencies = {
   getFixtureEvents
 };
 
+async function buildFixturePickCollection(fixtureId, { forceRefresh = false } = {}) {
+  const before = getApiFootballObservability();
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
+  dataset.poissonModel ||= calculatePoissonModel(dataset);
+  dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
+  dataset.cornersModel ||= calculateCornersModel(dataset);
+  const [teamPerformance, playerGoals] = await Promise.all([
+    getTeamPerformanceForFixture(dataset.fixture, { getPreviousFixtures: getPreviousFixturesForTeam, getFixturePlayers }),
+    getPlayerGoalCandidates(dataset, playerGoalDependencies)
+  ]);
+  const teamPerformanceWithPicks = {
+    ...teamPerformance,
+    picks: buildTeamPerformancePicks(dataset.fixture, teamPerformance.equipo_local, teamPerformance.equipo_visitante, { odds: dataset.researchData?.odds?.markets || [] })
+  };
+  dataset.playerGoalCandidates = playerGoals;
+  const results = {
+    dataPicks: generateDataPicks(dataset), outcome: buildOutcomeScenarios(dataset), poisson: dataset.poissonModel,
+    teamGoals: dataset.teamGoalProbability, corners: dataset.cornersModel, teamPerformance: teamPerformanceWithPicks,
+    playerGoals, specificMarkets: buildSpecificMarkets(dataset)
+  };
+  const after = getApiFootballObservability();
+  const apiUsage = {
+    networkRequests: Math.max(0, after.networkRequests - before.networkRequests), cacheHits: Math.max(0, after.cacheHits - before.cacheHits),
+    cacheMisses: Math.max(0, after.cacheMisses - before.cacheMisses), pendingHits: Math.max(0, after.pendingHits - before.pendingHits),
+    negativeCacheHits: Math.max(0, after.negativeCacheHits - before.negativeCacheHits), failures: Math.max(0, after.failures - before.failures)
+  };
+  return { dataset, collection: buildPickAnalysisCollection(dataset, results, apiUsage) };
+}
+
 apiRouter.get("/fixtures/:fixtureId/player-goal-candidates", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
@@ -379,40 +411,59 @@ apiRouter.post("/fixtures/:fixtureId/models/goal-half", requireLiveMode, asyncRo
 apiRouter.post("/fixtures/:fixtureId/picks/collection", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
   const forceRefresh = ["1", "true"].includes(String(req.query.refresh || "").toLowerCase());
-  const before = getApiFootballObservability();
-  const dataset = await getFixtureDataset(fixtureId, { forceRefresh });
-  dataset.poissonModel ||= calculatePoissonModel(dataset);
-  dataset.teamGoalProbability ||= calculateTeamGoalProbability(dataset);
-  dataset.cornersModel ||= calculateCornersModel(dataset);
-  const [teamPerformance, playerGoals] = await Promise.all([
-    getTeamPerformanceForFixture(dataset.fixture, { getPreviousFixtures: getPreviousFixturesForTeam, getFixturePlayers }),
-    getPlayerGoalCandidates(dataset, playerGoalDependencies)
-  ]);
-  const teamPerformanceWithPicks = {
-    ...teamPerformance,
-    picks: buildTeamPerformancePicks(dataset.fixture, teamPerformance.equipo_local, teamPerformance.equipo_visitante, { odds: dataset.researchData?.odds?.markets || [] })
+  const { collection } = await buildFixturePickCollection(fixtureId, { forceRefresh });
+  res.json(collection);
+}));
+
+const bestBetsLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: "draft-8", legacyHeaders: false });
+apiRouter.get("/best-bets/config", (req, res) => res.json(BEST_BETS_CONFIG));
+apiRouter.get("/best-bets", (req, res) => {
+  const report = latestBestBetsReport() || {
+    type: "bestBetsReport", generatedAt: null, summary: { fixturesEvaluated: 0, candidatesEvaluated: 0, approved: 0, observed: 0, discarded: 0 },
+    bestBet: null, picks: [], candidates: [], warnings: ["Todavía no se ha ejecutado el selector en este proceso."]
   };
-  dataset.playerGoalCandidates = playerGoals;
-  const results = {
-    dataPicks: generateDataPicks(dataset),
-    outcome: buildOutcomeScenarios(dataset),
-    poisson: dataset.poissonModel,
-    teamGoals: dataset.teamGoalProbability,
-    corners: dataset.cornersModel,
-    teamPerformance: teamPerformanceWithPicks,
-    playerGoals,
-    specificMarkets: buildSpecificMarkets(dataset)
-  };
-  const after = getApiFootballObservability();
-  const apiUsage = {
-    networkRequests: Math.max(0, after.networkRequests - before.networkRequests),
-    cacheHits: Math.max(0, after.cacheHits - before.cacheHits),
-    cacheMisses: Math.max(0, after.cacheMisses - before.cacheMisses),
-    pendingHits: Math.max(0, after.pendingHits - before.pendingHits),
-    negativeCacheHits: Math.max(0, after.negativeCacheHits - before.negativeCacheHits),
-    failures: Math.max(0, after.failures - before.failures)
-  };
-  res.json(buildPickAnalysisCollection(dataset, results, apiUsage));
+  const hasFilters = ["limit", "offset", "classification", "league", "market"].some((key) => req.query[key] !== undefined);
+  if (!hasFilters) return res.json(report);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 25));
+  const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
+  const filtered = (report.candidates || []).filter((candidate) =>
+    (!req.query.classification || candidate.classification === req.query.classification)
+    && (!req.query.league || candidate.leagueName === req.query.league)
+    && (!req.query.market || candidate.marketKey === req.query.market));
+  return res.json({ ...report, candidates: filtered.slice(offset, offset + limit), pagination: { offset, limit, total: filtered.length } });
+});
+apiRouter.get("/best-bets/:reportId", (req, res, next) => {
+  const report = getBestBetsReport(req.params.reportId);
+  if (!report) return next(new AppError("Reporte de mejores apuestas no encontrado.", 404, "BEST_BETS_REPORT_NOT_FOUND"));
+  res.json(report);
+});
+apiRouter.post("/best-bets/generate", requireLiveMode, bestBetsLimiter, asyncRoute(async (req, res) => {
+  const fixtureIds = [...new Set((Array.isArray(req.body?.fixtureIds) ? req.body.fixtureIds : []).map((value) => parseFixtureId(value)))]
+    .slice(0, BEST_BETS_CONFIG.thresholds.maximumFixturesPerRun);
+  if (!fixtureIds.length) throw new AppError("Selecciona al menos un encuentro para ejecutar el selector.", 400, "BEST_BETS_FIXTURES_REQUIRED");
+  const historyRecords = (Array.isArray(req.body?.historyRecords) ? req.body.historyRecords : []).slice(0, 1000).map((row) => ({
+    fixtureId: String(row.fixtureId || ""), leagueId: row.leagueId ?? null, marketKey: String(row.marketKey || row.marketCode || ""),
+    market: String(row.market || ""), originModule: String(row.originModule || ""), sourceModule: String(row.sourceModule || ""),
+    selectionKey: String(row.selectionKey || row.selectionCode || ""), modelVersion: String(row.modelVersion || ""), outcome: String(row.outcome || row.result || "")
+  }));
+  const fixturePackages = [];
+  const errors = [];
+  for (const fixtureId of fixtureIds) {
+    try {
+      const { dataset, collection } = await buildFixturePickCollection(fixtureId);
+      fixturePackages.push({
+        fixture: dataset.fixture, modelVersion: collection.modelVersion,
+        dataQualityScore: dataset.dataQuality?.score ?? collection.summary?.availablePct ?? 0,
+        summary: collection.summary, oddsMarkets: dataset.researchData?.odds?.markets || dataset.marketAnalysis || [],
+        candidates: collection.candidateMarkets || []
+      });
+    } catch (error) {
+      errors.push({ fixtureId: String(fixtureId), code: error.code || "BEST_BETS_FIXTURE_FAILED", message: error.message || "No se pudo evaluar el encuentro." });
+    }
+  }
+  const report = selectBestBets({ fixturePackages, historyRecords });
+  const stored = saveBestBetsReport({ ...report, errors });
+  res.json(stored);
 }));
 
 apiRouter.post("/fixtures/:fixtureId/models/outcome-1x2", requireLiveMode, asyncRoute(async (req, res) => {
