@@ -324,6 +324,21 @@ export const footballDataService = {
     return requestJson(`/api/simulation/audit?${new URLSearchParams(params)}`);
   },
 
+  async getBestBetsReport() {
+    return requestJson("/api/best-bets");
+  },
+
+  async getBestBetsConfig() {
+    return requestJson("/api/best-bets/config");
+  },
+
+  async generateBestBets(fixtureIds, historyRecords = []) {
+    return requestJson("/api/best-bets/generate", {
+      method: "POST",
+      body: JSON.stringify({ fixtureIds, historyRecords })
+    });
+  },
+
   async getFixtureResult(fixtureId) {
     const payload = await requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/result`);
     return payload.result;

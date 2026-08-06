@@ -1,5 +1,5 @@
 import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260712-expanded-competitions-v1";
-import { footballDataService } from "./services.js?v=20260729-goal-half-v1";
+import { footballDataService } from "./services.js?v=20260805-best-bets-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
   assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, createSavedParlay, createSavedPick,
@@ -9,7 +9,7 @@ import {
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginKey, pickOriginLabel } from "./pick-origins.js?v=20260726-favorite-origin-v1";
+import { pickOriginKey, pickOriginLabel } from "./pick-origins.js?v=20260805-best-bets-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260724-parlay-trash-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260722-corners-v2";
@@ -20,6 +20,7 @@ import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2
 import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.js?v=20260722-recent-form-v1";
 import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=20260725-xg-btts-v2";
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
+import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260805-best-bets-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -53,6 +54,8 @@ const state = {
   teamPerformanceByFixture: new Map(),
   playerGoalByFixture: new Map(),
   pickCollectionByFixture: new Map(Object.entries(readLocalJson(PICK_COLLECTION_CACHE_KEY, {}))),
+  bestBetsReport: null,
+  bestBetsFilters: { classification: "all", league: "all", market: "all" },
   favoriteTeamStatsById: new Map(),
   favoriteTeamLoadingIds: new Set(),
   parlayDraft: loadParlayDraft(),
@@ -92,6 +95,7 @@ const state = {
   isCapturingEvidence: false,
   isLoadingEvidenceLibrary: false,
   isCollectingPickInfo: false,
+  isGeneratingBestBets: false,
   lastLiveRefreshAt: null,
   simulationTeamOptionByValue: new Map(),
   simulationCompetitionOptionByValue: new Map(),
@@ -145,6 +149,14 @@ const elements = {
   showDataPicks: document.querySelector("#show-data-picks"),
   dataPicksStatus: document.querySelector("#data-picks-status"),
   dataPicksContent: document.querySelector("#data-picks-content"),
+  bestBetsStatus: document.querySelector("#best-bets-status"),
+  generateBestBets: document.querySelector("#generate-best-bets"),
+  bestBetsSummary: document.querySelector("#best-bets-summary"),
+  bestBetsControls: document.querySelector("#best-bets-controls"),
+  bestBetsClassification: document.querySelector("#best-bets-classification"),
+  bestBetsLeague: document.querySelector("#best-bets-league"),
+  bestBetsMarket: document.querySelector("#best-bets-market"),
+  bestBetsContent: document.querySelector("#best-bets-content"),
   showOutcome: document.querySelector("#show-outcome"),
   refreshOutcome: document.querySelector("#refresh-outcome"),
   outcomeStatus: document.querySelector("#outcome-status"),
@@ -1389,9 +1401,119 @@ function openCompetitionOrigin(origin, leagueSlug, originLabel) {
   });
 }
 
+function eligibleBestBetFixtures() {
+  const now = Date.now();
+  return state.fixtures
+    .filter((fixture) => fixture.dataSource === "api-football" && fixture.status === "scheduled")
+    .filter((fixture) => {
+      const kickoff = fixtureKickoffTime(fixture);
+      return kickoff === null || kickoff > now;
+    })
+    .sort((left, right) => (fixtureKickoffTime(left) ?? Infinity) - (fixtureKickoffTime(right) ?? Infinity))
+    .slice(0, 10);
+}
+
+function bestBetsMetric(label, value) {
+  return `<div class="best-bets-summary__metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function bestBetsPercent(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toFixed(1)}%` : "No disponible";
+}
+
+function populateBestBetsFilters(report) {
+  const leagues = [...new Set((report.candidates || []).map((candidate) => candidate.leagueName).filter(Boolean))].sort();
+  const markets = [...new Map((report.candidates || []).filter((candidate) => candidate.marketKey).map((candidate) => [candidate.marketKey, candidate.market || candidate.marketKey])).entries()];
+  elements.bestBetsLeague.innerHTML = '<option value="all">Todas</option>' + leagues.map((league) => `<option value="${escapeHtml(league)}">${escapeHtml(league)}</option>`).join("");
+  elements.bestBetsMarket.innerHTML = '<option value="all">Todos</option>' + markets.map(([key, label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`).join("");
+  elements.bestBetsClassification.value = state.bestBetsFilters.classification;
+  elements.bestBetsLeague.value = leagues.includes(state.bestBetsFilters.league) ? state.bestBetsFilters.league : "all";
+  elements.bestBetsMarket.value = markets.some(([key]) => key === state.bestBetsFilters.market) ? state.bestBetsFilters.market : "all";
+  state.bestBetsFilters.league = elements.bestBetsLeague.value;
+  state.bestBetsFilters.market = elements.bestBetsMarket.value;
+}
+
+function renderBestBets({ refreshFilters = false } = {}) {
+  const report = state.bestBetsReport;
+  const eligibleCount = eligibleBestBetFixtures().length;
+  elements.generateBestBets.disabled = state.isGeneratingBestBets || eligibleCount === 0;
+  elements.generateBestBets.textContent = state.isGeneratingBestBets ? "Analizando..." : "Analizar partidos";
+  if (!report) {
+    elements.bestBetsStatus.className = "status-badge status-badge--unavailable";
+    elements.bestBetsStatus.textContent = state.isGeneratingBestBets ? "Procesando" : "Sin ejecutar";
+    elements.bestBetsSummary.textContent = eligibleCount
+      ? `${eligibleCount} encuentro(s) programado(s) listo(s) para analizar manualmente.`
+      : "Busca partidos programados para habilitar el selector.";
+    elements.bestBetsControls.hidden = true;
+    elements.bestBetsContent.innerHTML = "";
+    return;
+  }
+  if (refreshFilters) populateBestBetsFilters(report);
+  const summary = report.summary || {};
+  const hasApproved = Number(summary.approved) > 0;
+  elements.bestBetsStatus.className = `status-badge status-badge--${hasApproved ? "available" : "partial"}`;
+  elements.bestBetsStatus.textContent = hasApproved ? `${summary.approved} aprobado(s)` : "Sin apuesta apta";
+  elements.bestBetsSummary.innerHTML = [
+    bestBetsMetric("Partidos", summary.fixturesEvaluated ?? 0),
+    bestBetsMetric("Candidatos", summary.candidatesEvaluated ?? 0),
+    bestBetsMetric("Aprobados", summary.approved ?? 0),
+    bestBetsMetric("Observar", summary.observed ?? 0),
+    bestBetsMetric("Descartados", summary.discarded ?? 0)
+  ].join("");
+  elements.bestBetsControls.hidden = false;
+  const filtered = filterBestBetCandidates(report, state.bestBetsFilters);
+  const best = report.bestBet;
+  const highlight = best ? `<div class="best-bets-highlight"><div><span class="eyebrow">Mejor apuesta general</span><strong>${escapeHtml(best.selection)}</strong><p>${escapeHtml(best.homeTeam)} vs ${escapeHtml(best.awayTeam)} · ${escapeHtml(best.leagueName)} · puntuación ${escapeHtml(best.selectorScore)}/100</p></div><button class="button button--primary button--compact" type="button" data-add-best-bet="${escapeHtml(best.id)}">Agregar</button></div>`
+    : `<div class="best-bets-highlight"><div><strong>No existe una apuesta recomendable</strong><p>${escapeHtml(report.warnings?.[0] || "Ningún candidato superó simultáneamente los filtros de valor, calidad, riesgo e historial.")}</p></div></div>`;
+  const rows = filtered.map((candidate) => {
+    const approved = ["APTO", "APTO CON PRECAUCIÓN"].includes(candidate.classification);
+    const detailId = `best-bet-detail-${String(candidate.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    const evidence = [
+      ...(candidate.reasons || []).map((reason) => `<li>${escapeHtml(reason)}</li>`),
+      ...(candidate.warnings || []).map((warning) => `<li>Advertencia: ${escapeHtml(warning)}</li>`),
+      ...(candidate.exclusionReasons || []).map((reason) => `<li>Descartado: ${escapeHtml(reason)}</li>`)
+    ].join("") || "<li>Sin detalles adicionales.</li>";
+    return `<tr>
+      <td><strong>${escapeHtml(candidate.homeTeam)} vs ${escapeHtml(candidate.awayTeam)}</strong><small>${escapeHtml(candidate.leagueName)} · ${escapeHtml(candidate.kickoffTime ? formatDate(String(candidate.kickoffTime).slice(0, 10)) : "Fecha pendiente")}</small></td>
+      <td><strong>${escapeHtml(candidate.selection)}</strong><small>${escapeHtml(candidate.market)}</small></td>
+      <td><strong>${escapeHtml(candidate.classification)}</strong><small>Selector ${escapeHtml(candidate.selectorScore)}/100</small></td>
+      <td><strong>Modelo ${escapeHtml(bestBetsPercent(candidate.modelProbabilityPct))}</strong><small>Implícita justa ${escapeHtml(bestBetsPercent(candidate.normalizedImpliedProbabilityPct))}</small></td>
+      <td><strong>${candidate.odds ? escapeHtml(Number(candidate.odds).toFixed(2)) : "No disponible"}</strong><small>Justa ${candidate.fairOdds ? escapeHtml(Number(candidate.fairOdds).toFixed(2)) : "—"} · ${escapeHtml(candidate.bookmaker || "Casa no indicada")}</small></td>
+      <td><strong>Edge ${escapeHtml(bestBetsPercent(candidate.edgePct))}</strong><small>EV ${escapeHtml(bestBetsPercent(candidate.expectedValuePct))}</small></td>
+      <td><strong>Calidad ${escapeHtml(candidate.dataQualityScore)}/100</strong><small>Riesgo ${escapeHtml(candidate.riskScore)}/100 · historial n=${escapeHtml(candidate.historicalReliability?.sampleSize ?? 0)}</small></td>
+      <td class="best-bets-table__actions"><button class="button button--secondary button--compact" type="button" data-view-best-bet="${escapeHtml(detailId)}" aria-expanded="false">Ver evidencia</button>${approved ? `<button class="button button--primary button--compact" type="button" data-add-best-bet="${escapeHtml(candidate.id)}">Agregar</button>` : ""}<div id="${escapeHtml(detailId)}" class="best-bets-evidence" hidden><strong>Desglose</strong><ul>${evidence}</ul><small>Fiabilidad histórica: ${escapeHtml(candidate.historicalReliability?.status || "insuficiente")} · configuración ${escapeHtml(candidate.configVersion || "no disponible")}</small></div></td>
+    </tr>`;
+  }).join("");
+  elements.bestBetsContent.innerHTML = highlight + (rows ? `<table class="best-bets-table"><thead><tr><th>Partido</th><th>Selección</th><th>Estado</th><th>Probabilidades</th><th>Cuota</th><th>Valor</th><th>Control</th><th>Acciones</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="best-bets-empty">No hay candidatos para los filtros seleccionados.</div>');
+}
+
+async function generateBestBetsReport() {
+  if (state.isGeneratingBestBets) return;
+  const fixtures = eligibleBestBetFixtures();
+  if (!fixtures.length) return showNotice("Busca al menos un partido programado antes de ejecutar el selector.");
+  state.isGeneratingBestBets = true;
+  state.bestBetsReport = null;
+  renderBestBets();
+  try {
+    const historyRecords = buildBestBetsHistoryRecords(state.savedPicks, state.savedParlays);
+    state.bestBetsReport = await footballDataService.generateBestBets(fixtures.map((fixture) => fixture.id), historyRecords);
+    renderBestBets({ refreshFilters: true });
+    const approved = state.bestBetsReport.summary?.approved || 0;
+    showNotice(approved ? `Selector completado: ${approved} apuesta(s) aprobada(s).` : "Selector completado sin picks que superen todos los filtros.");
+  } catch (error) {
+    state.bestBetsReport = null;
+    showNotice(error.message || "No fue posible ejecutar el selector de mejores apuestas.");
+  } finally {
+    state.isGeneratingBestBets = false;
+    renderBestBets();
+  }
+}
+
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
+  renderBestBets();
   refreshSimulationPickers();
 
   if (!state.fixtures.length) {
@@ -5389,6 +5511,8 @@ async function searchFixtures(event) {
     const searchResults = await footballDataService.searchFixtures(filters);
     const filteredResults = filterPastTodayFixtures(searchResults, filters);
     state.fixtures = filteredResults.fixtures;
+    state.bestBetsReport = null;
+    state.bestBetsFilters = { classification: "all", league: "all", market: "all" };
     purgeInvalidEvidenceSnapshots({ sync: true, render: false });
     const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
     const validCount = state.fixtures.length;
@@ -5856,6 +5980,32 @@ elements.matchesList.addEventListener("click", async (event) => {
     showFixtureReadyDialog();
     return;
   }
+});
+elements.generateBestBets.addEventListener("click", () => void generateBestBetsReport());
+[elements.bestBetsClassification, elements.bestBetsLeague, elements.bestBetsMarket].forEach((control) => control.addEventListener("change", () => {
+  state.bestBetsFilters = {
+    classification: elements.bestBetsClassification.value,
+    league: elements.bestBetsLeague.value,
+    market: elements.bestBetsMarket.value
+  };
+  renderBestBets();
+}));
+elements.bestBetsContent.addEventListener("click", (event) => {
+  const evidenceButton = event.target.closest("[data-view-best-bet]");
+  if (evidenceButton) {
+    const detail = document.getElementById(evidenceButton.dataset.viewBestBet);
+    if (detail) {
+      detail.hidden = !detail.hidden;
+      evidenceButton.setAttribute("aria-expanded", String(!detail.hidden));
+      evidenceButton.textContent = detail.hidden ? "Ver evidencia" : "Ocultar evidencia";
+    }
+    return;
+  }
+  const addButton = event.target.closest("[data-add-best-bet]");
+  if (!addButton || !state.bestBetsReport) return;
+  const candidate = (state.bestBetsReport.candidates || []).find((item) => String(item.id) === String(addButton.dataset.addBestBet));
+  if (!candidate || !["APTO", "APTO CON PRECAUCIÓN"].includes(candidate.classification)) return;
+  appendPickToParlay(bestBetCandidateToLeg(candidate), "Mejor apuesta agregada a Mi parlay.");
 });
 elements.favoriteTeamsList.addEventListener("click", (event) => {
   const refresh = event.target.closest("[data-refresh-favorite-team]");

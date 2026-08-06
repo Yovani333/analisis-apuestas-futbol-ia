@@ -151,6 +151,29 @@
         </form>
       </aside>
 
+      <section id="best-bets-panel" class="panel best-bets-panel" aria-labelledby="best-bets-title">
+        <div class="panel-heading best-bets-heading">
+          <div>
+            <p class="eyebrow">Selector inteligente</p>
+            <h2 id="best-bets-title">Mejores apuestas</h2>
+          </div>
+          <div class="panel-actions">
+            <span id="best-bets-status" class="status-badge status-badge--unavailable">Sin ejecutar</span>
+            <button id="generate-best-bets" class="button button--primary button--compact" type="button" disabled>Analizar partidos</button>
+          </div>
+        </div>
+        <p class="best-bets-intro">Ordena los mercados ya calculados por valor, calidad, riesgo e historial. No realiza apuestas ni fuerza una recomendaci&oacute;n.</p>
+        <div id="best-bets-summary" class="best-bets-summary" aria-live="polite">
+          Busca partidos programados y pulsa &ldquo;Analizar partidos&rdquo;.
+        </div>
+        <div id="best-bets-controls" class="best-bets-controls" hidden>
+          <label>Clasificaci&oacute;n<select id="best-bets-classification"><option value="all">Todas</option><option value="APTO">Apto</option><option value="APTO CON PRECAUCI&Oacute;N">Apto con precauci&oacute;n</option><option value="OBSERVAR">Observar</option><option value="DESCARTADO">Descartado</option></select></label>
+          <label>Liga<select id="best-bets-league"><option value="all">Todas</option></select></label>
+          <label>Mercado<select id="best-bets-market"><option value="all">Todos</option></select></label>
+        </div>
+        <div id="best-bets-content" class="best-bets-content"></div>
+      </section>
+
       <section class="panel matches-panel" aria-labelledby="matches-title">
         <div class="panel-heading">
           <div>
@@ -668,6 +691,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260729-goal-half-v1"></script>
+    <script type="module" src="app.js?v=20260805-best-bets-v1"></script>
   </body>
 </html>

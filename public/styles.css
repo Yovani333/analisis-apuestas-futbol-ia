@@ -2151,8 +2151,32 @@ body {
   padding-top: 14px;
 }
 .dashboard > .filters { grid-column: 1 / -1; }
+.dashboard > .best-bets-panel { grid-column: 1 / -1; }
 .dashboard > .matches-panel { grid-column: span 5; }
 .dashboard > .insights-column { grid-column: span 7; }
+
+.best-bets-panel { border-top: 2px solid var(--primary); }
+.best-bets-heading { align-items: center; }
+.best-bets-intro { margin: -2px 0 12px; color: var(--muted); font-size: .76rem; }
+.best-bets-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; color: var(--muted); font-size: .76rem; }
+.best-bets-summary__metric { min-width: 0; padding: 9px; border: 1px solid var(--border); border-radius: 6px; }
+.best-bets-summary__metric strong { display: block; margin-top: 3px; color: var(--text); font-size: .95rem; }
+.best-bets-highlight { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: 12px; padding: 11px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.best-bets-highlight p { margin: 3px 0 0; color: var(--muted); font-size: .72rem; }
+.best-bets-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.best-bets-controls label { color: var(--muted); font-size: .63rem; text-transform: uppercase; }
+.best-bets-controls select { width: 100%; margin-top: 4px; }
+.best-bets-content { margin-top: 10px; overflow-x: auto; overscroll-behavior-inline: contain; }
+.best-bets-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: .7rem; }
+.best-bets-table th,
+.best-bets-table td { padding: 8px 7px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+.best-bets-table th { color: var(--muted); font-size: .61rem; text-transform: uppercase; }
+.best-bets-table strong { display: block; }
+.best-bets-table small { display: block; margin-top: 2px; color: var(--muted); }
+.best-bets-table__actions { display: flex; flex-wrap: wrap; gap: 5px; min-width: 150px; }
+.best-bets-evidence { margin-top: 6px; padding: 7px; color: var(--muted); background: var(--surface-soft); border-radius: 5px; }
+.best-bets-evidence ul { margin: 4px 0 0; padding-left: 17px; }
+.best-bets-empty { padding: 18px 0 6px; color: var(--muted); text-align: center; }
 
 .panel,
 .match-card,
@@ -2851,6 +2875,15 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .app-header { transition: none; }
+}
+
+@media (max-width: 720px) {
+  .best-bets-heading { align-items: stretch; }
+  .best-bets-heading .panel-actions { width: 100%; }
+  .best-bets-heading .button { flex: 1; }
+  .best-bets-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .best-bets-highlight { grid-template-columns: 1fr; }
+  .best-bets-controls { grid-template-columns: 1fr; }
 }
 
 .favorite-teams-view { display: grid; align-content: start; gap: 12px; }

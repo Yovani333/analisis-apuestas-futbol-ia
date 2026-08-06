@@ -13,6 +13,7 @@ export const PICK_ORIGINS = Object.freeze({
   team_goals: { label: "Ataque vs Defensa", module: "Guía de análisis / Ataque vs Defensa", status: "internal_alias" },
   specific_markets: { label: "Catálogo de mercados", module: "Catálogo de mercados", status: "active" },
   pick_analysis_snapshot: { label: "Picks recomendados", module: "Picks recomendados", status: "active" },
+  best_bets_selector: { label: "Mejores apuestas", module: "Dashboard / Mejores apuestas", status: "active" },
   team_average_performance: { label: "Rendimiento promedio por equipo", module: "Rendimiento promedio por equipo", status: "active" },
   player_goal_candidate: { label: "Jugador con posible gol", module: "Jugador con posible gol", status: "active" },
   manual: { label: "Manual", module: "Captura manual", status: "reserved" },
