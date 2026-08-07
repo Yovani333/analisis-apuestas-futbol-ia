@@ -8,6 +8,8 @@ const MAX_WATCHLIST_FIXTURES = 100;
 const MAX_AUTOMATIC_EVIDENCE_METADATA_ON_STATE = 100;
 const MAX_EVIDENCE_LIBRARY_PAGE = 200;
 const MAX_EVIDENCE_LIBRARY_TOTAL = 500;
+const MAX_EVIDENCE_LABEL_PAGE = 1_000;
+const MAX_EVIDENCE_LABEL_TOTAL = 20_000;
 const HEAVY_SYNC_KEYS = new Set([
   "raw", "rawData", "dataset", "matchData", "fullDataset", "debug", "logs",
   "apiResponse", "response", "scoreMatrix", "goalMatrix", "matrix",
@@ -88,7 +90,7 @@ function isMissingCloudSchema(error) {
 }
 
 function isMissingEvidenceSchema(error) {
-  return /evidence_watchlist|automatic_evidence_snapshots|schema cache|could not find|does not exist|42P01|PGRST205/i.test(providerMessage(error));
+  return /evidence_watchlist|automatic_evidence_snapshots|evidence_pick_outcomes|schema cache|could not find|does not exist|42P01|PGRST205/i.test(providerMessage(error));
 }
 
 function isMissingRpc(error, functionName) {
@@ -468,6 +470,91 @@ export async function listCloudEvidenceSnapshots(authorization, input = {}) {
   };
 }
 
+function normalizedAuditOutcome(value) {
+  const key = String(value || "").trim().toUpperCase();
+  return new Set(["HIT", "MISS", "VOID", "NO_BET", "DATA_INSUFFICIENT", "LIVE_PENDING"]).has(key) ? key : "";
+}
+
+function normalizedPickKey(row = {}) {
+  const selectionKey = String(row.selectionKey || "").trim();
+  if (selectionKey) return `key:${selectionKey}`;
+  const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return `text:${normalize(row.market)}:${normalize(row.pick || row.selection)}`;
+}
+
+function evidenceAuditLabelPayload(userId, evidence, audit, now = new Date()) {
+  if (!filterValidEvidenceSnapshots([evidence]).length) return [];
+  if (String(audit?.fixtureId || "") !== String(evidence.fixture?.id || "")) return [];
+  const evaluatedAt = Number.isNaN(Date.parse(audit.generatedAt || "")) ? now.toISOString() : new Date(audit.generatedAt).toISOString();
+  return (Array.isArray(audit.records) ? audit.records : []).map((row) => {
+    const outcome = normalizedAuditOutcome(row.outcome);
+    if (!outcome) return null;
+    return {
+      user_id: userId,
+      snapshot_id: String(evidence.id).slice(0, 240),
+      fixture_id: String(evidence.fixture.id).slice(0, 80),
+      pick_key: normalizedPickKey(row).slice(0, 300),
+      selection_key: String(row.selectionKey || "").slice(0, 240) || null,
+      market: String(row.market || "No disponible").slice(0, 240),
+      selection: String(row.pick || row.selection || "No disponible").slice(0, 300),
+      model_version: String(row.modelVersion || evidence.modules?.dataPicks?.modelVersion || evidence.auditMetadata?.dataPicksModelVersion || "unknown").slice(0, 160),
+      outcome,
+      evaluated_at: evaluatedAt,
+      updated_at: now.toISOString()
+    };
+  }).filter(Boolean);
+}
+
+export async function saveEvidenceAuditLabels(authorization, evidence, audit) {
+  const token = bearerToken(authorization);
+  const userId = userIdFromToken(token);
+  const payload = evidenceAuditLabelPayload(userId, evidence, audit);
+  if (!payload.length) return { saved: 0, status: "no_valid_labels" };
+  try {
+    await supabaseRequest("/rest/v1/evidence_pick_outcomes?on_conflict=user_id,snapshot_id,pick_key", {
+      method: "POST", token, body: payload, prefer: "resolution=merge-duplicates,return=minimal"
+    });
+  } catch (error) {
+    if (isMissingEvidenceSchema(error)) return { saved: 0, status: "schema_pending" };
+    throw error;
+  }
+  return { saved: payload.length, status: "saved" };
+}
+
+export async function listAllCloudEvidenceSnapshots(authorization) {
+  const snapshots = new Map();
+  let offset = 0;
+  let pages = 0;
+  while (offset !== null && offset < MAX_EVIDENCE_LIBRARY_TOTAL) {
+    const page = await listCloudEvidenceSnapshots(authorization, { limit: MAX_EVIDENCE_LIBRARY_PAGE, offset });
+    pages += 1;
+    for (const snapshot of page.snapshots || []) if (snapshot?.id) snapshots.set(String(snapshot.id), snapshot);
+    offset = page.nextOffset;
+  }
+  return { snapshots: [...snapshots.values()], count: snapshots.size, pages };
+}
+
+export async function listCloudEvidenceAuditLabels(authorization) {
+  const token = bearerToken(authorization);
+  const labels = [];
+  let offset = 0;
+  try {
+    while (offset < MAX_EVIDENCE_LABEL_TOTAL) {
+      const limit = Math.min(MAX_EVIDENCE_LABEL_PAGE, MAX_EVIDENCE_LABEL_TOTAL - offset);
+      const payload = await supabaseRequest(`/rest/v1/evidence_pick_outcomes?select=snapshot_id,fixture_id,pick_key,selection_key,market,selection,model_version,outcome,evaluated_at&order=evaluated_at.asc&limit=${limit}&offset=${offset}`, { token });
+      const rows = Array.isArray(payload) ? payload : [];
+      labels.push(...rows);
+      if (rows.length < limit) break;
+      offset += limit;
+    }
+  } catch (error) {
+    if (isMissingEvidenceSchema(error)) return { labels: [], count: 0, status: "schema_pending" };
+    throw error;
+  }
+  return { labels, count: labels.length, status: "available" };
+}
+
 function normalizeWatchedFixture(fixture, userId, now = new Date()) {
   const fixtureId = String(fixture?.id || "");
   const fixtureDate = new Date(fixture?.utcDateTime || "");
@@ -728,4 +815,4 @@ export async function updateEvidenceWatchlist(row, changes) {
   });
 }
 
-export const cloudSyncInternals = { bearerToken, compactCloudStateResponse, isMissingCloudSchema, isMissingEvidenceSchema, isMissingRpc, isRpcExecutionFailure, mergeEvidenceSnapshots, mergeNormalizedState, normalizedState, normalizeWatchedFixture, providerMessage, userIdFromToken, validateCredentials };
+export const cloudSyncInternals = { bearerToken, compactCloudStateResponse, evidenceAuditLabelPayload, isMissingCloudSchema, isMissingEvidenceSchema, isMissingRpc, isRpcExecutionFailure, mergeEvidenceSnapshots, mergeNormalizedState, normalizedAuditOutcome, normalizedPickKey, normalizedState, normalizeWatchedFixture, providerMessage, userIdFromToken, validateCredentials };

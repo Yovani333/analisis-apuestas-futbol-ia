@@ -21,6 +21,11 @@ El exportador prepara ejemplos supervisados sin entrenar modelos ni cambiar deci
 
 La salida contiene un `fingerprint` SHA-256 determinista sobre las filas. Esto permite demostrar que dos ejecuciones con las mismas entradas producen el mismo conjunto de entrenamiento.
 
-## Limite actual
+## Integracion en linea
 
-Las evidencias en Supabase y las evaluaciones deben reunirse antes de llamar al exportador. Esta etapa no agrega consultas masivas, tablas nuevas ni persistencia. La siguiente fase debera definir un proceso administrativo autenticado que lea las evidencias por paginas y conserve las etiquetas completas de auditoria.
+- `GET /api/audit/neural-dataset` entrega un resumen autenticado y no incluye filas por defecto.
+- `GET /api/audit/neural-dataset?includeRows=true` incluye las filas entrenables para una exportacion administrativa explicita.
+- Las evidencias se leen en backend por paginas de hasta 200, con un limite total de 500 snapshots.
+- Las etiquetas se guardan en `evidence_pick_outcomes` cuando el backend completa una auditoria.
+- No se consulta API-Football para construir el dataset.
+- La ausencia de la migracion 007 se reporta como `schema_pending` y no rompe la auditoria existente.

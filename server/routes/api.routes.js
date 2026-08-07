@@ -35,13 +35,15 @@ import {
 } from "../services/simulation-audit-store.service.js";
 import {
   cloudConfiguration, getCloudState, getEvidenceAutomationStatus, refreshCloudSession, registerEvidenceWatchlist,
-  listCloudEvidenceSnapshots, saveCloudEvidenceSnapshots, saveCloudState, signInCloudUser, signOutCloudUser, signUpCloudUser
+  listAllCloudEvidenceSnapshots, listCloudEvidenceAuditLabels, listCloudEvidenceSnapshots, saveCloudEvidenceSnapshots,
+  saveCloudState, saveEvidenceAuditLabels, signInCloudUser, signOutCloudUser, signUpCloudUser
 } from "../services/cloud-sync.service.js";
 import { createServerEvidenceSnapshot, runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
 import { loadEvidenceLibrary } from "../services/audit/evidence-library.service.js";
 import { BEST_BETS_CONFIG } from "../config/best-bets.config.js";
 import { selectBestBets } from "../services/best-bets-selector.service.js";
 import { getBestBetsReport, latestBestBetsReport, saveBestBetsReport } from "../services/best-bets-store.service.js";
+import { exportNeuralTrainingDataset } from "../services/audit/neural-dataset-export.service.js";
 
 export const apiRouter = Router();
 const DEPLOYED_AT = new Date().toISOString();
@@ -125,6 +127,41 @@ apiRouter.post("/automation/evidence/run", requireLiveMode, automationLimiter, a
 }));
 
 apiRouter.get("/audit/evidence-library", (req, res) => res.json(loadEvidenceLibrary()));
+
+apiRouter.get("/audit/neural-dataset", asyncRoute(async (req, res) => {
+  const authorization = req.headers.authorization;
+  const [evidenceLibrary, storedLabels] = await Promise.all([
+    listAllCloudEvidenceSnapshots(authorization),
+    listCloudEvidenceAuditLabels(authorization)
+  ]);
+  const audits = {};
+  for (const label of storedLabels.labels || []) {
+    if (!audits[label.snapshot_id]) audits[label.snapshot_id] = { fixtureId: label.fixture_id, records: [] };
+    audits[label.snapshot_id].records.push({
+      selectionKey: label.selection_key,
+      market: label.market,
+      pick: label.selection,
+      modelVersion: label.model_version,
+      outcome: label.outcome
+    });
+  }
+  const dataset = exportNeuralTrainingDataset({ snapshots: evidenceLibrary.snapshots, audits });
+  const includeRows = ["1", "true"].includes(String(req.query.includeRows || "").toLowerCase());
+  const exclusionSummary = Object.entries(dataset.exclusions.reduce((summary, row) => {
+    summary[row.reason] = (summary[row.reason] || 0) + 1;
+    return summary;
+  }, {})).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count);
+  res.json({
+    schemaVersion: dataset.schemaVersion,
+    generatedAt: dataset.generatedAt,
+    fingerprint: dataset.fingerprint,
+    policy: dataset.policy,
+    summary: { ...dataset.summary, evidencePagesRead: evidenceLibrary.pages, storedLabels: storedLabels.count, labelStorageStatus: storedLabels.status },
+    readiness: dataset.readiness,
+    exclusionSummary,
+    ...(includeRows ? { rows: dataset.rows, exclusions: dataset.exclusions } : {})
+  });
+}));
 
 apiRouter.get("/leagues", asyncRoute(async (req, res) => {
   if (env.dataMode !== "live") {
@@ -337,7 +374,13 @@ apiRouter.post("/fixtures/:fixtureId/audit/snapshot", requireLiveMode, asyncRout
     const pendingError = resolvePendingAuditError(result);
     throw new AppError(pendingError.message, 409, pendingError.code);
   }
-  res.json(runSavedEvidenceBacktest(evidence, result));
+  const audit = runSavedEvidenceBacktest(evidence, result);
+  let labelPersistence = { saved: 0, status: "not_authenticated" };
+  if (String(req.headers.authorization || "").startsWith("Bearer ")) {
+    try { labelPersistence = await saveEvidenceAuditLabels(req.headers.authorization, evidence, audit); }
+    catch { labelPersistence = { saved: 0, status: "temporarily_unavailable" }; }
+  }
+  res.json({ ...audit, labelPersistence });
 }));
 
 for (const [route, key] of [["statistics", "statistics"], ["standings", "standings"], ["head-to-head", "h2h"], ["injuries", "injuries"], ["lineups", "lineups"], ["odds", "odds"], ["events", "events"], ["players", "players"], ["team-statistics", "teamStatistics"]]) {
