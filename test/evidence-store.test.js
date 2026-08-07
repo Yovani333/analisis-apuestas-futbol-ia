@@ -41,7 +41,7 @@ test("genera evidencia textual con modelos, picks y campos de auditoría", () =>
     dataPicks: { modelVersion: "picks-data-engine-v3", adjustmentsVersion: "predictive-adjustments-v1", finalDecision: "PRECAUCIÓN", picks: [{ market: "Total", selection: "Over 1.5", decision: "PRECAUCIÓN", decimalOdds: 1.5, expectedValuePct: 5, conservativeExpectedValuePct: 1, confidenceScore: 60, statisticalConfidenceScore: 58, footballConfidenceScore: 62, riskScore: 40 }] },
     poisson: { lambdaHome: 1.4, lambdaAway: 1.1, probabilities: { over15: 71 } },
     teamGoals: { homeGoalProbability: 75, awayGoalProbability: 65, btts: { yesProbabilityPct: 54 } }
-  });
+  }, new Date("2026-08-03T17:00:00Z"));
   const text = evidenceSnapshotToText(snapshot);
   assert.match(text, /EVIDENCIA PREPARTIDO AUDITABLE/);
   assert.match(text, /Lambda local: 1.4/);
