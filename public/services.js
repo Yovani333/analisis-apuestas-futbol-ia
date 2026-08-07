@@ -344,10 +344,14 @@ export const footballDataService = {
     return payload.result;
   },
 
-  async auditFixture(fixtureId, evidence = null) {
+  async auditFixture(fixtureId, evidence = null, token = "") {
     const runtime = await this.getRuntime();
     if (runtime.mode !== "live") throw new Error("La auditoría real requiere API-Football; los cálculos se validan localmente con mocks.");
-    return requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/audit${evidence ? "/snapshot" : ""}`, { method: "POST", body: evidence ? JSON.stringify({ evidence }) : undefined });
+    return requestJson(`/api/fixtures/${encodeURIComponent(fixtureId)}/audit${evidence ? "/snapshot" : ""}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: evidence ? JSON.stringify({ evidence }) : undefined
+    });
   },
 
   async captureEvidence(fixtureId) {

@@ -163,6 +163,57 @@ apiRouter.get("/audit/neural-dataset", asyncRoute(async (req, res) => {
   });
 }));
 
+apiRouter.post("/audit/neural-dataset/backfill", requireLiveMode, asyncRoute(async (req, res) => {
+  const authorization = req.headers.authorization;
+  const limit = Math.max(1, Math.min(10, Number(req.body?.limit) || 5));
+  const dryRun = req.body?.dryRun === true;
+  const storedLabels = await listCloudEvidenceAuditLabels(authorization);
+  const labelsBySnapshot = new Map();
+  for (const label of storedLabels.labels || []) labelsBySnapshot.set(label.snapshot_id, (labelsBySnapshot.get(label.snapshot_id) || 0) + 1);
+  const candidates = [];
+  let offset = 0;
+  let pagesRead = 0;
+  while (offset !== null && candidates.length < limit) {
+    const page = await listCloudEvidenceSnapshots(authorization, { limit: 25, offset });
+    pagesRead += 1;
+    for (const snapshot of page.snapshots || []) {
+      const expected = Array.isArray(snapshot.modules?.dataPicks?.picks) ? snapshot.modules.dataPicks.picks.length : 0;
+      const stored = labelsBySnapshot.get(String(snapshot.id)) || 0;
+      const kickoffTime = Date.parse(snapshot.fixture?.utcDateTime || snapshot.fixture?.date || "");
+      const resultCanExist = Number.isFinite(kickoffTime) && kickoffTime < Date.now();
+      if (resultCanExist && expected > stored) candidates.push({ snapshot, expected, stored });
+      if (candidates.length >= limit) break;
+    }
+    offset = page.nextOffset;
+  }
+  if (dryRun) return res.json({ dryRun: true, candidates: candidates.map(({ snapshot, expected, stored }) => ({ snapshotId: snapshot.id, fixtureId: snapshot.fixture?.id, expected, stored })), pagesRead, fixtureResultChecks: 0 });
+  const results = [];
+  let fixtureResultChecks = 0;
+  for (const candidate of candidates) {
+    try {
+      fixtureResultChecks += 1;
+      const fixtureResult = await getFixtureResult(candidate.snapshot.fixture.id);
+      if (!fixtureResult.finished) {
+        results.push({ snapshotId: candidate.snapshot.id, fixtureId: candidate.snapshot.fixture.id, status: fixtureResult.appStatus || "pending", saved: 0 });
+        continue;
+      }
+      const audit = runSavedEvidenceBacktest(candidate.snapshot, fixtureResult);
+      const persistence = await saveEvidenceAuditLabels(authorization, candidate.snapshot, audit);
+      results.push({ snapshotId: candidate.snapshot.id, fixtureId: candidate.snapshot.fixture.id, status: persistence.status, saved: persistence.saved });
+    } catch (error) {
+      results.push({ snapshotId: candidate.snapshot.id, fixtureId: candidate.snapshot.fixture?.id, status: "error", saved: 0, code: error?.code || "BACKFILL_FAILED" });
+    }
+  }
+  res.json({
+    dryRun: false, requested: limit, candidates: candidates.length,
+    completed: results.filter((row) => row.status === "saved").length,
+    labelsSaved: results.reduce((sum, row) => sum + Number(row.saved || 0), 0),
+    pending: results.filter((row) => ["scheduled", "live", "pending"].includes(row.status)).length,
+    errors: results.filter((row) => row.status === "error").length,
+    pagesRead, fixtureResultChecks, results
+  });
+}));
+
 apiRouter.get("/leagues", asyncRoute(async (req, res) => {
   if (env.dataMode !== "live") {
     return res.json({ mode: "mock", leagues: ALLOWED_LEAGUES.map(({ apiNames, ...league }) => ({ ...league, apiId: null, verified: false })) });

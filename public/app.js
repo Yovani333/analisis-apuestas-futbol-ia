@@ -287,7 +287,10 @@ Object.assign(elements, {
 });
 Object.assign(elements, {
   evidenceReadinessTotal: document.querySelector("#evidence-readiness-total"),
-  evidenceReadinessList: document.querySelector("#evidence-readiness-list")
+  evidenceReadinessList: document.querySelector("#evidence-readiness-list"),
+  neuralDatasetStatus: document.querySelector("#neural-dataset-status"),
+  neuralDatasetSummary: document.querySelector("#neural-dataset-summary"),
+  prepareNeuralDataset: document.querySelector("#prepare-neural-dataset")
 });
 Object.assign(elements, {
   favoriteTeamCount: document.querySelector("#favorite-team-count"),
@@ -4318,7 +4321,8 @@ async function evaluateCompetitionEvidence(competitionKey) {
   renderEvidenceReadiness();
   for (const evidence of pending.ready) {
     try {
-      const audit = await footballDataService.auditFixture(evidence.fixture.id, evidence);
+      const token = await cloudSyncClient.accessToken();
+      const audit = await footballDataService.auditFixture(evidence.fixture.id, evidence, token);
       const completed = markEvidenceAudited(evidence, audit, { render: false, sync: false });
       if (completed) progress.completed += 1;
       else progress.errors += 1;
@@ -4429,7 +4433,8 @@ async function runSelectedAudit() {
   elements.runAudit.textContent = "Auditando…";
   try {
     const evidence = selectedAuditEvidence();
-    const audit = await footballDataService.auditFixture(elements.auditFixture.value, evidence);
+    const token = await cloudSyncClient.accessToken();
+    const audit = await footballDataService.auditFixture(elements.auditFixture.value, evidence, token);
     renderAuditResults(audit);
     markEvidenceAudited(evidence, audit);
   }
@@ -4441,6 +4446,28 @@ async function runSelectedAudit() {
     } else elements.auditResults.innerHTML = `<div class="saved-empty"><h3>No se pudo ejecutar la auditoría</h3><p>${escapeHtml(error.message)}</p></div>`;
   }
   finally { elements.runAudit.disabled = false; elements.runAudit.textContent = "Ejecutar auditoría"; }
+}
+
+async function prepareNextNeuralDatasetBatch() {
+  if (!elements.prepareNeuralDataset || elements.prepareNeuralDataset.disabled) return;
+  elements.prepareNeuralDataset.disabled = true;
+  elements.prepareNeuralDataset.textContent = "Preparando…";
+  elements.neuralDatasetStatus.className = "status-badge status-badge--processing";
+  elements.neuralDatasetStatus.textContent = "Procesando";
+  try {
+    const result = await cloudSyncClient.backfillNeuralDataset({ limit: 5 });
+    const summary = await cloudSyncClient.neuralDatasetSummary();
+    elements.neuralDatasetStatus.className = `status-badge status-badge--${summary.summary?.trainableRows >= 100 ? "available" : "partial"}`;
+    elements.neuralDatasetStatus.textContent = `${summary.summary?.trainableRows || 0} entrenables`;
+    elements.neuralDatasetSummary.innerHTML = `<strong>Lote completado</strong><span>${escapeHtml(result.completed)} evidencia(s) etiquetadas · ${escapeHtml(result.labelsSaved)} etiquetas guardadas · ${escapeHtml(result.fixtureResultChecks)} resultado(s) revisados. Total entrenable actual: ${escapeHtml(summary.summary?.trainableRows || 0)}.</span>`;
+  } catch (error) {
+    elements.neuralDatasetStatus.className = "status-badge status-badge--unavailable";
+    elements.neuralDatasetStatus.textContent = "No disponible";
+    elements.neuralDatasetSummary.innerHTML = `<strong>No se pudo preparar el lote</strong><span>${escapeHtml(error.message || "Error controlado")}</span>`;
+  } finally {
+    elements.prepareNeuralDataset.disabled = false;
+    elements.prepareNeuralDataset.textContent = "Preparar siguiente lote";
+  }
 }
 
 async function capturePreMatchEvidence() {
@@ -6070,6 +6097,7 @@ elements.auditFixture.addEventListener("change", () => {
   elements.auditEvidencePreview.hidden = true;
 });
 elements.runAudit.addEventListener("click", runSelectedAudit);
+elements.prepareNeuralDataset.addEventListener("click", prepareNextNeuralDatasetBatch);
 elements.evidenceReadinessList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-evaluate-evidence]");
   if (button) void evaluateCompetitionEvidence(button.dataset.evaluateEvidence);

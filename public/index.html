@@ -574,6 +574,11 @@
         <div id="evidence-readiness-list" class="evidence-readiness-grid"><div class="research-empty">Cargando evidencias por competición…</div></div>
         <p class="market-disclaimer">El verde permite estudiar ajustes con pruebas por mercado y versión; nunca modifica fórmulas automáticamente. “Descartados prepartido” son candidatos que el motor marcó NO BET o EVITAR. “Descartes con resultado comprobable” indica que después fue posible comprobar qué habría ocurrido, pero ese dato contrafactual no cuenta como apuesta, acierto, fallo ni ROI.</p>
       </section>
+      <section class="panel neural-dataset-preparation" aria-labelledby="neural-dataset-title">
+        <div class="panel-heading"><div><p class="eyebrow">Preparación controlada</p><h2 id="neural-dataset-title">Dataset neuronal</h2><p>Conserva etiquetas de auditoría por pick sin entrenar modelos ni modificar evidencias.</p></div><span id="neural-dataset-status" class="status-badge status-badge--unavailable">Sin revisar</span></div>
+        <div id="neural-dataset-summary" class="detail-note"><strong>Procesamiento manual</strong><span>Cada ejecución revisa como máximo cinco evidencias antiguas y omite las que ya tienen etiquetas completas.</span></div>
+        <button id="prepare-neural-dataset" class="button button--primary" type="button">Preparar siguiente lote</button>
+      </section>
       <section class="panel audit-controls">
         <label for="audit-fixture">Partido finalizado</label>
         <select id="audit-fixture"><option value="">Cargando evidencias guardadas</option></select>

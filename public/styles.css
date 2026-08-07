@@ -2915,6 +2915,9 @@ body {
 }
 
 .evidence-readiness { display: grid; gap: 11px; }
+.neural-dataset-preparation { display: grid; gap: 11px; }
+.neural-dataset-preparation .panel-heading { margin-bottom: 0; }
+.neural-dataset-preparation .button { justify-self: start; }
 .evidence-readiness .panel-heading { margin-bottom: 0; }
 .evidence-readiness .panel-heading p:last-child { margin: 4px 0 0; color: var(--muted); font-size: .72rem; }
 .evidence-readiness-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: .68rem; }

@@ -500,6 +500,20 @@ export class CloudSyncClient {
     return requestJson("/api/cloud/evidence/status", { token });
   }
 
+  async neuralDatasetSummary() {
+    const token = await this.accessToken();
+    if (!token) throw new Error("Inicia sesión para preparar el dataset neuronal.");
+    return requestJson("/api/audit/neural-dataset", { token });
+  }
+
+  async backfillNeuralDataset({ limit = 5, dryRun = false } = {}) {
+    const token = await this.accessToken();
+    if (!token) throw new Error("Inicia sesión para preparar el dataset neuronal.");
+    return requestJson("/api/audit/neural-dataset/backfill", {
+      method: "POST", token, body: { limit: Math.max(1, Math.min(10, Number(limit) || 5)), dryRun: Boolean(dryRun) }
+    });
+  }
+
   async signOut() {
     const token = await this.accessToken().catch(() => "");
     if (token) await requestJson("/api/cloud/auth/sign-out", { method: "POST", token }).catch(() => null);
