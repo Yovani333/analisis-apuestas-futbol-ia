@@ -290,6 +290,7 @@ Object.assign(elements, {
   evidenceReadinessList: document.querySelector("#evidence-readiness-list"),
   neuralDatasetStatus: document.querySelector("#neural-dataset-status"),
   neuralDatasetSummary: document.querySelector("#neural-dataset-summary"),
+  neuralDatasetDetails: document.querySelector("#neural-dataset-details"),
   prepareNeuralDataset: document.querySelector("#prepare-neural-dataset")
 });
 Object.assign(elements, {
@@ -4459,15 +4460,75 @@ async function prepareNextNeuralDatasetBatch() {
     const summary = await cloudSyncClient.neuralDatasetSummary();
     elements.neuralDatasetStatus.className = `status-badge status-badge--${summary.summary?.trainableRows >= 100 ? "available" : "partial"}`;
     elements.neuralDatasetStatus.textContent = `${summary.summary?.trainableRows || 0} entrenables`;
-    elements.neuralDatasetSummary.innerHTML = `<strong>Lote completado</strong><span>${escapeHtml(result.completed)} evidencia(s) etiquetadas · ${escapeHtml(result.labelsSaved)} etiquetas guardadas · ${escapeHtml(result.fixtureResultChecks)} resultado(s) revisados. Total entrenable actual: ${escapeHtml(summary.summary?.trainableRows || 0)}.</span>`;
+    const advanced = Number(result.labelsSaved || 0) > 0;
+    const exhausted = Number(result.candidates || 0) === 0;
+    const title = advanced ? "Lote completado" : exhausted ? "Evidencias disponibles agotadas" : "Sin nuevas etiquetas en este lote";
+    elements.neuralDatasetSummary.innerHTML = `<strong>${title}</strong><span>${escapeHtml(result.completed)} evidencia(s) etiquetadas · ${escapeHtml(result.labelsSaved)} etiquetas guardadas · ${escapeHtml(result.fixtureResultChecks)} resultado(s) revisados. Total entrenable actual: ${escapeHtml(summary.summary?.trainableRows || 0)}.</span>`;
+    renderNeuralDatasetDetails(summary, result);
+    if (exhausted || !advanced) {
+      elements.prepareNeuralDataset.disabled = true;
+      elements.prepareNeuralDataset.textContent = exhausted ? "Sin evidencias nuevas" : "Revisar más tarde";
+    }
   } catch (error) {
     elements.neuralDatasetStatus.className = "status-badge status-badge--unavailable";
     elements.neuralDatasetStatus.textContent = "No disponible";
     elements.neuralDatasetSummary.innerHTML = `<strong>No se pudo preparar el lote</strong><span>${escapeHtml(error.message || "Error controlado")}</span>`;
   } finally {
-    elements.prepareNeuralDataset.disabled = false;
-    elements.prepareNeuralDataset.textContent = "Preparar siguiente lote";
+    if (!["Sin evidencias nuevas", "Revisar más tarde"].includes(elements.prepareNeuralDataset.textContent)) {
+      elements.prepareNeuralDataset.disabled = false;
+      elements.prepareNeuralDataset.textContent = "Preparar siguiente lote";
+    }
   }
+}
+
+function neuralDatasetReasonLabel(reason) {
+  const labels = {
+    missing_audit: "Evidencia todavía sin evaluación guardada",
+    missing_pick_evaluation: "Pick sin resultado enlazado",
+    invalid_model_probability: "Probabilidad histórica ausente o inválida",
+    pick_generated_after_kickoff: "Pick fuera del corte prepartido",
+    captured_after_kickoff: "Captura posterior al inicio",
+    current_fixture_statistics_used: "Captura con datos del fixture actual",
+    current_fixture_source_not_verified: "Fuente prepartido no verificable",
+    openai_source_not_verified: "Origen del análisis no verificable",
+    calibration_not_eligible: "Evidencia no elegible para calibración",
+    snapshot_not_scheduled: "Snapshot no conservó estado prepartido",
+    audit_fixture_mismatch: "Resultado asociado a otro fixture"
+  };
+  if (String(reason || "").startsWith("non_decisive_")) return "Resultado no decisivo: NO BET, VOID o no evaluable";
+  return labels[reason] || String(reason || "No especificado").replaceAll("_", " ");
+}
+
+function neuralBatchStatusLabel(row = {}) {
+  const labels = {
+    scheduled: "El partido sigue programado o no tiene resultado oficial",
+    live: "El partido continúa en vivo",
+    pending: "Resultado oficial pendiente",
+    postponed: "Partido pospuesto",
+    cancelled: "Partido cancelado",
+    suspended: "Partido suspendido",
+    error: `Consulta no completada${row.code ? ` (${row.code})` : ""}`,
+    saved: "Etiquetas guardadas"
+  };
+  return labels[row.status] || String(row.status || "Estado no disponible");
+}
+
+function neuralDatasetLevelLabel(status) {
+  return ({ insufficient: "Insuficiente", exploratory: "Exploratorio", prototype_only: "Prototipo", evaluation_ready: "Evaluación sólida" })[status] || status || "Insuficiente";
+}
+
+function renderNeuralDatasetDetails(summary = {}, batch = {}) {
+  if (!elements.neuralDatasetDetails) return;
+  const readiness = Array.isArray(summary.readiness) ? summary.readiness : [];
+  const exclusions = Array.isArray(summary.exclusionSummary) ? summary.exclusionSummary : [];
+  const blocked = Array.isArray(batch.results) ? batch.results.filter((row) => row.status !== "saved") : [];
+  const readinessRows = readiness.slice(0, 12).map((row) => `<tr><td>${escapeHtml(String(row.marketKey || "No disponible").replaceAll("_", " "))}</td><td>${escapeHtml(row.modelVersion || "Sin versión")}</td><td>${escapeHtml(row.samples || 0)}</td><td>${escapeHtml(row.hits || 0)}</td><td>${escapeHtml(row.misses || 0)}</td><td>${escapeHtml(neuralDatasetLevelLabel(row.status))}</td></tr>`).join("");
+  const exclusionRows = exclusions.slice(0, 8).map((row) => `<li><span>${escapeHtml(neuralDatasetReasonLabel(row.reason))}</span><strong>${escapeHtml(row.count || 0)}</strong></li>`).join("");
+  const blockedRows = blocked.map((row) => `<li><span>Fixture ${escapeHtml(row.fixtureId || "No disponible")}: ${escapeHtml(neuralBatchStatusLabel(row))}</span></li>`).join("");
+  elements.neuralDatasetDetails.hidden = false;
+  elements.neuralDatasetDetails.innerHTML = `
+    <section><h3>Muestra entrenable por mercado y versión</h3>${readinessRows ? `<div class="table-scroll"><table><thead><tr><th>Mercado</th><th>Versión</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Nivel</th></tr></thead><tbody>${readinessRows}</tbody></table></div>` : '<p class="market-disclaimer">Todavía no existen grupos entrenables.</p>'}</section>
+    <section class="neural-dataset-detail-grid">${exclusionRows ? `<div><h3>Principales exclusiones</h3><ul>${exclusionRows}</ul></div>` : ""}${blockedRows ? `<div><h3>Resultados sin etiqueta nueva</h3><ul>${blockedRows}</ul></div>` : ""}</section>`;
 }
 
 async function capturePreMatchEvidence() {

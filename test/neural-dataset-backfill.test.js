@@ -7,6 +7,7 @@ const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const services = readFileSync(new URL("../public/services.js", import.meta.url), "utf8");
 const cloud = readFileSync(new URL("../public/cloud-sync.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 
 test("backfill es manual, autenticado y limitado a diez fixtures", () => {
   assert.match(routes, /apiRouter\.post\("\/audit\/neural-dataset\/backfill"/);
@@ -34,4 +35,14 @@ test("la interfaz requiere acción manual y muestra consumo del lote", () => {
   assert.match(app, /fixtureResultChecks/);
   assert.doesNotMatch(app, /setInterval\([^)]*prepareNextNeuralDatasetBatch/);
   assert.match(cloud, /backfillNeuralDataset\(\{ limit = 5, dryRun = false \} = \{\}\)/);
+});
+
+test("el panel distingue muestra agotada, exclusiones y grupos por versión", () => {
+  assert.match(html, /id="neural-dataset-details"/);
+  assert.match(app, /Evidencias disponibles agotadas/);
+  assert.match(app, /Revisar más tarde/);
+  assert.match(app, /summary\.readiness/);
+  assert.match(app, /summary\.exclusionSummary/);
+  assert.match(app, /Resultados sin etiqueta nueva/);
+  assert.match(styles, /\.neural-dataset-detail-grid/);
 });
