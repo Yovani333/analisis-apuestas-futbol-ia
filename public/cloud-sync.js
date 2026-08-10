@@ -506,6 +506,12 @@ export class CloudSyncClient {
     return requestJson("/api/audit/neural-dataset", { token });
   }
 
+  async neuralDatasetExploratoryReport() {
+    const token = await this.accessToken();
+    if (!token) throw new Error("Inicia sesión para auditar el dataset neuronal.");
+    return requestJson("/api/audit/neural-dataset/exploratory-report", { token });
+  }
+
   async backfillNeuralDataset({ limit = 5, dryRun = false } = {}) {
     const token = await this.accessToken();
     if (!token) throw new Error("Inicia sesión para preparar el dataset neuronal.");

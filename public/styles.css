@@ -2918,6 +2918,7 @@ body {
 .neural-dataset-preparation { display: grid; gap: 11px; }
 .neural-dataset-preparation .panel-heading { margin-bottom: 0; }
 .neural-dataset-preparation .button { justify-self: start; }
+.neural-dataset-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .neural-dataset-details { display: grid; gap: 12px; }
 .neural-dataset-details h3 { margin: 0 0 7px; font-size: .78rem; }
 .neural-dataset-details table { min-width: 680px; }
@@ -2927,7 +2928,25 @@ body {
 .neural-dataset-detail-grid ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .neural-dataset-detail-grid li { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .66rem; }
 .neural-dataset-detail-grid strong { color: var(--text); }
+.neural-exploratory-report { display: grid; gap: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.neural-exploratory-report > header { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.neural-exploratory-report > header h3, .neural-exploratory-report > header p { margin: 0; }
+.neural-exploratory-report > header p:not(.eyebrow) { margin-top: 3px; color: var(--muted); font-size: .68rem; }
+.neural-exploratory-report section > h3 { margin: 0 0 7px; font-size: .78rem; }
+.neural-exploratory-report table { min-width: 820px; }
+.neural-exploratory-report th, .neural-exploratory-report td { padding: 7px 9px; font-size: .65rem; }
+.neural-exploratory-metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
+.neural-exploratory-metrics > div, .neural-temporal-comparison > div { display: grid; gap: 3px; min-width: 0; padding: 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-subtle); }
+.neural-exploratory-metrics span, .neural-exploratory-metrics small, .neural-temporal-comparison span, .neural-temporal-comparison small { color: var(--muted); font-size: .6rem; }
+.neural-exploratory-metrics strong, .neural-temporal-comparison strong { font-size: .86rem; }
+.neural-temporal-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.neural-exploratory-report details { padding: 9px; border: 1px solid var(--border); border-radius: 6px; }
+.neural-exploratory-report summary { cursor: pointer; font-size: .7rem; font-weight: 800; }
+.neural-exploratory-details { display: grid; gap: 12px; padding-top: 12px; }
+.neural-warning-list { display: grid; gap: 6px; margin: 0; padding-left: 18px; color: var(--muted); font-size: .66rem; }
 @media (max-width: 760px) { .neural-dataset-detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .neural-exploratory-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .neural-exploratory-metrics, .neural-temporal-comparison { grid-template-columns: 1fr; } .neural-dataset-actions .button { flex: 1 1 100%; } }
 .evidence-readiness .panel-heading { margin-bottom: 0; }
 .evidence-readiness .panel-heading p:last-child { margin: 4px 0 0; color: var(--muted); font-size: .72rem; }
 .evidence-readiness-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: .68rem; }

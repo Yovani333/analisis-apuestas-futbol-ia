@@ -291,7 +291,9 @@ Object.assign(elements, {
   neuralDatasetStatus: document.querySelector("#neural-dataset-status"),
   neuralDatasetSummary: document.querySelector("#neural-dataset-summary"),
   neuralDatasetDetails: document.querySelector("#neural-dataset-details"),
-  prepareNeuralDataset: document.querySelector("#prepare-neural-dataset")
+  prepareNeuralDataset: document.querySelector("#prepare-neural-dataset"),
+  runNeuralExploratoryAudit: document.querySelector("#run-neural-exploratory-audit"),
+  neuralExploratoryReport: document.querySelector("#neural-exploratory-report")
 });
 Object.assign(elements, {
   favoriteTeamCount: document.querySelector("#favorite-team-count"),
@@ -4531,6 +4533,52 @@ function renderNeuralDatasetDetails(summary = {}, batch = {}) {
     <section class="neural-dataset-detail-grid">${exclusionRows ? `<div><h3>Principales exclusiones</h3><ul>${exclusionRows}</ul></div>` : ""}${blockedRows ? `<div><h3>Resultados sin etiqueta nueva</h3><ul>${blockedRows}</ul></div>` : ""}</section>`;
 }
 
+function exploratoryMetric(value, suffix = "") {
+  return value === null || value === undefined ? "No disponible" : `${escapeHtml(value)}${suffix}`;
+}
+
+function exploratoryGroupRows(groups = [], labelBuilder) {
+  return groups.map((row) => `<tr><td>${escapeHtml(labelBuilder(row))}</td><td>${escapeHtml(row.samples || 0)}</td><td>${escapeHtml(row.hits || 0)}</td><td>${escapeHtml(row.misses || 0)}</td><td>${exploratoryMetric(row.hitRatePct, "%")}</td><td>${exploratoryMetric(row.confidenceInterval95Pct?.lowPct, "%")}–${exploratoryMetric(row.confidenceInterval95Pct?.highPct, "%")}</td><td>${exploratoryMetric(row.calibration?.brierScore)}</td><td>${exploratoryMetric(row.theoreticalRoi?.roiPct, "%")}</td></tr>`).join("");
+}
+
+function renderNeuralExploratoryReport(report = {}) {
+  if (!elements.neuralExploratoryReport) return;
+  const overall = report.overall || {};
+  const temporal = report.temporalValidation || {};
+  const decision = ({ collect_more_evidence: "Continuar recolectando evidencia", exploratory_by_selection: "Exploración por selección disponible", prototype_validation_possible: "Prototipo aislado evaluable" })[report.decision] || "Diagnóstico disponible";
+  const selectionRows = exploratoryGroupRows(report.bySelection || [], (row) => `${row.selection || "Selección"} · ${row.market || "Mercado"} · ${row.modelVersion || "Sin versión"}`);
+  const leagueRows = exploratoryGroupRows(report.byLeague || [], (row) => `${row.leagueName || "Competición"}${row.season ? ` · ${row.season}` : ""}`);
+  const originRows = exploratoryGroupRows(report.byOrigin || [], (row) => `${pickOriginLabel({ sourceModule: row.sourceModule })} · ${row.modelVersion || "Sin versión"}`);
+  const confidenceRows = exploratoryGroupRows(report.byConfidence || [], (row) => row.confidenceBand || "No disponible");
+  const missingRows = (report.missingFeatures || []).slice(0, 12).map((row) => `<li><span>${escapeHtml(String(row.feature || "Dato").replaceAll(/([A-Z])/g, " $1"))}</span><strong>${escapeHtml(row.count || 0)} · ${exploratoryMetric(row.ratePct, "%")}</strong></li>`).join("");
+  const warnings = (report.warnings || []).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
+  const temporalContent = temporal.status === "available" ? `<div class="neural-temporal-comparison"><div><span>Bloque inicial 70%</span><strong>${exploratoryMetric(temporal.training?.hitRatePct, "%")}</strong><small>${escapeHtml(temporal.training?.samples || 0)} muestras</small></div><div><span>Bloque reciente 30%</span><strong>${exploratoryMetric(temporal.validation?.hitRatePct, "%")}</strong><small>${escapeHtml(temporal.validation?.samples || 0)} muestras</small></div></div>` : '<p class="market-disclaimer">La muestra temporal todavía es insuficiente.</p>';
+  elements.neuralExploratoryReport.hidden = false;
+  elements.neuralExploratoryReport.innerHTML = `
+    <header><div><p class="eyebrow">Diagnóstico de solo lectura</p><h3>Auditoría exploratoria</h3><p>${escapeHtml(decision)}</p></div><span class="status-badge status-badge--${report.decision === "collect_more_evidence" ? "partial" : "available"}">${escapeHtml(overall.samples || 0)} filas</span></header>
+    <div class="neural-exploratory-metrics"><div><span>HIT / MISS</span><strong>${escapeHtml(overall.hits || 0)} / ${escapeHtml(overall.misses || 0)}</strong></div><div><span>Acierto global</span><strong>${exploratoryMetric(overall.hitRatePct, "%")}</strong><small>IC 95% ${exploratoryMetric(overall.confidenceInterval95Pct?.lowPct, "%")}–${exploratoryMetric(overall.confidenceInterval95Pct?.highPct, "%")}</small></div><div><span>Brier Score</span><strong>${exploratoryMetric(overall.calibration?.brierScore)}</strong></div><div><span>Log Loss</span><strong>${exploratoryMetric(overall.calibration?.logLoss)}</strong></div><div><span>ECE</span><strong>${exploratoryMetric(overall.calibration?.expectedCalibrationErrorPct, "%")}</strong></div><div><span>ROI teórico</span><strong>${exploratoryMetric(overall.theoreticalRoi?.roiPct, "%")}</strong><small>${escapeHtml(overall.theoreticalRoi?.samples || 0)} cuotas válidas</small></div></div>
+    <section><h3>Selecciones concretas</h3><div class="table-scroll"><table><thead><tr><th>Selección</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>IC 95%</th><th>Brier</th><th>ROI teórico</th></tr></thead><tbody>${selectionRows}</tbody></table></div></section>
+    <section><h3>Estabilidad temporal</h3>${temporalContent}</section>
+    <details><summary>Ver competiciones, orígenes y confianza</summary><div class="neural-exploratory-details"><section><h3>Por competición</h3><div class="table-scroll"><table><thead><tr><th>Competición</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>IC 95%</th><th>Brier</th><th>ROI</th></tr></thead><tbody>${leagueRows}</tbody></table></div></section><section><h3>Por origen</h3><div class="table-scroll"><table><thead><tr><th>Origen</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>IC 95%</th><th>Brier</th><th>ROI</th></tr></thead><tbody>${originRows}</tbody></table></div></section><section><h3>Por confianza</h3><div class="table-scroll"><table><thead><tr><th>Confianza</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>IC 95%</th><th>Brier</th><th>ROI</th></tr></thead><tbody>${confidenceRows}</tbody></table></div></section></div></details>
+    <section class="neural-dataset-detail-grid">${missingRows ? `<div><h3>Datos faltantes</h3><ul>${missingRows}</ul></div>` : ""}<div><h3>Conclusiones prudentes</h3><ul class="neural-warning-list">${warnings}</ul></div></section>`;
+}
+
+async function runNeuralExploratoryAudit() {
+  if (!elements.runNeuralExploratoryAudit || elements.runNeuralExploratoryAudit.disabled) return;
+  elements.runNeuralExploratoryAudit.disabled = true;
+  elements.runNeuralExploratoryAudit.textContent = "Analizando…";
+  try {
+    const report = await cloudSyncClient.neuralDatasetExploratoryReport();
+    renderNeuralExploratoryReport(report);
+  } catch (error) {
+    elements.neuralExploratoryReport.hidden = false;
+    elements.neuralExploratoryReport.innerHTML = `<div class="research-empty"><strong>No se pudo ejecutar la auditoría exploratoria</strong><p>${escapeHtml(error.message || "Error controlado")}</p></div>`;
+  } finally {
+    elements.runNeuralExploratoryAudit.disabled = false;
+    elements.runNeuralExploratoryAudit.textContent = "Ejecutar auditoría exploratoria";
+  }
+}
+
 async function capturePreMatchEvidence() {
   const fixture = selectedFixture();
   if (!fixture || state.isCapturingEvidence) return;
@@ -6159,6 +6207,7 @@ elements.auditFixture.addEventListener("change", () => {
 });
 elements.runAudit.addEventListener("click", runSelectedAudit);
 elements.prepareNeuralDataset.addEventListener("click", prepareNextNeuralDatasetBatch);
+elements.runNeuralExploratoryAudit.addEventListener("click", runNeuralExploratoryAudit);
 elements.evidenceReadinessList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-evaluate-evidence]");
   if (button) void evaluateCompetitionEvidence(button.dataset.evaluateEvidence);
