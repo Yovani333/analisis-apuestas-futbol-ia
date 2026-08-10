@@ -535,14 +535,19 @@ export async function listAllCloudEvidenceSnapshots(authorization) {
   return { snapshots: [...snapshots.values()], count: snapshots.size, pages };
 }
 
-export async function listCloudEvidenceAuditLabels(authorization) {
+export async function listCloudEvidenceAuditLabels(authorization, input = {}) {
   const token = bearerToken(authorization);
   const labels = [];
   let offset = 0;
+  const allowedOutcomes = new Set(["HIT", "MISS", "VOID", "NO_BET", "DATA_INSUFFICIENT", "LIVE_PENDING"]);
+  const outcomes = [...new Set((Array.isArray(input.outcomes) ? input.outcomes : [])
+    .map((value) => String(value || "").trim().toUpperCase())
+    .filter((value) => allowedOutcomes.has(value)))];
+  const outcomeFilter = outcomes.length ? `&outcome=in.(${outcomes.join(",")})` : "";
   try {
     while (offset < MAX_EVIDENCE_LABEL_TOTAL) {
       const limit = Math.min(MAX_EVIDENCE_LABEL_PAGE, MAX_EVIDENCE_LABEL_TOTAL - offset);
-      const payload = await supabaseRequest(`/rest/v1/evidence_pick_outcomes?select=snapshot_id,fixture_id,pick_key,selection_key,market,selection,model_version,outcome,evaluated_at&order=evaluated_at.asc&limit=${limit}&offset=${offset}`, { token });
+      const payload = await supabaseRequest(`/rest/v1/evidence_pick_outcomes?select=snapshot_id,fixture_id,pick_key,selection_key,market,selection,model_version,outcome,evaluated_at${outcomeFilter}&order=evaluated_at.asc&limit=${limit}&offset=${offset}`, { token });
       const rows = Array.isArray(payload) ? payload : [];
       labels.push(...rows);
       if (rows.length < limit) break;
@@ -553,6 +558,51 @@ export async function listCloudEvidenceAuditLabels(authorization) {
     throw error;
   }
   return { labels, count: labels.length, status: "available" };
+}
+
+export async function listCloudNeuralEvidenceSnapshots(authorization, snapshotIds = []) {
+  const token = bearerToken(authorization);
+  const ids = [...new Set((Array.isArray(snapshotIds) ? snapshotIds : [])
+    .map((value) => String(value || "").trim())
+    .filter((value) => /^[a-z0-9_.:-]{1,240}$/i.test(value)))];
+  if (!ids.length) return { snapshots: [], count: 0, requests: 0 };
+
+  const select = [
+    "fixture_id", "captured_at", "snapshot_id:snapshot->>id", "snapshot_version:snapshot->version",
+    "fixture:snapshot->fixture", "data_quality:snapshot->dataQuality", "data_picks:snapshot->modules->dataPicks",
+    "audit_metadata:snapshot->auditMetadata", "current_fixture_statistics_used:snapshot->currentFixtureStatisticsUsed",
+    "open_ai_used:snapshot->openAiUsed"
+  ].join(",");
+  const rows = [];
+  let requests = 0;
+  try {
+    for (let index = 0; index < ids.length; index += 25) {
+      const chunk = ids.slice(index, index + 25);
+      const snapshotFilter = chunk.map((value) => encodeURIComponent(`"${value}"`)).join(",");
+      const payload = await supabaseRequest(
+        `/rest/v1/automatic_evidence_snapshots?select=${encodeURIComponent(select)}&snapshot->>id=in.(${snapshotFilter})`,
+        { token }
+      );
+      requests += 1;
+      rows.push(...(Array.isArray(payload) ? payload : []));
+    }
+  } catch (error) {
+    if (isMissingEvidenceSchema(error)) return { snapshots: [], count: 0, requests, status: "schema_pending" };
+    throw error;
+  }
+
+  const snapshots = rows.map((row) => ({
+    id: row.snapshot_id || null,
+    version: Number(row.snapshot_version || 3),
+    capturedAt: row.captured_at || null,
+    fixture: row.fixture || null,
+    dataQuality: row.data_quality || null,
+    modules: { dataPicks: row.data_picks || null },
+    auditMetadata: row.audit_metadata || null,
+    currentFixtureStatisticsUsed: row.current_fixture_statistics_used,
+    openAiUsed: row.open_ai_used
+  })).filter((snapshot) => snapshot.id && snapshot.fixture?.id);
+  return { snapshots, count: snapshots.length, requests, status: "available" };
 }
 
 function normalizeWatchedFixture(fixture, userId, now = new Date()) {

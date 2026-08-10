@@ -35,7 +35,7 @@ import {
 } from "../services/simulation-audit-store.service.js";
 import {
   cloudConfiguration, getCloudState, getEvidenceAutomationStatus, refreshCloudSession, registerEvidenceWatchlist,
-  listAllCloudEvidenceSnapshots, listCloudEvidenceAuditLabels, listCloudEvidenceSnapshots, saveCloudEvidenceSnapshots,
+  listAllCloudEvidenceSnapshots, listCloudEvidenceAuditLabels, listCloudEvidenceSnapshots, listCloudNeuralEvidenceSnapshots, saveCloudEvidenceSnapshots,
   saveCloudState, saveEvidenceAuditLabels, signInCloudUser, signOutCloudUser, signUpCloudUser
 } from "../services/cloud-sync.service.js";
 import { createServerEvidenceSnapshot, runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
@@ -153,6 +153,28 @@ async function loadCloudNeuralDataset(authorization) {
   return { dataset, evidenceLibrary, storedLabels, exclusionSummary };
 }
 
+async function loadCloudNeuralExploratoryDataset(authorization) {
+  const storedLabels = await listCloudEvidenceAuditLabels(authorization, { outcomes: ["HIT", "MISS"] });
+  const snapshotIds = [...new Set((storedLabels.labels || []).map((label) => String(label.snapshot_id || "")).filter(Boolean))];
+  const evidenceLibrary = await listCloudNeuralEvidenceSnapshots(authorization, snapshotIds);
+  const audits = {};
+  for (const label of storedLabels.labels || []) {
+    if (!audits[label.snapshot_id]) audits[label.snapshot_id] = { fixtureId: label.fixture_id, records: [] };
+    audits[label.snapshot_id].records.push({
+      selectionKey: label.selection_key,
+      market: label.market,
+      pick: label.selection,
+      modelVersion: label.model_version,
+      outcome: label.outcome
+    });
+  }
+  return {
+    dataset: exportNeuralTrainingDataset({ snapshots: evidenceLibrary.snapshots, audits }),
+    evidenceLibrary,
+    storedLabels
+  };
+}
+
 apiRouter.get("/audit/neural-dataset", asyncRoute(async (req, res) => {
   const { dataset, evidenceLibrary, storedLabels, exclusionSummary } = await loadCloudNeuralDataset(req.headers.authorization);
   const includeRows = ["1", "true"].includes(String(req.query.includeRows || "").toLowerCase());
@@ -169,12 +191,12 @@ apiRouter.get("/audit/neural-dataset", asyncRoute(async (req, res) => {
 }));
 
 apiRouter.get("/audit/neural-dataset/exploratory-report", asyncRoute(async (req, res) => {
-  const { dataset, evidenceLibrary, storedLabels } = await loadCloudNeuralDataset(req.headers.authorization);
+  const { dataset, evidenceLibrary, storedLabels } = await loadCloudNeuralExploratoryDataset(req.headers.authorization);
   const report = buildNeuralDatasetExploratoryReport(dataset);
   res.json({
     ...report,
     source: "frozen_pre_match_snapshots_and_saved_audits",
-    evidencePagesRead: evidenceLibrary.pages,
+    evidenceQueries: evidenceLibrary.requests,
     storedLabels: storedLabels.count,
     apiFootballRequests: 0
   });

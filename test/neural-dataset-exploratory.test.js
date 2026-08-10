@@ -6,6 +6,7 @@ import { buildNeuralDatasetExploratoryReport, neuralExploratoryInternals } from 
 const routes = readFileSync(new URL("../server/routes/api.routes.js", import.meta.url), "utf8");
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const cloud = readFileSync(new URL("../public/cloud-sync.js", import.meta.url), "utf8");
+const cloudService = readFileSync(new URL("../server/services/cloud-sync.service.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 
 function row(index, overrides = {}) {
@@ -96,4 +97,12 @@ test("la auditoría exploratoria es manual, autenticada y no consulta API-Footba
   assert.match(html, /id="run-neural-exploratory-audit"/);
   assert.match(app, /runNeuralExploratoryAudit\.addEventListener\("click", runNeuralExploratoryAudit\)/);
   assert.doesNotMatch(app, /setInterval\([^)]*runNeuralExploratoryAudit/);
+});
+
+test("la auditoria exploratoria carga solo etiquetas decisivas y snapshots minimos", () => {
+  assert.match(routes, /listCloudEvidenceAuditLabels\(authorization, \{ outcomes: \["HIT", "MISS"\] \}\)/);
+  assert.match(routes, /listCloudNeuralEvidenceSnapshots\(authorization, snapshotIds\)/);
+  assert.match(cloudService, /outcome=in\.\(\$\{outcomes\.join\(","\)\}\)/);
+  assert.match(cloudService, /data_picks:snapshot->modules->dataPicks/);
+  assert.match(cloudService, /snapshot->>id=in\.\(\$\{snapshotFilter\}\)/);
 });
