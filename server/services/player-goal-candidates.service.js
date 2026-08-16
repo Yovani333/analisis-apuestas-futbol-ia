@@ -1,4 +1,5 @@
 import { buildShortTournamentContext } from "./short-tournament-context.service.js";
+import { competitionLabel, isSameCompetition } from "./competition-scope.service.js";
 
 const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -31,10 +32,11 @@ const fixtureTime = (row) => Date.parse(row?.fixture?.date || "") || 0;
 const ratioPct = (part, total) => total > 0 ? round((part / total) * 100, 1) : 0;
 const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== "" && Number.isFinite(Number.parseFloat(String(value).replace("%", "")));
 
-export function selectPlayerHistoryFixtures(rows = [], currentMatchDate, limit = MAX_MATCHES) {
+export function selectPlayerHistoryFixtures(rows = [], currentMatchDate, limit = MAX_MATCHES, targetFixture = null) {
   const cutoff = Date.parse(currentMatchDate || "");
   return rows.filter((row) => FINISHED_STATUSES.has(row?.fixture?.status?.short))
     .filter((row) => !Number.isFinite(cutoff) || fixtureTime(row) < cutoff)
+    .filter((row) => !targetFixture || isSameCompetition(row, targetFixture))
     .sort((a, b) => fixtureTime(b) - fixtureTime(a)).slice(0, limit);
 }
 
@@ -323,8 +325,8 @@ export async function getPlayerGoalCandidates(dataset, dependencies, { forceRefr
     const [homeRows, awayRows] = await Promise.all([
       dependencies.getPreviousFixtures(fixture.homeTeamId, 10), dependencies.getPreviousFixtures(fixture.awayTeamId, 10)
     ]);
-    const homeFixtures = selectPlayerHistoryFixtures(homeRows, fixture.utcDateTime);
-    const awayFixtures = selectPlayerHistoryFixtures(awayRows, fixture.utcDateTime);
+    const homeFixtures = selectPlayerHistoryFixtures(homeRows, fixture.utcDateTime, MAX_MATCHES, fixture);
+    const awayFixtures = selectPlayerHistoryFixtures(awayRows, fixture.utcDateTime, MAX_MATCHES, fixture);
     const uniqueFixtureIds = [...new Set([...homeFixtures, ...awayFixtures].map((row) => String(row.fixture.id)))];
     const loaded = new Map(await mapWithConcurrency(uniqueFixtureIds, 3, async (fixtureId) => {
       const [players, lineups, events] = await Promise.all([
@@ -335,7 +337,7 @@ export async function getPlayerGoalCandidates(dataset, dependencies, { forceRefr
     const rowsFor = (fixtures) => fixtures.map((row) => ({ ...(loaded.get(String(row.fixture.id)) || {}), fixture: row.fixture })).filter((row) => row?.players?.length);
     const homeLoaded = rowsFor(homeFixtures);
     const awayLoaded = rowsFor(awayFixtures);
-    const coverage = { homeFixtures: homeFixtures.length, awayFixtures: awayFixtures.length, homePlayerFixtures: homeLoaded.length, awayPlayerFixtures: awayLoaded.length, lineupsAvailable: [...loaded.values()].filter((row) => row.lineups.length).length, eventsAvailable: [...loaded.values()].filter((row) => row.events.length).length };
+    const coverage = { competition: competitionLabel(fixture), homeFixtures: homeFixtures.length, awayFixtures: awayFixtures.length, homeExcludedOtherCompetitions: homeRows.filter((row) => !isSameCompetition(row, fixture)).length, awayExcludedOtherCompetitions: awayRows.filter((row) => !isSameCompetition(row, fixture)).length, homePlayerFixtures: homeLoaded.length, awayPlayerFixtures: awayLoaded.length, lineupsAvailable: [...loaded.values()].filter((row) => row.lineups.length).length, eventsAvailable: [...loaded.values()].filter((row) => row.events.length).length };
     if (!homeLoaded.length && !awayLoaded.length) return unavailable(dataset, "no_player_coverage", "La API no tiene cobertura suficiente de estadisticas de jugadores para este partido.", coverage);
     const contexts = {
       [String(fixture.homeTeamId)]: teamContextFromDataset(dataset, fixture.homeTeamId, "home"),
@@ -367,7 +369,7 @@ export async function getPlayerGoalCandidates(dataset, dependencies, { forceRefr
     const value = {
       status: built.candidates.length ? "available" : "insufficient_data", fixtureId: key, candidates: built.candidates,
       coverage, message: built.candidates.length ? "" : "Datos insuficientes para sugerir jugador con posible gol.",
-      playersEvaluated: homePlayers.length + awayPlayers.length, individualForm, tournamentContext, source: "api-football + modelo interno",
+      playersEvaluated: homePlayers.length + awayPlayers.length, individualForm, tournamentContext, source: "api-football + modelo interno", modelVersion: "player-goal-same-competition-v2",
       updateReason: "historical_snapshot_calculated_from_api_football",
       cached: false, generatedAt: new Date(now).toISOString()
     };

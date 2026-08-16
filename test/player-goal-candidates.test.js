@@ -5,8 +5,8 @@ import {
   getPlayerGoalCandidates, normalizeTeamPlayerHistory, selectPlayerHistoryFixtures
 } from "../server/services/player-goal-candidates.service.js";
 
-const match = { id: 100, home: "England", away: "Norway", homeTeamId: 1, awayTeamId: 2, utcDateTime: "2026-07-10T20:00:00Z" };
-const fixture = (id, date, status = "FT") => ({ fixture: { id, date, status: { short: status } } });
+const match = { id: 100, leagueId: 10, leagueName: "Liga Oficial", home: "England", away: "Norway", homeTeamId: 1, awayTeamId: 2, utcDateTime: "2026-07-10T20:00:00Z" };
+const fixture = (id, date, status = "FT", leagueId = 10) => ({ fixture: { id, date, status: { short: status } }, league: { id: leagueId, name: leagueId === 10 ? "Liga Oficial" : "Otra Copa" } });
 const lineup = (teamId, players = []) => [{ team: { id: teamId }, startXI: players.map((player) => ({ player: { id: player.id, name: player.name, pos: player.pos || "F" } })), substitutes: [] }];
 const playerResponse = (teamId, players) => [{ team: { id: teamId }, players: players.map((item) => ({
   player: { id: item.id, name: item.name }, statistics: [{ games: { minutes: item.minutes, position: item.position || "F" }, goals: { total: item.goals || 0, assists: item.assists || 0, expected: item.xg }, shots: { total: item.shots ?? 3, on: item.on ?? 2 }, penalty: { scored: item.penalties || 0, missed: 0 }, cards: { red: item.red || 0 } }]
@@ -56,6 +56,13 @@ test("alineaciones ausentes no permiten afirmar cinco titularidades", () => {
   const rows = historyRows(1, Array.from({ length: 4 }, () => [attacker(9, "Kane")])).map((row) => ({ ...row, lineups: [] }));
   const players = normalizeTeamPlayerHistory({ teamId: 1, teamName: "England", fixtureRows: rows, teamContext: { lambda: 1.8 } });
   assert.equal(buildPlayerGoalCandidates(match, players, [], { "1": { lambda: 1.8 } }).candidates.length, 0);
+});
+
+test("posible goleador selecciona solo partidos de la misma competicion", () => {
+  const rows = [fixture(1, "2026-07-09T10:00:00Z", "FT", 20), ...Array.from({ length: 5 }, (_, index) => fixture(index + 2, `2026-07-0${8 - index}T10:00:00Z`))];
+  const selected = selectPlayerHistoryFixtures(rows, match.utcDateTime, 5, match);
+  assert.equal(selected.length, 5);
+  assert.ok(selected.every((row) => row.league.id === 10));
 });
 
 test("excluye jugador que no fue titular en los cinco partidos", () => {

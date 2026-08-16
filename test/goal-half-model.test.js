@@ -7,6 +7,8 @@ const targetFixture = {
   utcDateTime: "2026-07-30T20:00:00Z",
   homeTeamId: 1,
   awayTeamId: 2,
+  leagueId: 10,
+  leagueName: "Liga Oficial",
   home: "Local",
   away: "Visitante"
 };
@@ -14,7 +16,7 @@ const targetFixture = {
 function fixture(id, teamId, opponentId, date, home = true, status = "FT") {
   return {
     fixture: { id, date, status: { short: status } },
-    league: { name: "Liga Oficial", type: "League" },
+    league: { id: 10, name: "Liga Oficial", type: "League" },
     teams: home
       ? { home: { id: teamId, name: `Equipo ${teamId}` }, away: { id: opponentId, name: `Rival ${opponentId}` } }
       : { home: { id: opponentId, name: `Rival ${opponentId}` }, away: { id: teamId, name: `Equipo ${teamId}` } }
@@ -50,6 +52,18 @@ test("no recomienda cuando algun equipo tiene menos de tres partidos previos ofi
   const result = await calculateGoalHalfModel(targetFixture, dependencies(homeFixtures, awayFixtures, {}));
   assert.equal(result.status, "not_available");
   assert.match(result.warning, /al menos 3 partidos/i);
+});
+
+test("gol por mitad excluye fixtures de otra competicion", async () => {
+  const other = fixture(99, 1, 90, "2026-07-26T20:00:00Z");
+  other.league = { id: 20, name: "Otra Copa", type: "Cup" };
+  const homeFixtures = [other, fixture(1, 1, 11, "2026-07-25T20:00:00Z"), fixture(2, 1, 12, "2026-07-24T20:00:00Z"), fixture(3, 1, 13, "2026-07-23T20:00:00Z")];
+  const awayFixtures = [6, 7, 8].map((id, index) => fixture(id, 2, 20 + id, `2026-07-${25 - index}T20:00:00Z`, false));
+  const events = Object.fromEntries([...homeFixtures, ...awayFixtures].map((row) => [String(row.fixture.id), [goal(99, 70)]]));
+  const result = await calculateGoalHalfModel(targetFixture, dependencies(homeFixtures, awayFixtures, events));
+  assert.equal(result.teams.home.useful, 3);
+  assert.equal(result.teams.home.excludedOtherCompetitions, 1);
+  assert.ok(result.warnings.some((item) => /otras competiciones/.test(item)));
 });
 
 test("ignora prorroga, penales y el fixture objetivo dentro de la muestra", async () => {

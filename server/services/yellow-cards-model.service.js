@@ -1,4 +1,5 @@
 import { resolveModuleQuality } from "./module-quality.service.js";
+import { competitionLabel, filterSameCompetitionRows } from "./competition-scope.service.js";
 
 const RECENCY_WEIGHTS = [1, 0.9, 0.8, 0.7, 0.6];
 
@@ -22,7 +23,8 @@ function history(dataset, side) {
   const fixtures = dataset.historicalEstimatedXg?.[`${side}Team`]?.fixturesUsed
     || dataset.researchData?.xgXga?.[`fixturesUsed${side === "home" ? "Home" : "Away"}`]
     || [];
-  const official = fixtures.filter((fixture) => !friendly(fixture));
+  const sameCompetition = filterSameCompetitionRows(fixtures, dataset.fixture);
+  const official = sameCompetition.filter((fixture) => !friendly(fixture));
   const usefulRows = official
     .filter((fixture) => number(fixture.cardStats?.yellowCardsFor) !== null && number(fixture.cardStats?.yellowCardsAgainst) !== null)
     .slice(0, 5);
@@ -30,6 +32,8 @@ function history(dataset, side) {
   const cardsAgainst = usefulRows.map((fixture) => number(fixture.cardStats.yellowCardsAgainst));
   return {
     attempted: fixtures.length,
+    excludedOtherCompetitions: fixtures.length - sameCompetition.length,
+    targetCompetition: competitionLabel(dataset.fixture),
     excludedFriendlies: fixtures.filter(friendly).length,
     useful: usefulRows.length,
     competitions: [...new Set(usefulRows.map((fixture) => fixture.competition).filter(Boolean))],
@@ -58,15 +62,16 @@ export function calculateYellowCardsModel(dataset = {}) {
       status: "not_available",
       sourceModule: "yellow_cards",
       source: "API-Football fixture statistics",
-      modelVersion: "official-history-yellow-cards-v1",
+      modelVersion: "official-history-yellow-cards-v2-same-competition",
       fixtureId: String(fixture.id || ""),
       teams: { home, away },
       projection: null,
       quality: resolveModuleQuality({ status: "not_available" }),
-      warning: "Tarjetas amarillas no disponible: faltan partidos oficiales con Yellow Cards completos.",
+      warning: `Tarjetas amarillas no disponible: faltan partidos de ${competitionLabel(fixture)} con Yellow Cards completos.`,
       generatedAt: new Date().toISOString()
     };
   }
+  if (home.excludedOtherCompetitions || away.excludedOtherCompetitions) warnings.push("Se excluyeron partidos de otras competiciones.");
   if (Math.min(home.useful, away.useful) < 5) warnings.push("Muestra menor a 5 partidos oficiales; interpretar con precaucion.");
   const matchupExpected = (home.yellowCardsForAvg * 0.6 + away.yellowCardsAgainstAvg * 0.4)
     + (away.yellowCardsForAvg * 0.6 + home.yellowCardsAgainstAvg * 0.4);
@@ -80,7 +85,7 @@ export function calculateYellowCardsModel(dataset = {}) {
     status,
     source: "API-Football fixture statistics + modelo interno",
     sourceModule: "yellow_cards",
-    modelVersion: "official-history-yellow-cards-v1",
+    modelVersion: "official-history-yellow-cards-v2-same-competition",
     fixtureId: String(fixture.id || ""),
     teams: { home, away },
     projection: {

@@ -5,6 +5,7 @@ import { calculateYellowCardsModel } from "../server/services/yellow-cards-model
 function record(id, forCards, againstCards, competition = "Liga") {
   return {
     fixtureId: String(id),
+    leagueId: 10,
     date: `2026-07-${10 - id}`,
     opponent: `Rival ${id}`,
     venue: id % 2 ? "home" : "away",
@@ -16,7 +17,7 @@ function record(id, forCards, againstCards, competition = "Liga") {
 
 function dataset(homeRecords, awayRecords) {
   return {
-    fixture: { id: 100, home: "Local", away: "Visitante" },
+    fixture: { id: 100, leagueId: 10, leagueName: "Liga", home: "Local", away: "Visitante" },
     historicalEstimatedXg: {
       homeTeam: { fixturesUsed: homeRecords },
       awayTeam: { fixturesUsed: awayRecords }
@@ -43,7 +44,19 @@ test("no inventa tarjetas cuando falta Yellow Cards completo", () => {
   ));
   assert.equal(result.status, "not_available");
   assert.equal(result.projection, null);
-  assert.match(result.warning, /faltan partidos oficiales/i);
+  assert.match(result.warning, /faltan partidos de Liga/i);
+});
+
+test("tarjetas amarillas usa solamente la misma competicion", () => {
+  const other = record(20, 9, 9, "Otra Copa");
+  other.leagueId = 20;
+  const result = calculateYellowCardsModel(dataset(
+    [other, record(1, 2, 2), record(2, 2, 2), record(3, 2, 2)],
+    [record(4, 2, 2), record(5, 2, 2), record(6, 2, 2)]
+  ));
+  assert.equal(result.teams.home.useful, 3);
+  assert.equal(result.teams.home.excludedOtherCompetitions, 1);
+  assert.ok(result.warnings.some((item) => /otras competiciones/.test(item)));
 });
 
 test("excluye amistosos de la muestra de tarjetas", () => {

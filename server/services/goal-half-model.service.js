@@ -1,4 +1,5 @@
 import { resolveModuleQuality } from "./module-quality.service.js";
+import { competitionLabel, isSameCompetition } from "./competition-scope.service.js";
 
 const RECENCY_WEIGHTS = [1, 0.9, 0.8, 0.7, 0.6];
 const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
@@ -67,6 +68,7 @@ function selectPreviousFixtures(rows, fixture, teamId, limit = 5) {
   const seen = new Set();
   return (Array.isArray(rows) ? rows : [])
     .filter((row) => isFinishedPrevious(row, targetDateMs, fixture?.id))
+    .filter((row) => isSameCompetition(row, fixture))
     .sort((a, b) => Date.parse(fixtureDateOf(b)) - Date.parse(fixtureDateOf(a)))
     .filter((row) => {
       const id = fixtureIdOf(row);
@@ -170,7 +172,7 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
     return {
       status: "not_available",
       sourceModule: "goal_half_projection",
-      modelVersion: "goal-half-events-v1",
+      modelVersion: "goal-half-events-v2-same-competition",
       fixtureId,
       quality: resolveModuleQuality({ status: "not_available" }),
       warning: "Gol por mitad no disponible: faltan fixture, equipos o servicios de eventos oficiales.",
@@ -191,6 +193,8 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
   ])));
   const home = summarizeRows(homeFixtures, homeTeamId, eventsByFixture);
   const away = summarizeRows(awayFixtures, awayTeamId, eventsByFixture);
+  home.excludedOtherCompetitions = homeRows.filter((row) => !isSameCompetition(row, fixture)).length;
+  away.excludedOtherCompetitions = awayRows.filter((row) => !isSameCompetition(row, fixture)).length;
   const warnings = [];
   const minSample = Math.min(home.useful, away.useful);
   if (minSample < 3) {
@@ -198,16 +202,17 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
       status: "not_available",
       source: "API-Football fixture events",
       sourceModule: "goal_half_projection",
-      modelVersion: "goal-half-events-v1",
+      modelVersion: "goal-half-events-v2-same-competition",
       fixtureId,
       teams: { home, away },
       projection: null,
       quality: resolveModuleQuality({ status: "not_available" }),
-      warning: "Gol por mitad no disponible: se requieren al menos 3 partidos oficiales previos por equipo con eventos.",
+      warning: `Gol por mitad no disponible: se requieren al menos 3 partidos previos por equipo en ${competitionLabel(fixture)} con eventos.`,
       generatedAt: new Date().toISOString()
     };
   }
   if (minSample < 5) warnings.push("Muestra menor a 5 partidos oficiales; interpretar como tendencia contextual.");
+  if (home.excludedOtherCompetitions || away.excludedOtherCompetitions) warnings.push("Se excluyeron partidos de otras competiciones.");
   if (home.excludedNoEvents || away.excludedNoEvents) warnings.push("Algunos partidos no devolvieron eventos de API-Football.");
   const projection = buildProjection(home, away);
   const confidenceScore = Math.min(86, Math.max(45, 42 + minSample * 6 + projection.difference));
@@ -216,7 +221,7 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
     status,
     source: "API-Football fixture events + modelo interno",
     sourceModule: "goal_half_projection",
-    modelVersion: "goal-half-events-v1",
+    modelVersion: "goal-half-events-v2-same-competition",
     fixtureId,
     teams: { home, away },
     projection,

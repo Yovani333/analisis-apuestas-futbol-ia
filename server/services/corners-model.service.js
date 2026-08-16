@@ -1,4 +1,5 @@
 import { resolveModuleQuality } from "./module-quality.service.js";
+import { competitionLabel, filterSameCompetitionRows } from "./competition-scope.service.js";
 
 const number = (value) => value === null || value === undefined || value === "" || !Number.isFinite(Number(String(value).replace("%", ""))) ? null : Number(String(value).replace("%", ""));
 const round = (value, digits = 1) => Number(value.toFixed(digits));
@@ -20,10 +21,13 @@ function weightedRate(values, predicate) {
 
 function history(dataset, side) {
   const fixtures = dataset.historicalEstimatedXg?.[`${side}Team`]?.fixturesUsed || dataset.researchData?.xgXga?.[`fixturesUsed${side === "home" ? "Home" : "Away"}`] || [];
-  const official = fixtures.filter((fixture) => !friendly(fixture));
+  const sameCompetition = filterSameCompetitionRows(fixtures, dataset.fixture);
+  const official = sameCompetition.filter((fixture) => !friendly(fixture));
   const usefulRows = official.filter((fixture) => number(fixture.cornerStats?.cornersFor) !== null && number(fixture.cornerStats?.cornersAgainst) !== null).slice(0, 5);
   return {
     attempted: fixtures.length,
+    excludedOtherCompetitions: fixtures.length - sameCompetition.length,
+    targetCompetition: competitionLabel(dataset.fixture),
     excludedFriendlies: fixtures.filter(friendly).length,
     useful: usefulRows.length,
     competitions: [...new Set(usefulRows.map((fixture) => fixture.competition).filter(Boolean))],
@@ -53,7 +57,7 @@ export function calculateCornersModel(dataset = {}) {
   const fixture = dataset.fixture || {};
   const home = history(dataset, "home");
   const away = history(dataset, "away");
-  if (!home.useful || !away.useful) return { status: "not_available", sourceModule: "corners", source: "API-Football fixture statistics", teams: { home, away }, picks: [], quality: resolveModuleQuality({ status: "not_available" }), warning: "Corners no disponible: faltan partidos oficiales con corners completos.", generatedAt: new Date().toISOString() };
+  if (!home.useful || !away.useful) return { status: "not_available", sourceModule: "corners", source: "API-Football fixture statistics", teams: { home, away }, picks: [], quality: resolveModuleQuality({ status: "not_available" }), warning: `Corners no disponible: faltan partidos de ${competitionLabel(fixture)} con corners completos.`, generatedAt: new Date().toISOString() };
 
   home.tier = tier(dataset, "home", home);
   away.tier = tier(dataset, "away", away);
@@ -68,6 +72,7 @@ export function calculateCornersModel(dataset = {}) {
   const offensiveMonopoly = Boolean(favorite && favorite.possessionAvg >= 58 && favorite.shotsAvg >= 13 && underdog.cornersAgainstAvg >= 5);
   let confidenceScore = Math.min(home.useful, away.useful) >= 5 ? 76 : 49;
   const warnings = [];
+  if (home.excludedOtherCompetitions || away.excludedOtherCompetitions) warnings.push("Se excluyeron partidos de otras competiciones.");
   if (Math.min(home.useful, away.useful) < 5) warnings.push("Muestra menor a 5 partidos oficiales; no se permite recomendación fuerte.");
   if (home.possessionAvg === null || away.possessionAvg === null) { confidenceScore -= 10; warnings.push("Posesión histórica incompleta."); }
 
@@ -108,7 +113,7 @@ export function calculateCornersModel(dataset = {}) {
   };
   const disparity = home.tier === away.tier ? "low" : Math.abs(Number(home.tier.at(-1)) - Number(away.tier.at(-1))) >= 2 ? "high" : "medium";
   return {
-    status, source: "API-Football fixture statistics + modelo interno", sourceModule: "corners", modelVersion: "official-history-corners-v2",
+    status, source: "API-Football fixture statistics + modelo interno", sourceModule: "corners", modelVersion: "official-history-corners-v3-same-competition",
     fixtureId: String(fixture.id || ""), teams: { home, away }, disparity, totalExpectedCorners: totalExpected, recommendation,
     offensiveMonopoly, preMatchSignal: offensiveMonopoly ? `Posible monopolio ofensivo de ${fixture[favoriteSide]}.` : "Sin monopolio ofensivo confirmado.",
     live: { active: live, current, alert: liveAlert, competitiveNeed: "Necesidad competitiva no disponible" },

@@ -172,6 +172,7 @@ async function buildTeamHistory({
       opponentId: String(opponentId),
       opponent: String(homeId) === String(team.id) ? fixture?.teams?.away?.name || "" : fixture?.teams?.home?.name || "",
       venue: String(homeId) === String(team.id) ? "home" : "away",
+      leagueId: fixture?.league?.id ?? null,
       competition: fixture?.league?.name || "",
       competitionType: fixture?.league?.type || "",
       estimatedXG,
