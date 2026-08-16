@@ -4,8 +4,8 @@ import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js
 import {
   assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, calculateTestParlayMetrics, createSavedParlay, createSavedPick, isTestParlay,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
-  permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, setParlayTestMode, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260815-test-parlays-v2";
+  permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, setParlayTestMode, setTestParlayLegFixtureStatus, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
+} from "./parlay-store.js?v=20260816-test-fixture-status-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -3582,7 +3582,7 @@ function renderTestParlays() {
       <div class="test-parlay-mode-row"><label class="saved-parlay-test-toggle"><input type="checkbox" data-parlay-test-toggle="${escapeHtml(parlay.id)}" checked /><span><strong>Parlay de prueba</strong><small>Se aplica a todas sus selecciones.</small></span></label></div>
       <details class="saved-parlay saved-parlay--test saved-parlay--${result}">
         <summary class="saved-parlay__header"><div><span>PRUEBA · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(formatUpdatedAt(parlay.createdAt))}</time></div><div class="saved-parlay__summary"><span class="parlay-win-progress"><small>Acierto</small><strong>${displayValue(progress.percentage)}%</strong><small>${progress.won}/${progress.total}</small></span><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong></div></summary>
-        <div class="saved-parlay__legs">${(parlay.legs || []).map((leg, index) => `<section class="saved-leg saved-leg--${escapeHtml(leg.result)}"><div class="saved-leg__index">${index + 1}</div><div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(resultLabels[leg.result] || "Pendiente")}${savedLegScoreHtml(leg)}</small><small>Origen ${escapeHtml(pickOriginLabel(leg))}</small></div></section>`).join("")}</div>
+        <div class="saved-parlay__legs">${(parlay.legs || []).map((leg, index) => { const fixtureStatus = normalizedSavedStatus(leg.fixtureStatus); return `<section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-test-leg-id="${escapeHtml(leg.id)}"><div class="saved-leg__index">${index + 1}</div><div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(fixtureStatus)} · ${escapeHtml(resultLabels[leg.result] || "Pendiente")}${savedLegScoreHtml(leg)}</small><small>Origen ${escapeHtml(pickOriginLabel(leg))}</small></div><div class="saved-leg__controls test-fixture-status-control"><label>Estado del encuentro<select data-test-fixture-status><option value="Programado" ${fixtureStatus === "Programado" ? "selected" : ""}>Programado</option><option value="En vivo" ${fixtureStatus === "En vivo" ? "selected" : ""}>En vivo</option><option value="Finalizado" ${fixtureStatus === "Finalizado" ? "selected" : ""}>Finalizado</option><option value="Postergado" ${fixtureStatus === "Postergado" ? "selected" : ""}>Postergado</option><option value="Suspendido" ${fixtureStatus === "Suspendido" ? "selected" : ""}>Suspendido</option><option value="Cancelado" ${fixtureStatus === "Cancelado" ? "selected" : ""}>Cancelado</option></select></label><button class="button button--secondary button--compact" type="button" data-save-test-fixture-status>Guardar estado</button></div></section>`; }).join("")}</div>
       </details>
     </article>`;
   }).join("");
@@ -3599,6 +3599,17 @@ function updateParlayTestMode(parlayId, enabled) {
   showNotice(enabled
     ? "Parlay completo movido a Pruebas. Todas sus selecciones quedaron fuera de los históricos reales."
     : "Parlay completo devuelto al seguimiento normal con todas sus selecciones.");
+}
+
+function updateTestFixtureStatus(parlayId, legId, fixtureStatus) {
+  const index = state.savedParlays.findIndex((parlay) => parlay.id === parlayId);
+  if (index < 0) return;
+  const updated = setTestParlayLegFixtureStatus(state.savedParlays[index], legId, fixtureStatus);
+  if (updated === state.savedParlays[index]) return;
+  state.savedParlays[index] = updated;
+  persistSavedParlays();
+  renderTestParlays();
+  showNotice(`Estado de prueba guardado como ${fixtureStatus}. El resultado del pick no fue modificado.`);
 }
 
 function parlayTotalOdds(legs, key) {
@@ -6198,6 +6209,15 @@ elements.testParlaysList.addEventListener("change", (event) => {
   const testToggle = event.target.closest("[data-parlay-test-toggle]");
   if (!testToggle) return;
   updateParlayTestMode(testToggle.dataset.parlayTestToggle, testToggle.checked);
+});
+elements.testParlaysList.addEventListener("click", (event) => {
+  const save = event.target.closest("[data-save-test-fixture-status]");
+  if (!save) return;
+  const parlayCard = save.closest("[data-test-parlay-id]");
+  const legRow = save.closest("[data-test-leg-id]");
+  const select = legRow?.querySelector("[data-test-fixture-status]");
+  if (!parlayCard || !legRow || !select) return;
+  updateTestFixtureStatus(parlayCard.dataset.testParlayId, legRow.dataset.testLegId, select.value);
 });
 elements.savedPicksList.addEventListener("change", (event) => {
   const select = event.target.closest("[data-pick-result]");

@@ -19,6 +19,31 @@ export function setParlayTestMode(parlay = {}, isTest = false, now = new Date())
   };
 }
 
+const MANUAL_TEST_FIXTURE_STATUSES = new Set(["Programado", "En vivo", "Finalizado", "Postergado", "Suspendido", "Cancelado"]);
+
+export function setTestParlayLegFixtureStatus(parlay = {}, legId, fixtureStatus, now = new Date()) {
+  if (!isTestParlay(parlay) || !MANUAL_TEST_FIXTURE_STATUSES.has(fixtureStatus)) return parlay;
+  let changed = false;
+  const updatedAt = now.toISOString();
+  const legs = (parlay.legs || []).map((leg) => {
+    if (String(leg.id) !== String(legId)) return leg;
+    changed = true;
+    const updatedLeg = {
+      ...leg,
+      fixtureStatus,
+      fixtureStatusSource: "manual_test",
+      fixtureStatusUpdatedAt: updatedAt,
+      updatedAt
+    };
+    if (fixtureStatus !== "En vivo") {
+      delete updatedLeg.liveScore;
+      delete updatedLeg.liveElapsed;
+    }
+    return updatedLeg;
+  });
+  return changed ? { ...parlay, legs, updatedAt } : parlay;
+}
+
 function productionParlays(parlays = []) {
   return parlays.filter((parlay) => !isTestParlay(parlay));
 }

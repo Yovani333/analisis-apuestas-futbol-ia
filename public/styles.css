@@ -830,6 +830,7 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .saved-leg__controls { display: grid; align-self: stretch; gap: 6px; }
 .saved-leg__controls > div { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .saved-leg__controls .button { min-height: 29px; padding: 4px 6px; font-size: .62rem; }
+.test-fixture-status-control .button { width: 100%; }
 .saved-parlay__notes { padding: 12px 18px; }
 .saved-parlay__notes label { display: block; margin-bottom: 5px; }
 .saved-parlay__notes textarea { width: 100%; min-height: 72px; padding: 9px 10px; resize: vertical; color: var(--text); border: 1px solid var(--border); border-radius: 9px; }
