@@ -80,6 +80,49 @@ test("traduce el rango conjunto tardio a gol en el segundo tiempo", async () => 
   assert.equal(result.intervalComparison.strongestHalfSelection, "Gol en el segundo tiempo");
 });
 
+test("recomienda sin anotacion en primer tiempo con muestra verificada estable", async () => {
+  const homeFixtures = [1, 2, 3, 4, 5].map((id, index) => fixture(id, 1, 10 + id, `2026-07-${25 - index}T20:00:00Z`));
+  const awayFixtures = [6, 7, 8, 9, 10].map((id, index) => fixture(id, 2, 20 + id, `2026-07-${25 - index}T20:00:00Z`, false));
+  const events = {};
+  homeFixtures.forEach((row) => { events[row.fixture.id] = [goal(1, 68)]; });
+  awayFixtures.forEach((row) => { events[row.fixture.id] = [goal(2, 78)]; });
+
+  const result = await calculateGoalHalfModel(targetFixture, dependencies(homeFixtures, awayFixtures, events));
+  const noGoal = result.firstHalfNoGoalProjection;
+
+  assert.equal(noGoal.status, "RECOMMENDED");
+  assert.equal(noGoal.recommendedSelection, "No habrá anotación en el primer tiempo");
+  assert.equal(noGoal.homeNoGoalRate, 100);
+  assert.equal(noGoal.awayNoGoalRate, 100);
+  assert.equal(noGoal.averageFirstHalfGoals, 0);
+  assert.equal(noGoal.confidence, "Alta");
+});
+
+test("rechaza primer tiempo sin gol cuando los goles tempranos son frecuentes", async () => {
+  const homeFixtures = [1, 2, 3, 4, 5].map((id, index) => fixture(id, 1, 10 + id, `2026-07-${25 - index}T20:00:00Z`));
+  const awayFixtures = [6, 7, 8, 9, 10].map((id, index) => fixture(id, 2, 20 + id, `2026-07-${25 - index}T20:00:00Z`, false));
+  const events = {};
+  homeFixtures.forEach((row) => { events[row.fixture.id] = [goal(1, 18)]; });
+  awayFixtures.forEach((row) => { events[row.fixture.id] = [goal(2, 28)]; });
+
+  const result = await calculateGoalHalfModel(targetFixture, dependencies(homeFixtures, awayFixtures, events));
+
+  assert.equal(result.firstHalfNoGoalProjection.status, "NO_BET");
+  assert.equal(result.firstHalfNoGoalProjection.recommendedSelection, null);
+  assert.equal(result.firstHalfNoGoalProjection.confidence, "Baja");
+});
+
+test("no convierte partidos sin eventos ni descanso en primeros tiempos sin gol", async () => {
+  const homeFixtures = [1, 2, 3, 4, 5].map((id, index) => fixture(id, 1, 10 + id, `2026-07-${25 - index}T20:00:00Z`));
+  const awayFixtures = [6, 7, 8, 9, 10].map((id, index) => fixture(id, 2, 20 + id, `2026-07-${25 - index}T20:00:00Z`, false));
+
+  const result = await calculateGoalHalfModel(targetFixture, dependencies(homeFixtures, awayFixtures, {}));
+
+  assert.equal(result.firstHalfNoGoalProjection.status, "INSUFFICIENT_DATA");
+  assert.equal(result.firstHalfNoGoalProjection.recommendedSelection, null);
+  assert.match(result.firstHalfNoGoalProjection.explanation, /No se interpreta la ausencia de eventos/);
+});
+
 test("no recomienda cuando algun equipo tiene menos de tres partidos previos oficiales", async () => {
   const homeFixtures = [fixture(1, 1, 11, "2026-07-25T20:00:00Z"), fixture(2, 1, 12, "2026-07-24T20:00:00Z")];
   const awayFixtures = [fixture(6, 2, 21, "2026-07-25T20:00:00Z"), fixture(7, 2, 22, "2026-07-24T20:00:00Z"), fixture(8, 2, 23, "2026-07-23T20:00:00Z")];

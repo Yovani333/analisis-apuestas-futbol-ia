@@ -29,7 +29,7 @@ const AUTO_SETTLEMENT_CODES = new Set([
   "over_0_5", "over_1_5", "over_2_5", "over_3_5",
   "under_1_5", "under_2_5", "under_3_5", "btts_yes", "btts_no",
   "home_most_corners", "away_most_corners", "over_corners", "under_corners",
-  "over_yellow_cards", "under_yellow_cards", "goal_first_half", "goal_second_half"
+  "over_yellow_cards", "under_yellow_cards", "goal_first_half", "goal_second_half", "no_goal_first_half"
 ]);
 
 function readArray(storage, key) {
@@ -163,6 +163,8 @@ export function resolveSelectionCode(leg = {}) {
   const away = normalizedSelectionText(leg.away);
   const belongsTo = (team) => Boolean(team && selection.includes(team));
 
+  if (/no habra (?:anotacion|gol).*primer(?:a)? (?:mitad|tiempo)|primer(?:a)? (?:mitad|tiempo).*sin gol/.test(selection)) return "no_goal_first_half";
+
   if (/\b1x\b|local.*empate|home.*draw/.test(selection)) return "1X";
   if (/\bx2\b|empate.*visitante|draw.*away/.test(selection)) return "X2";
   if (/\b12\b|local.*visitante|home.*away/.test(selection)) return "12";
@@ -259,9 +261,10 @@ export function applyFixtureStatusUpdate(leg = {}, fixtureResult = {}, now = new
 export function settlePickResult(leg, fixtureResult) {
   const selectionCode = resolveSelectionCode(leg);
   if (!selectionCode || !fixtureResult?.finished) return "pending";
-  if (selectionCode === "goal_first_half" || selectionCode === "goal_second_half") {
+  if (["goal_first_half", "goal_second_half", "no_goal_first_half"].includes(selectionCode)) {
     const halftime = validFixtureScore(fixtureResult.halftimeScore || fixtureResult.score?.halftime);
     if (!halftime) return "pending";
+    if (selectionCode === "no_goal_first_half") return halftime.home + halftime.away === 0 ? "won" : "lost";
     if (selectionCode === "goal_first_half") return halftime.home + halftime.away > 0 ? "won" : "lost";
     const regulation = validFixtureScore(fixtureResult.regulationGoals || fixtureResult.fulltimeScore || fixtureResult.score?.fulltime || fixtureResult.goals);
     if (!regulation) return "pending";

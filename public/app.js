@@ -5125,7 +5125,16 @@ function renderGoalIntervals(result = {}) {
   const addAction = goalIntervalProjectionLeg(result)
     ? '<div class="module-pick-action"><span>Selección basada en el rango con mayor señal conjunta; queda pendiente de cuota.</span><button class="button button--primary button--compact" type="button" data-add-goal-interval-pick>Agregar pick</button></div>'
     : "";
-  elements.goalIntervalsContent.innerHTML = `${addAction}<div class="goal-interval-summary"><span>Rango con mayor señal conjunta</span><strong>${escapeHtml(comparison.strongestInterval || "Sin tendencia clara")}</strong><div class="goal-interval-summary__support"><small>Respaldo ponderado ${displayValue(comparison.strongestSupport, 0)}%</small>${halfSelection ? `<b>${escapeHtml(halfSelection)}</b>` : ""}</div></div><div class="goal-interval-table">${detailTable(["Rango", homeName, awayName, "Señal conjunta"], rows)}</div><div class="detail-note detail-note--info"><strong>Cómo interpretarlo</strong><span>Los porcentajes indican la frecuencia ponderada con que cada equipo marcó en ese intervalo durante sus partidos previos de la misma competición. La mitad indicada corresponde al rango con mayor señal conjunta. Es evidencia contextual, no una probabilidad garantizada.</span></div>`;
+  const noGoal = result.firstHalfNoGoalProjection;
+  const noGoalRecommended = noGoal?.status === "RECOMMENDED";
+  const noGoalAnalysis = noGoal ? `<section class="goal-no-first-half-analysis goal-no-first-half-analysis--${noGoalRecommended ? "recommended" : "observe"}">
+    <header><div><small>Análisis conservador del primer tiempo</small><h3>${escapeHtml(noGoal.recommendedSelection || (noGoal.status === "INSUFFICIENT_DATA" ? "Datos insuficientes para recomendar 0-0 al descanso" : "Sin pick de primer tiempo sin gol"))}</h3></div><span class="status-badge status-badge--${noGoalRecommended ? "available" : "partial"}">${noGoalRecommended ? `Confianza ${escapeHtml(noGoal.confidence)}` : "No recomendado"}</span></header>
+    <div class="goal-no-first-half-metrics"><span>${homeName}<strong>${displayValue(noGoal.homeNoGoalRate, 0)}%</strong><small>${displayValue(noGoal.homeSampleSize, 0)} verificados</small></span><span>${awayName}<strong>${displayValue(noGoal.awayNoGoalRate, 0)}%</strong><small>${displayValue(noGoal.awaySampleSize, 0)} verificados</small></span><span>Respaldo conjunto<strong>${displayValue(noGoal.overallSupport, 0)}%</strong><small>Reciente ${displayValue(noGoal.recentSupport, 0)}%</small></span><span>Localía comparable<strong>${displayValue(noGoal.contextualSupport, 0)}%</strong><small>Promedio 1T ${displayValue(noGoal.averageFirstHalfGoals)}</small></span><span>Índice de respaldo<strong>${displayValue(noGoal.supportScore, 0)}/100</strong><small>No es probabilidad calibrada</small></span></div>
+    <p>${escapeHtml(noGoal.explanation || "")}</p>
+    ${noGoal.warnings?.length ? `<div class="data-picks-warnings">${noGoal.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
+    ${noGoalRecommended ? '<div class="module-pick-action"><span>La cuota queda pendiente hasta que esté disponible.</span><button class="button button--primary button--compact" type="button" data-add-no-goal-first-half-pick>Agregar pick</button></div>' : ""}
+  </section>` : "";
+  elements.goalIntervalsContent.innerHTML = `${addAction}<div class="goal-interval-summary"><span>Rango con mayor señal conjunta</span><strong>${escapeHtml(comparison.strongestInterval || "Sin tendencia clara")}</strong><div class="goal-interval-summary__support"><small>Respaldo ponderado ${displayValue(comparison.strongestSupport, 0)}%</small>${halfSelection ? `<b>${escapeHtml(halfSelection)}</b>` : ""}</div></div><div class="goal-interval-table">${detailTable(["Rango", homeName, awayName, "Señal conjunta"], rows)}</div>${noGoalAnalysis}<div class="detail-note detail-note--info"><strong>Cómo interpretarlo</strong><span>Los porcentajes indican la frecuencia ponderada con que cada equipo marcó en ese intervalo durante sus partidos previos de la misma competición. La mitad indicada corresponde al rango con mayor señal conjunta. Es evidencia contextual, no una probabilidad garantizada.</span></div>`;
 }
 
 function yellowCardsProjectionLeg() {
@@ -5204,6 +5213,34 @@ function goalIntervalProjectionLeg(result = null) {
   };
 }
 
+function noGoalFirstHalfProjectionLeg(result = null) {
+  const fixture = selectedFixture();
+  const model = result || state.goalHalfByFixture.get(fixture?.id);
+  const projection = model?.firstHalfNoGoalProjection;
+  if (!fixture || projection?.status !== "RECOMMENDED" || !projection.recommendedSelection) return null;
+  return {
+    id: `${fixture.id}:goal-interval:no-goal-first-half`,
+    fixtureId: fixture.id, league: fixture.leagueName, leagueId: fixture.leagueId,
+    country: fixture.country, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: "Gol en el primer tiempo", selection: projection.recommendedSelection,
+    marketCode: "first_half_goal", selectionCode: "no_goal_first_half",
+    decimalOdds: null, originalOdds: null, updatedOdds: null, impliedProbability: null,
+    modelProbability: null, estimatedProbability: null, expectedValue: null,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null,
+    lastUpdatedAt: model.generatedAt, confidence: projection.confidence, confidenceScore: projection.supportScore,
+    risk: projection.confidence === "Alta" ? "Medio" : "Medio-alto", requiresReview: true,
+    reasoning: projection.explanation, sourceModule: "goal_interval_projection", source: model.source,
+    originMenu: "Dashboard", originSection: "Posible gol por rango de tiempo",
+    supportingData: [
+      `${projection.overallSupport}% de respaldo conjunto sin gol en 1T`,
+      `${projection.recentSupport}% de respaldo en los tres partidos más recientes`,
+      `${projection.averageFirstHalfGoals} goles promedio en 1T`,
+      `Índice ${projection.supportScore}/100`
+    ],
+    contradictingData: projection.warnings || []
+  };
+}
+
 function renderYellowCardsWithPick(result = {}) {
   renderYellowCards(result);
   if (yellowCardsProjectionLeg()) elements.yellowCardsContent.insertAdjacentHTML("afterbegin", '<div class="module-pick-action"><span>Pick conservador basado en el límite inferior del rango; queda pendiente de cuota.</span><button class="button button--primary button--compact" type="button" data-add-yellow-cards-pick>Agregar pick</button></div>');
@@ -5227,6 +5264,11 @@ function addGoalHalfProjectionPick() {
 function addGoalIntervalProjectionPick() {
   const leg = goalIntervalProjectionLeg();
   if (leg) appendPickToParlay(leg, "Pick de posible gol por rango de tiempo agregado a Mi parlay.");
+}
+
+function addNoGoalFirstHalfProjectionPick() {
+  const leg = noGoalFirstHalfProjectionLeg();
+  if (leg) appendPickToParlay(leg, "Pick de primer tiempo sin anotación agregado a Mi parlay.");
 }
 
 async function loadGoalHalf(forceRefresh = false) {
@@ -6051,7 +6093,10 @@ elements.showGoalHalf.addEventListener("click", () => toggleReadyModule(elements
 elements.showGoalIntervals.addEventListener("click", () => toggleReadyModule(elements.showGoalIntervals, elements.goalIntervalsContent));
 elements.yellowCardsContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-yellow-cards-pick]")) addYellowCardsProjectionPick(); });
 elements.goalHalfContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-goal-half-pick]")) addGoalHalfProjectionPick(); });
-elements.goalIntervalsContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-goal-interval-pick]")) addGoalIntervalProjectionPick(); });
+elements.goalIntervalsContent.addEventListener("click", (event) => {
+  if (event.target.closest("[data-add-goal-interval-pick]")) addGoalIntervalProjectionPick();
+  if (event.target.closest("[data-add-no-goal-first-half-pick]")) addNoGoalFirstHalfProjectionPick();
+});
 elements.cornersContent.addEventListener("click", (event) => { const add = event.target.closest("[data-add-corners]"); const save = event.target.closest("[data-save-corners]"); const addExpected = event.target.closest("[data-add-expected-corners]"); const saveExpected = event.target.closest("[data-save-expected-corners]"); if (add) addCornerPick(add.dataset.addCorners); if (save) saveCornerPick(save.dataset.saveCorners); if (addExpected) addExpectedCornersPick(); if (saveExpected) saveExpectedCornersPick(); });
 elements.showSpecificMarkets.addEventListener("click", () => loadSpecificMarkets(true));
 elements.specificMarketsContent.addEventListener("click", (event) => {
