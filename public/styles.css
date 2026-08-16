@@ -1806,6 +1806,12 @@ body {
 .saved-market-metrics { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px !important; }
 .saved-market-metrics > span { display: grid; gap: 2px; padding: 6px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
 .saved-parlay__summary { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.saved-parlay-test-toggle { display: inline-flex; min-height: 32px; align-items: center; gap: 7px; padding: 5px 8px; color: var(--text); font-size: .64rem; font-weight: 800; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.saved-parlay-test-toggle input { width: 16px; min-height: 16px; margin: 0; accent-color: var(--warning); }
+.saved-parlay-test-toggle > span { display: grid; gap: 1px; }
+.saved-parlay-test-toggle small { color: var(--muted); font-size: .56rem; font-weight: 600; }
+.test-parlay-shell { display: grid; gap: 6px; }
+.test-parlay-mode-row { display: flex; justify-content: flex-end; }
 .saved-parlay__summary .parlay-win-progress { display: inline-flex; min-height: 30px; align-items: center; gap: 4px; padding: 4px 7px; color: var(--muted); white-space: nowrap; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
 .parlay-win-progress small { font-size: .56rem; }
 .parlay-win-progress strong { color: var(--text); font-size: .66rem; }
@@ -3180,7 +3186,7 @@ body {
   .saved-parlay__summary {
     display: grid;
     width: 100%;
-    grid-template-columns: minmax(0, 1fr) auto 36px;
+    grid-template-columns: auto minmax(0, 1fr) auto 36px;
     align-items: center;
     justify-content: stretch;
     gap: 7px;
@@ -3192,6 +3198,7 @@ body {
   }
 
   .saved-parlay__summary .result-badge { min-width: 0; }
+  .saved-parlay-test-toggle { justify-content: center; }
 
   .saved-date-filter, .performance-month-filter { grid-template-columns: minmax(0, 1fr); }
   .saved-date-filter > div, .saved-date-filter .button, .saved-date-filter span,

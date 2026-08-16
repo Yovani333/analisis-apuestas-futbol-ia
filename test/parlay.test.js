@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFixtureStatusUpdate, assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, calculateTestParlayMetrics, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, isTestParlay, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { applyFixtureStatusUpdate, assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, calculateTestParlayMetrics, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, isTestParlay, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, setParlayTestMode, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("calcula el porcentaje ganado de un parlay aunque el resultado general sea perdido", () => {
   assert.deepEqual(calculateParlayWinProgress([
@@ -676,4 +676,26 @@ test("las pruebas conservan estadísticas separadas por parlay, selección y mer
   assert.equal(metrics.legHitRate, 75);
   assert.equal(metrics.averageSelections, 2);
   assert.ok(metrics.marketPerformance.some((row) => row.market === "Más de 1.5 - total" && row.won === 2));
+});
+
+test("la marca de prueba mueve el parlay completo sin modificar sus selecciones", () => {
+  const original = createSavedParlay("Parlay completo", [
+    { id: "leg-a", fixtureId: 1001, market: "Total de goles", selection: "Más de 1.5", result: "won" },
+    { id: "leg-b", fixtureId: 1002, market: "Ambos anotan", selection: "Sí", result: "lost" }
+  ], new Date("2026-08-15T12:00:00Z"));
+  original.legs[0].result = "won";
+  original.legs[1].result = "lost";
+  const originalLegs = structuredClone(original.legs);
+
+  const marked = setParlayTestMode(original, true, new Date("2026-08-15T12:05:00Z"));
+  assert.equal(isTestParlay(marked), true);
+  assert.deepEqual(marked.legs, originalLegs);
+  assert.equal(calculateHistoryMetrics([marked]).total, 0);
+  assert.equal(calculateTestParlayMetrics([marked]).total, 1);
+
+  const restored = setParlayTestMode(marked, false, new Date("2026-08-15T12:10:00Z"));
+  assert.equal(isTestParlay(restored), false);
+  assert.deepEqual(restored.legs, originalLegs);
+  assert.equal(calculateHistoryMetrics([restored]).total, 1);
+  assert.equal(calculateTestParlayMetrics([restored]).total, 0);
 });

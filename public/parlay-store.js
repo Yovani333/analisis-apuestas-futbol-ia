@@ -11,6 +11,14 @@ export function isTestParlay(parlay = {}) {
   return parlay?.isTest === true;
 }
 
+export function setParlayTestMode(parlay = {}, isTest = false, now = new Date()) {
+  return {
+    ...parlay,
+    isTest: Boolean(isTest),
+    updatedAt: now.toISOString()
+  };
+}
+
 function productionParlays(parlays = []) {
   return parlays.filter((parlay) => !isTestParlay(parlay));
 }

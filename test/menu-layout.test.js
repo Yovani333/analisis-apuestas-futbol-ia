@@ -294,4 +294,7 @@ test("Mis apuestas incluye parlays de prueba aislados", () => {
   assert.match(html, /id="parlay-test-mode" type="checkbox"/);
   assert.match(app, /calculateTestParlayMetrics\(tests\)/);
   assert.match(app, /isTestParlay\(parlay\) === testOnly/);
+  assert.match(app, /data-parlay-test-toggle/);
+  assert.match(app, /setParlayTestMode/);
+  assert.match(app, /Todas sus selecciones quedaron fuera de los históricos reales/);
 });

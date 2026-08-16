@@ -4,8 +4,8 @@ import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js
 import {
   assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, calculateTestParlayMetrics, createSavedParlay, createSavedPick, isTestParlay,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
-  permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260815-test-parlays-v1";
+  permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, setParlayTestMode, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
+} from "./parlay-store.js?v=20260815-test-parlays-v2";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
@@ -3540,7 +3540,7 @@ function renderSavedParlays() {
     return `<article class="saved-parlay saved-parlay--${result}" data-parlay-id="${escapeHtml(parlay.id)}">
       <header class="saved-parlay__header">
         <div><span>Parlay · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}${hasLiveFixture ? '<strong class="parlay-live-badge">En vivo</strong>' : ""}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(parlay.createdAt)))}</time></div>
-        <div class="saved-parlay__summary"><span class="parlay-win-progress" title="${winProgress.won} de ${winProgress.total} selecciones ganadas"><small>Acierto</small><strong>${displayValue(winProgress.percentage)}%</strong><small>${winProgress.won}/${winProgress.total}</small></span><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong><button class="parlay-expand" type="button" data-toggle-parlay aria-expanded="${expanded}">${expanded ? "−" : "+"}</button></div>
+        <div class="saved-parlay__summary"><label class="saved-parlay-test-toggle" title="La marca se aplica al parlay completo"><input type="checkbox" data-parlay-test-toggle="${escapeHtml(parlay.id)}" /><span>Prueba</span></label><span class="parlay-win-progress" title="${winProgress.won} de ${winProgress.total} selecciones ganadas"><small>Acierto</small><strong>${displayValue(winProgress.percentage)}%</strong><small>${winProgress.won}/${winProgress.total}</small></span><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong><button class="parlay-expand" type="button" data-toggle-parlay aria-expanded="${expanded}">${expanded ? "−" : "+"}</button></div>
       </header>
       <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); const favoriteOrigin = isActiveSavedPick(leg) && preferredOrigins.has(pickOriginKey(leg)); const countryLabel = leg.country ? ` · ${escapeHtml(leg.country)}` : ""; return `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
@@ -3578,11 +3578,27 @@ function renderTestParlays() {
   elements.testParlaysList.innerHTML = visible.map((parlay) => {
     const result = calculateParlayResult(parlay.legs || []);
     const progress = calculateParlayWinProgress(parlay.legs || []);
-    return `<details class="saved-parlay saved-parlay--test saved-parlay--${result}" data-test-parlay-id="${escapeHtml(parlay.id)}">
-      <summary class="saved-parlay__header"><div><span>PRUEBA · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(formatUpdatedAt(parlay.createdAt))}</time></div><div class="saved-parlay__summary"><span class="parlay-win-progress"><small>Acierto</small><strong>${displayValue(progress.percentage)}%</strong><small>${progress.won}/${progress.total}</small></span><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong></div></summary>
-      <div class="saved-parlay__legs">${(parlay.legs || []).map((leg, index) => `<section class="saved-leg saved-leg--${escapeHtml(leg.result)}"><div class="saved-leg__index">${index + 1}</div><div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(resultLabels[leg.result] || "Pendiente")}${savedLegScoreHtml(leg)}</small><small>Origen ${escapeHtml(pickOriginLabel(leg))}</small></div></section>`).join("")}</div>
-    </details>`;
+    return `<article class="test-parlay-shell" data-test-parlay-id="${escapeHtml(parlay.id)}">
+      <div class="test-parlay-mode-row"><label class="saved-parlay-test-toggle"><input type="checkbox" data-parlay-test-toggle="${escapeHtml(parlay.id)}" checked /><span><strong>Parlay de prueba</strong><small>Se aplica a todas sus selecciones.</small></span></label></div>
+      <details class="saved-parlay saved-parlay--test saved-parlay--${result}">
+        <summary class="saved-parlay__header"><div><span>PRUEBA · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(formatUpdatedAt(parlay.createdAt))}</time></div><div class="saved-parlay__summary"><span class="parlay-win-progress"><small>Acierto</small><strong>${displayValue(progress.percentage)}%</strong><small>${progress.won}/${progress.total}</small></span><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong></div></summary>
+        <div class="saved-parlay__legs">${(parlay.legs || []).map((leg, index) => `<section class="saved-leg saved-leg--${escapeHtml(leg.result)}"><div class="saved-leg__index">${index + 1}</div><div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(resultLabels[leg.result] || "Pendiente")}${savedLegScoreHtml(leg)}</small><small>Origen ${escapeHtml(pickOriginLabel(leg))}</small></div></section>`).join("")}</div>
+      </details>
+    </article>`;
   }).join("");
+}
+
+function updateParlayTestMode(parlayId, enabled) {
+  const index = state.savedParlays.findIndex((parlay) => parlay.id === parlayId);
+  if (index < 0) return;
+  state.savedParlays[index] = setParlayTestMode(state.savedParlays[index], enabled);
+  persistSavedParlays();
+  renderSavedParlays();
+  renderTestParlays();
+  refreshActivePickIndicators();
+  showNotice(enabled
+    ? "Parlay completo movido a Pruebas. Todas sus selecciones quedaron fuera de los históricos reales."
+    : "Parlay completo devuelto al seguimiento normal con todas sus selecciones.");
 }
 
 function parlayTotalOdds(legs, key) {
@@ -6103,6 +6119,11 @@ elements.originPicksDialog.addEventListener("click", (event) => {
   if (event.target === elements.originPicksDialog) elements.originPicksDialog.close();
 });
 elements.savedParlaysList.addEventListener("change", (event) => {
+  const testToggle = event.target.closest("[data-parlay-test-toggle]");
+  if (testToggle) {
+    updateParlayTestMode(testToggle.dataset.parlayTestToggle, testToggle.checked);
+    return;
+  }
   const select = event.target.closest("[data-leg-result]");
   const card = event.target.closest("[data-parlay-id]");
   const legRow = event.target.closest("[data-leg-id]");
@@ -6128,6 +6149,11 @@ elements.savedParlaysList.addEventListener("change", (event) => {
   persistSavedParlays();
   renderSavedParlays();
   refreshActivePickIndicators();
+});
+elements.testParlaysList.addEventListener("change", (event) => {
+  const testToggle = event.target.closest("[data-parlay-test-toggle]");
+  if (!testToggle) return;
+  updateParlayTestMode(testToggle.dataset.parlayTestToggle, testToggle.checked);
 });
 elements.savedPicksList.addEventListener("change", (event) => {
   const select = event.target.closest("[data-pick-result]");
