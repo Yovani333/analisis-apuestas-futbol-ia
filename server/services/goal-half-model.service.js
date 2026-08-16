@@ -183,10 +183,17 @@ function buildIntervalComparison(home, away) {
     };
   });
   const strongest = [...rows].sort((a, b) => b.combinedSupport - a.combinedSupport || (b.homeGoals + b.awayGoals) - (a.homeGoals + a.awayGoals))[0];
+  const strongestHalf = strongest?.key && strongest.combinedSupport > 0
+    ? (["0_15", "16_30", "31_45"].includes(strongest.key) ? "Primera mitad" : "Segunda mitad")
+    : null;
   return {
     rows,
     strongestInterval: strongest?.combinedSupport > 0 ? strongest.label : null,
-    strongestSupport: strongest?.combinedSupport || 0
+    strongestSupport: strongest?.combinedSupport || 0,
+    strongestHalf,
+    strongestHalfSelection: strongestHalf === "Primera mitad"
+      ? "Gol en el primer tiempo"
+      : strongestHalf === "Segunda mitad" ? "Gol en el segundo tiempo" : null
   };
 }
 

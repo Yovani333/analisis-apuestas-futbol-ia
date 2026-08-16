@@ -62,6 +62,22 @@ test("compara los intervalos de gol desde la perspectiva de ambos equipos", asyn
   assert.equal(late.awayGoals, 5);
   assert.equal(early.homeWeightedRate, 100);
   assert.equal(late.awayWeightedRate, 100);
+  assert.equal(result.intervalComparison.strongestHalf, "Primera mitad");
+  assert.equal(result.intervalComparison.strongestHalfSelection, "Gol en el primer tiempo");
+});
+
+test("traduce el rango conjunto tardio a gol en el segundo tiempo", async () => {
+  const homeFixtures = [1, 2, 3, 4, 5].map((id, index) => fixture(id, 1, 10 + id, `2026-07-${25 - index}T20:00:00Z`));
+  const awayFixtures = [6, 7, 8, 9, 10].map((id, index) => fixture(id, 2, 20 + id, `2026-07-${25 - index}T20:00:00Z`, false));
+  const events = {};
+  homeFixtures.forEach((row) => { events[row.fixture.id] = [goal(1, 78)]; });
+  awayFixtures.forEach((row) => { events[row.fixture.id] = [goal(2, 82)]; });
+
+  const result = await calculateGoalHalfModel(targetFixture, dependencies(homeFixtures, awayFixtures, events));
+
+  assert.equal(result.intervalComparison.strongestInterval, "76-90+");
+  assert.equal(result.intervalComparison.strongestHalf, "Segunda mitad");
+  assert.equal(result.intervalComparison.strongestHalfSelection, "Gol en el segundo tiempo");
 });
 
 test("no recomienda cuando algun equipo tiene menos de tres partidos previos oficiales", async () => {

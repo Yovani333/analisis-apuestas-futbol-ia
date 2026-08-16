@@ -88,6 +88,9 @@ test("la comparativa de gol por intervalo reutiliza Gol por mitad sin otra fuent
   assert.match(app, /elements\.refreshGoalIntervals\.addEventListener\("click", \(\) => loadGoalHalf\(true\)\)/);
   assert.match(app, /elements\.showGoalIntervals\.addEventListener\("click", \(\) => toggleReadyModule/);
   assert.match(app, /Rango con mayor señal conjunta/);
+  assert.match(app, /Gol en el primer tiempo/);
+  assert.match(app, /Gol en el segundo tiempo/);
+  assert.match(app, /strongestHalfSelection/);
 });
 
 test("guardar desde el cupon permanece en la vista actual", () => {

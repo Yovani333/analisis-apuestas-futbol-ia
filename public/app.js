@@ -5113,7 +5113,11 @@ function renderGoalIntervals(result = {}) {
     `${displayValue(row.awayGoals, 0)} goles · ${displayValue(row.awayWeightedRate, 0)}%`,
     `${displayValue(row.combinedSupport, 0)}%`
   ]);
-  elements.goalIntervalsContent.innerHTML = `<div class="goal-interval-summary"><span>Rango con mayor señal conjunta</span><strong>${escapeHtml(comparison.strongestInterval || "Sin tendencia clara")}</strong><small>Respaldo ponderado ${displayValue(comparison.strongestSupport, 0)}%</small></div><div class="goal-interval-table">${detailTable(["Rango", homeName, awayName, "Señal conjunta"], rows)}</div><div class="detail-note detail-note--info"><strong>Cómo interpretarlo</strong><span>Los porcentajes indican la frecuencia ponderada con que cada equipo marcó en ese intervalo durante sus partidos previos de la misma competición. Es evidencia contextual, no una probabilidad garantizada.</span></div>`;
+  const strongestKey = comparison.rows.find((row) => row.label === comparison.strongestInterval)?.key;
+  const halfSelection = comparison.strongestHalfSelection || (["0_15", "16_30", "31_45"].includes(strongestKey)
+    ? "Gol en el primer tiempo"
+    : ["46_60", "61_75", "76_90"].includes(strongestKey) ? "Gol en el segundo tiempo" : null);
+  elements.goalIntervalsContent.innerHTML = `<div class="goal-interval-summary"><span>Rango con mayor señal conjunta</span><strong>${escapeHtml(comparison.strongestInterval || "Sin tendencia clara")}</strong><div class="goal-interval-summary__support"><small>Respaldo ponderado ${displayValue(comparison.strongestSupport, 0)}%</small>${halfSelection ? `<b>${escapeHtml(halfSelection)}</b>` : ""}</div></div><div class="goal-interval-table">${detailTable(["Rango", homeName, awayName, "Señal conjunta"], rows)}</div><div class="detail-note detail-note--info"><strong>Cómo interpretarlo</strong><span>Los porcentajes indican la frecuencia ponderada con que cada equipo marcó en ese intervalo durante sus partidos previos de la misma competición. La mitad indicada corresponde al rango con mayor señal conjunta. Es evidencia contextual, no una probabilidad garantizada.</span></div>`;
 }
 
 function yellowCardsProjectionLeg() {
