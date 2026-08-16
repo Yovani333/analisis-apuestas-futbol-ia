@@ -9,6 +9,8 @@ export const PICK_ORIGINS = Object.freeze({
   "xG / xGA": { label: "xG / xGA", module: "Transparencia de datos / xG / xGA", status: "legacy_alias" },
   poisson: { label: "Motor Poisson", module: "Guía de análisis / Motor Poisson", status: "active" },
   corners: { label: "Corners", module: "Modelo de Corners", status: "active" },
+  yellow_cards: { label: "Tarjetas amarillas", module: "Dashboard / Tarjetas amarillas", status: "active" },
+  goal_half_projection: { label: "Gol por mitad", module: "Dashboard / Gol por mitad", status: "active" },
   team_goal_probability: { label: "Ataque vs Defensa", module: "Guía de análisis / Ataque vs Defensa", status: "active" },
   team_goals: { label: "Ataque vs Defensa", module: "Guía de análisis / Ataque vs Defensa", status: "internal_alias" },
   specific_markets: { label: "Catálogo de mercados", module: "Catálogo de mercados", status: "active" },

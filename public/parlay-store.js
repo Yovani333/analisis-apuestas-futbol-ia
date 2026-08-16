@@ -12,7 +12,8 @@ const AUTO_SETTLEMENT_CODES = new Set([
   "home_over_0_5", "home_over_1_5", "away_over_0_5", "away_over_1_5",
   "over_0_5", "over_1_5", "over_2_5", "over_3_5",
   "under_1_5", "under_2_5", "under_3_5", "btts_yes", "btts_no",
-  "home_most_corners", "away_most_corners", "over_corners", "under_corners"
+  "home_most_corners", "away_most_corners", "over_corners", "under_corners",
+  "over_yellow_cards", "under_yellow_cards", "goal_first_half", "goal_second_half"
 ]);
 
 function readArray(storage, key) {
@@ -242,6 +243,25 @@ export function applyFixtureStatusUpdate(leg = {}, fixtureResult = {}, now = new
 export function settlePickResult(leg, fixtureResult) {
   const selectionCode = resolveSelectionCode(leg);
   if (!selectionCode || !fixtureResult?.finished) return "pending";
+  if (selectionCode === "goal_first_half" || selectionCode === "goal_second_half") {
+    const halftime = validFixtureScore(fixtureResult.halftimeScore || fixtureResult.score?.halftime);
+    if (!halftime) return "pending";
+    if (selectionCode === "goal_first_half") return halftime.home + halftime.away > 0 ? "won" : "lost";
+    const regulation = validFixtureScore(fixtureResult.regulationGoals || fixtureResult.fulltimeScore || fixtureResult.score?.fulltime || fixtureResult.goals);
+    if (!regulation) return "pending";
+    return regulation.home + regulation.away - halftime.home - halftime.away > 0 ? "won" : "lost";
+  }
+  if (selectionCode.includes("yellow_cards")) {
+    const homeYellow = fixtureResult.cards?.breakdown?.home?.yellow;
+    const awayYellow = fixtureResult.cards?.breakdown?.away?.yellow;
+    if (homeYellow === null || homeYellow === undefined || homeYellow === ""
+      || awayYellow === null || awayYellow === undefined || awayYellow === "") return "pending";
+    const total = Number(homeYellow) + Number(awayYellow);
+    const threshold = Number.parseFloat(normalizedSelectionText(leg.selection).match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(",", ".") || "");
+    if (!Number.isFinite(total) || !Number.isFinite(threshold)) return "pending";
+    if (Number.isInteger(threshold) && total === threshold) return "void";
+    return selectionCode === "over_yellow_cards" ? (total > threshold ? "won" : "lost") : total < threshold ? "won" : "lost";
+  }
   if (!/corners/.test(selectionCode)) {
     const regulation = fixtureResult.regulationGoals || fixtureResult.fulltimeScore || fixtureResult.score?.fulltime;
     const hasRegulationScore = regulation?.home !== null && regulation?.home !== undefined && regulation?.home !== ""
@@ -884,12 +904,14 @@ function historicalValidationForPick(pick, settled, context = {}) {
   };
 }
 
-export function buildHistoricalPickValidator(picks = [], parlays = [], now = new Date()) {
+export function buildHistoricalPickValidator(picks = [], parlays = [], now = new Date(), options = {}) {
   const activePicks = picks.filter((pick) => !pick?.trashed && !pick?.deletedPermanently);
   const activeParlays = parlays.filter((parlay) => !parlay?.trashed && !parlay?.deletedPermanently);
+  const historicalPicks = Array.isArray(options.historicalPicks) ? options.historicalPicks : activePicks;
+  const historicalParlays = Array.isArray(options.historicalParlays) ? options.historicalParlays : activeParlays;
   const settled = [
-    ...activePicks.filter((pick) => ["won", "lost"].includes(pick?.result)),
-    ...activeParlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []).filter((pick) => ["won", "lost"].includes(pick?.result))
+    ...historicalPicks.filter((pick) => ["won", "lost"].includes(pick?.result)),
+    ...historicalParlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []).filter((pick) => ["won", "lost"].includes(pick?.result))
   ];
   const validations = activePicks.filter((pick) => isPendingActivePick(pick, now)).map((pick) => historicalValidationForPick(pick, settled));
   for (const parlay of activeParlays) {
@@ -904,7 +926,7 @@ export function buildHistoricalPickValidator(picks = [], parlays = [], now = new
     }));
   }
   const sizeGroups = new Map();
-  for (const parlay of activeParlays.filter((row) => ["won", "lost"].includes(calculateParlayResult(row?.legs || [])))) {
+  for (const parlay of historicalParlays.filter((row) => ["won", "lost"].includes(calculateParlayResult(row?.legs || [])))) {
     const size = rowSize(parlay.legs?.length || 0);
     const current = sizeGroups.get(size.key) || { ...size, won: 0, lost: 0, evaluated: 0, winRate: null };
     const result = calculateParlayResult(parlay.legs || []);

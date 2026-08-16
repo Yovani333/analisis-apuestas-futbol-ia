@@ -678,6 +678,10 @@ body:has(.data-dialog[open]) { overflow: hidden; }
 .origin-performance__table th { color: var(--muted); font-size: .65rem; text-transform: uppercase; }
 .origin-performance__table tbody tr:last-child td { border-bottom: 0; }
 .origin-performance__table td:last-child strong { color: var(--success); }
+.competition-general-summary { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-soft); }
+.competition-general-summary span { color: var(--muted); }
+.competition-general-summary strong { font-size: 1rem; color: var(--success); }
+.competition-general-summary small { margin-left: auto; color: var(--muted); }
 .competition-result-name { display: grid; justify-items: start; gap: 5px; }
 .query-status { display: inline-flex; align-items: center; width: max-content; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: .62rem; font-weight: 900; text-transform: uppercase; }
 .query-status--active { color: #087a55; background: #e7f8ef; border-color: #9ddcbd; }
@@ -1614,6 +1618,8 @@ body {
 .goal-half-panel { grid-column: 1 / -1; border-top: 4px solid #2d8be0; }
 .goal-half-panel .eyebrow { color: #2563eb; }
 .corner-summary { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; margin-bottom: 10px; font-size: .72rem; background: var(--warning-soft); border: 1px solid #f2dda3; border-radius: 7px; }
+.module-pick-action { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-soft); }
+.module-pick-action span { color: var(--muted); font-size: .72rem; }
 .corner-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .corner-team { display: grid; gap: 7px; padding: 11px; border: 1px solid var(--border); border-radius: 7px; }
 .corner-team h3 { margin: 2px 0 0; font-size: .82rem; text-transform: uppercase; }
@@ -1832,6 +1838,8 @@ body {
   .team-goal-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .corner-grid { grid-template-columns: 1fr; }
   .corner-summary { align-items: flex-start; flex-direction: column; }
+  .competition-general-summary, .module-pick-action { align-items: stretch; flex-direction: column; }
+  .competition-general-summary small { margin-left: 0; }
   .expected-corners-pick { grid-template-columns: 1fr; }
   .simple-filters { grid-template-columns: 1fr !important; }
   .simple-filters > * { grid-column: 1 !important; }

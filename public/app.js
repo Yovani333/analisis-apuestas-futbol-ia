@@ -5,11 +5,11 @@ import {
   assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, createSavedParlay, createSavedPick,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260725-origin-winrate-v2";
+} from "./parlay-store.js?v=20260815-monthly-picks-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
-import { pickOriginKey, pickOriginLabel } from "./pick-origins.js?v=20260805-best-bets-v1";
+import { pickOriginKey, pickOriginLabel } from "./pick-origins.js?v=20260815-monthly-picks-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
 import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260724-parlay-trash-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260722-corners-v2";
@@ -66,7 +66,7 @@ const state = {
   evidenceEvaluationByCompetition: new Map(),
   savedTab: "individual",
   savedDateFilter: pacificToday(),
-  performanceMonthFilter: "",
+  performanceMonthFilter: pacificToday().slice(0, 7),
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
@@ -1532,6 +1532,7 @@ function renderMatches() {
     fixtures: state.fixtures.filter((fixture) => fixture.leagueSlug === league.slug)
   })).filter((group) => group.fixtures.length);
   const competitionHistory = calculateCompetitionPerformance(state.savedPicks, state.savedParlays);
+  const currentMonthHistory = currentMonthPerformanceData();
   groups.sort((left, right) => competitionHistoryOrder(left.league, left.fixtures, competitionHistory)
     - competitionHistoryOrder(right.league, right.fixtures, competitionHistory));
 
@@ -1539,12 +1540,12 @@ function renderMatches() {
     const expanded = state.expandedMatchGroups.has(league.slug);
     const positiveHistory = positiveCompetitionForFixtures(league, fixtures, competitionHistory);
     const unfavorableHistory = positiveHistory ? null : unfavorableCompetitionForFixtures(league, fixtures, competitionHistory);
-    const originLeaders = calculateCompetitionOriginLeaders(state.savedPicks, state.savedParlays, {
+    const originLeaders = calculateCompetitionOriginLeaders(currentMonthHistory.picks, currentMonthHistory.parlays, {
       leagueIds: fixtures.map((fixture) => fixture.leagueId ?? fixture.league?.id),
       competitions: [league.name, ...fixtures.map((fixture) => fixture.leagueName)],
       limit: 2
     });
-    const originLeadersHtml = originLeaders.length ? `<div class="league-origin-guides" aria-label="Orígenes con mejor porcentaje evaluado en ${escapeHtml(league.name)}"><span>Mejor origen:</span>${originLeaders.map((leader, index) => `<button class="league-origin-guide" type="button" data-competition-origin="${escapeHtml(leader.navigationOrigin)}" data-origin-league="${escapeHtml(league.slug)}" data-origin-label="${escapeHtml(leader.originLabel)}" title="${escapeHtml(`${leader.won} ganados y ${leader.lost} perdidos de ${leader.evaluated} evaluados · ${leader.winRate}% de acierto`)}"><b>${index + 1}</b>${escapeHtml(leader.originLabel)}<small>${leader.winRate}% · ${leader.won}/${leader.evaluated}</small></button>`).join("")}</div>` : "";
+    const originLeadersHtml = originLeaders.length ? `<div class="league-origin-guides" aria-label="Orígenes con mejor porcentaje evaluado en ${escapeHtml(league.name)} durante el mes actual"><span>Mejor origen del mes:</span>${originLeaders.map((leader, index) => `<button class="league-origin-guide" type="button" data-competition-origin="${escapeHtml(leader.navigationOrigin)}" data-origin-league="${escapeHtml(league.slug)}" data-origin-label="${escapeHtml(leader.originLabel)}" title="${escapeHtml(`${leader.won} ganados y ${leader.lost} perdidos de ${leader.evaluated} evaluados este mes · ${leader.winRate}% de acierto`)}"><b>${index + 1}</b>${escapeHtml(leader.originLabel)}<small>${leader.winRate}% · ${leader.won}/${leader.evaluated}</small></button>`).join("")}</div>` : "";
     return `
     <section class="league-group" aria-labelledby="league-${escapeHtml(league.slug)}">
       <header class="league-group__header">
@@ -1715,7 +1716,7 @@ function renderFixtureData() {
   elements.refreshYellowCards.disabled = false;
   elements.showYellowCards.disabled = state.isLoadingYellowCards;
   const savedYellowCards = state.yellowCardsByFixture.get(fixture.id);
-  if (savedYellowCards) renderYellowCards(savedYellowCards);
+  if (savedYellowCards) renderYellowCardsWithPick(savedYellowCards);
   else { elements.yellowCardsStatus.className = "status-badge status-badge--unavailable"; elements.yellowCardsStatus.textContent = "No disponible"; elements.yellowCardsContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar datos” para estimar posibles tarjetas amarillas oficiales; después usa Mostrar u Ocultar.</div>'; }
   elements.yellowCardsContent.hidden = true;
   if (savedYellowCards) { elements.showYellowCards.textContent = "Mostrar"; elements.showYellowCards.classList.remove("button--ready"); }
@@ -1723,7 +1724,7 @@ function renderFixtureData() {
   elements.refreshGoalHalf.disabled = false;
   elements.showGoalHalf.disabled = state.isLoadingGoalHalf;
   const savedGoalHalf = state.goalHalfByFixture.get(fixture.id);
-  if (savedGoalHalf) renderGoalHalf(savedGoalHalf);
+  if (savedGoalHalf) renderGoalHalfWithPick(savedGoalHalf);
   else { elements.goalHalfStatus.className = "status-badge status-badge--unavailable"; elements.goalHalfStatus.textContent = "No disponible"; elements.goalHalfContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar datos” para estimar la mitad con mayor tendencia de gol; después usa Mostrar u Ocultar.</div>'; }
   elements.goalHalfContent.hidden = true;
   if (savedGoalHalf) { elements.showGoalHalf.textContent = "Mostrar"; elements.showGoalHalf.classList.remove("button--ready"); }
@@ -3385,7 +3386,11 @@ function renderTeamGoalInsights() {
 
 function renderHistoricalValidator() {
   if (!elements.historicalValidator) return;
-  const report = buildHistoricalPickValidator(state.savedPicks, state.savedParlays);
+  const history = performanceHistoryData();
+  const report = buildHistoricalPickValidator(state.savedPicks, state.savedParlays, new Date(), {
+    historicalPicks: history.picks,
+    historicalParlays: history.parlays
+  });
   const maturityLabel = { sufficient: "Suficiente", provisional: "Provisional", insufficient: "Insuficiente" };
   const decisionData = {
     favorable: { label: "Respaldo histórico favorable", tone: "positive" },
@@ -3413,7 +3418,7 @@ function renderHistoricalValidator() {
   }).join("") : '<div class="saved-empty"><h3>Sin picks pendientes para validar</h3><p>El análisis aparecerá cuando exista un pick individual o una selección activa dentro de un parlay.</p></div>';
   const sizeHtml = report.parlaySizePerformance.length ? report.parlaySizePerformance.map((row) => `<div><span>${escapeHtml(row.label)} selecciones</span><strong>${displayValue(row.winRate)}%</strong><small>${row.won} ganados · ${row.lost} perdidos · n=${row.evaluated}</small></div>`).join("") : '<p class="muted-text">Todavía no hay parlays concluidos para comparar por tamaño.</p>';
   elements.historicalValidator.innerHTML = `
-    <div class="historical-validator__notice"><strong>Apoyo histórico, no garantía</strong><p>Compara resultados guardados sin alterar picks ni fórmulas. Un porcentaje alto con muestra pequeña no representa una probabilidad real del próximo partido.</p></div>
+    <div class="historical-validator__notice"><strong>Apoyo histórico · ${escapeHtml(performanceMonthLabel())}</strong><p>Compara resultados guardados sin alterar picks ni fórmulas. Un porcentaje alto con muestra pequeña no representa una probabilidad real del próximo partido.</p></div>
     <div class="historical-validator__summary"><div><span>Picks evaluados</span><strong>${report.historical.evaluated}</strong></div><div><span>Ganados</span><strong class="value-positive">${report.historical.won}</strong></div><div><span>Perdidos</span><strong class="value-negative">${report.historical.lost}</strong></div><div><span>Acierto histórico</span><strong>${report.historical.winRate === null ? "—" : `${displayValue(report.historical.winRate)}%`}</strong></div><div><span>Picks activos analizados</span><strong>${report.activeValidations.length}</strong></div></div>
     <section class="historical-validator__sizes"><header><h4>Rendimiento de parlays por tamaño</h4><small>Ayuda a detectar cuándo agregar selecciones reduce el rendimiento observado.</small></header><div>${sizeHtml}</div></section>
     <section class="historical-validator__active"><header><h4>Validación de picks activos</h4><small>La coincidencia exacta exige el mismo origen, mercado y competición.</small></header><div class="historical-validator__list">${activeHtml}</div></section>`;
@@ -3424,8 +3429,9 @@ function renderOriginPerformance() {
   renderHistoricalValidator();
   const history = performanceHistoryData();
   const rows = calculateOriginPerformance(history.picks, history.parlays);
-  const allRows = calculateOriginPerformance(state.savedPicks, state.savedParlays);
   const competitionRows = calculateCompetitionPerformance(history.picks, history.parlays);
+  const competitionTotals = competitionRows.reduce((total, row) => ({ won: total.won + row.won, lost: total.lost + row.lost, evaluated: total.evaluated + row.evaluated }), { won: 0, lost: 0, evaluated: 0 });
+  const competitionGeneralRate = competitionTotals.evaluated ? Number((competitionTotals.won / competitionTotals.evaluated * 100).toFixed(1)) : null;
   const pickTypeRows = calculateParlayPickTypePerformance(history.parlays);
   updatePerformanceMonthStatus();
   const noStoredPicks = state.savedPicks.length === 0 && state.savedParlays.length === 0;
@@ -3433,6 +3439,7 @@ function renderOriginPerformance() {
   elements.competitionPerformance.innerHTML = competitionRows.length
     ? `<header><div><span>Balance por torneo · ${escapeHtml(performanceMonthLabel())}</span><h3>Resultados por competición</h3></div><small>Selecciona un número para consultar sus picks.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Posición</th><th>Competición</th><th>Estado</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th></tr></thead><tbody>${competitionRows.map((row, index) => `<tr><td data-label="Posición"><strong>#${index + 1}</strong>${rankingMovementHtml(`competition:${row.key}`, index + 1)}</td><td data-label="Competición"><div class="competition-result-name"><span><strong>${escapeHtml(row.competition)}</strong>${performanceSignalBadge(row.winRate, row.evaluated)}</span>${row.active ? '<span class="active-pick-badge">Pick Activo</span>' : ""}</div></td><td data-label="Estado"><span class="query-status query-status--${escapeHtml(row.queryStatus || "active")}" title="${escapeHtml(row.queryStatusReason || "")}">${escapeHtml(row.queryStatusLabel || "Activo")}</span></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlayLegs}</td><td data-label="Ganados" class="value-positive"><button class="performance-count-link" type="button" data-view-competition-picks="${escapeHtml(row.key)}" data-competition-result="won" aria-label="Ver ${row.won} picks ganados de ${escapeHtml(row.competition)}">${row.won}</button></td><td data-label="Perdidos" class="value-negative"><button class="performance-count-link" type="button" data-view-competition-picks="${escapeHtml(row.key)}" data-competition-result="lost" aria-label="Ver ${row.lost} picks perdidos de ${escapeHtml(row.competition)}">${row.lost}</button></td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto"><strong>${row.winRate === null ? "—" : `${displayValue(row.winRate)}%`}</strong></td></tr>`).join("")}</tbody></table></div>`
     : '<div class="saved-empty"><h3>Sin resultados por competición</h3><p>El conteo aparecerá cuando existan picks concluidos como ganados o perdidos.</p></div>';
+  if (competitionRows.length) elements.competitionPerformance.insertAdjacentHTML("afterbegin", `<div class="competition-general-summary"><span>Porcentaje general · ${escapeHtml(performanceMonthLabel())}</span><strong>${competitionGeneralRate === null ? "—" : `${displayValue(competitionGeneralRate)}%`}</strong><small>${competitionTotals.won} ganados · ${competitionTotals.lost} perdidos · ${competitionTotals.evaluated} evaluados</small></div>`);
   const renderPickTypes = (result) => {
     const filtered = pickTypeRows.filter((row) => row[result] > 0)
       .sort((a, b) => b[result] - a[result] || a.type.localeCompare(b.type, "es"));
@@ -3460,7 +3467,8 @@ function renderOriginPerformance() {
   elements.originPerformance.innerHTML = renderResult("won");
   elements.originLostPerformance.innerHTML = renderResult("lost");
 
-  const recommendations = calculateOriginRecommendations(allRows);
+  const currentMonth = currentMonthPerformanceData();
+  const recommendations = calculateOriginRecommendations(calculateOriginPerformance(currentMonth.picks, currentMonth.parlays));
   const recommendationCards = (items, type) => items.map((item) => `<article class="origin-recommendation origin-recommendation--${type}"><span>${type === "recommended" ? "⚽ Mejor desempeño" : type === "avoid" ? "❌ No recomendado" : "Muestra en observación"}</span><h4>${escapeHtml(item.category)}</h4><p><strong>Origen:</strong> ${escapeHtml(item.originLabel || pickOriginLabel(item.originModule || item.origin))}</p><div><b>${item.won} ganados</b><b>${item.lost} perdidos</b><b>${displayValue(item.winRate)}% acierto</b></div><small>${type === "recommended" ? "Historial favorable con al menos 3 picks evaluados." : type === "avoid" ? "Balance desfavorable con al menos 3 picks evaluados." : "Aún no existe volumen o diferencia suficiente para recomendar o descartar."}</small></article>`).join("");
   elements.originRecommendations.innerHTML = `<div class="origin-recommendations__notice"><strong>Lectura responsable</strong><span>Esta clasificación resume resultados pasados; no modifica fórmulas ni garantiza el siguiente pick.</span></div><div class="origin-recommendations__columns"><section><header><h3>Mejores picks</h3><span>${recommendations.recommended.length}</span></header>${recommendationCards(recommendations.recommended, "recommended") || '<p class="muted-text">Todavía no hay picks con al menos 3 evaluados y 60% de acierto.</p>'}</section><section><header><h3>No recomendados</h3><span>${recommendations.notRecommended.length}</span></header>${recommendationCards(recommendations.notRecommended, "avoid") || '<p class="muted-text">No hay picks con balance claramente desfavorable.</p>'}</section></div>${recommendations.observing.length ? `<section class="origin-recommendations__observing"><header><h3>En observación</h3><span>${recommendations.observing.length}</span></header><div>${recommendationCards(recommendations.observing, "observing")}</div></section>` : ""}`;
 }
@@ -3541,7 +3549,8 @@ function renderTrashParlays() {
 }
 
 function renderBestCombinationAnalysis() {
-  const analysis = buildBestCombinationAnalysis(state.savedPicks, state.savedParlays);
+  const currentMonth = currentMonthPerformanceData();
+  const analysis = buildBestCombinationAnalysis(currentMonth.picks, currentMonth.parlays);
   const combination = analysis.bestCombination.map((item, index) => `<article class="best-combination-card"><span>Selección ${index + 1}</span><h4>${escapeHtml(item.competition)}</h4><p><strong>${escapeHtml(item.market)}</strong></p><small>Origen: ${escapeHtml(item.originLabel)}</small><div><b>${item.winRate}% acierto</b><b>${item.won}/${item.evaluated} ganados</b></div></article>`).join("");
   const avoidCompetitions = analysis.avoidCompetitions.map((item) => `<li><strong>${escapeHtml(item.competition)}</strong><span>${item.winRate}% · ${item.won} ganados / ${item.lost} perdidos</span></li>`).join("");
   const avoidPicks = analysis.avoid.slice(0, 8).map((item) => `<li><strong>${escapeHtml(item.market)}</strong><span>${escapeHtml(item.competition)} · ${escapeHtml(item.originLabel)} · ${item.winRate}%</span></li>`).join("");
@@ -3592,6 +3601,18 @@ async function updateSavedParlayResults({ automatic = false } = {}) {
       const awayRow = rows.find((row) => row.team?.name === fixtureResult?.away) || rows[1];
       return { home: read(homeRow), away: read(awayRow) };
     };
+    const fixtureYellowCards = (details, fixtureResult) => {
+      const rows = details?.confirmedData?.statistics || [];
+      const read = (row) => {
+        const raw = row?.statistics?.find((stat) => String(stat.type || "").toLowerCase() === "yellow cards")?.value;
+        if (raw === null || raw === undefined || raw === "") return null;
+        const value = Number(raw);
+        return Number.isFinite(value) ? value : null;
+      };
+      const homeRow = rows.find((row) => row.team?.name === fixtureResult?.home) || rows[0];
+      const awayRow = rows.find((row) => row.team?.name === fixtureResult?.away) || rows[1];
+      return { home: read(homeRow), away: read(awayRow) };
+    };
     const updateLeg = (leg) => {
       const shouldRefreshStatus = needsFixtureStatusRefresh(leg);
       const shouldSettle = needsSettlementRefresh(leg);
@@ -3626,8 +3647,16 @@ async function updateSavedParlayResults({ automatic = false } = {}) {
         home: resultCorners.home ?? detailCorners.home,
         away: resultCorners.away ?? detailCorners.away
       };
+      const detailYellowCards = fixtureYellowCards(update.details, fixtureResult);
+      const resultCards = fixtureResult?.cards || {};
+      const cards = resultCards.breakdown ? resultCards : {
+        breakdown: {
+          home: { yellow: detailYellowCards.home },
+          away: { yellow: detailYellowCards.away }
+        }
+      };
       if (!shouldSettle) return;
-      const nextResult = settlePickResult(leg, { ...fixtureResult, corners });
+      const nextResult = settlePickResult(leg, { ...fixtureResult, corners, cards });
       if (nextResult !== "pending") {
         const regulation = fixtureResult?.regulationGoals || fixtureResult?.fulltimeScore || fixtureResult?.goals;
         const changed = leg.result !== nextResult;
@@ -4483,6 +4512,15 @@ async function prepareNextNeuralDatasetBatch() {
   }
 }
 
+function currentMonthPerformanceData() {
+  const month = pacificToday().slice(0, 7);
+  return {
+    month,
+    picks: filterPicksByFixtureMonth(state.savedPicks, month),
+    parlays: filterParlaysByFixtureMonth(state.savedParlays, month)
+  };
+}
+
 function neuralDatasetReasonLabel(reason) {
   const labels = {
     missing_audit: "Evidencia todavía sin evaluación guardada",
@@ -4976,6 +5014,76 @@ function renderGoalHalf(result = {}) {
   elements.goalHalfContent.innerHTML = `<div class="corner-summary"><strong>Mitad con mayor señal: ${escapeHtml(projection.selectedHalf || "No disponible")}</strong><span>1T ${displayValue(projection.firstHalfSupport, 0)}% · 2T ${displayValue(projection.secondHalfSupport, 0)}% · Confianza ${displayValue(result.confidenceScore, 0)}/100</span></div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="corner-grid">${team(result.teams?.home || {}, selectedFixture()?.home || "Local")}${team(result.teams?.away || {}, selectedFixture()?.away || "Visitante")}</div><div class="detail-note detail-note--info"><strong>Uso responsable</strong><span>${escapeHtml(projection.explanation || "Tendencia contextual basada en eventos oficiales de goles previos. No es probabilidad completa ni pick automático.")}</span></div>${sampleRows.length ? `<section class="detail-section"><h3>Muestra usada</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "Goles 1T", "Goles 2T"], sampleRows)}</section>` : ""}`;
 }
 
+function yellowCardsProjectionLeg() {
+  const fixture = selectedFixture();
+  const result = state.yellowCardsByFixture.get(fixture?.id);
+  const lower = Number(String(result?.projection?.suggestedRange || "").split("-")[0]);
+  if (!fixture || !result?.projection || !Number.isFinite(lower)) return null;
+  const line = Math.max(0.5, lower - 0.5);
+  return {
+    id: `${fixture.id}:yellow-cards:over-${String(line).replace(".", "-")}`,
+    fixtureId: fixture.id, league: fixture.leagueName, leagueId: fixture.leagueId,
+    country: fixture.country, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: "Total de tarjetas amarillas", selection: `Más de ${line} tarjetas amarillas`,
+    marketCode: "total_yellow_cards", selectionCode: "over_yellow_cards",
+    decimalOdds: null, originalOdds: null, updatedOdds: null, impliedProbability: null,
+    modelProbability: null, expectedValue: null, fixtureStatus: fixture.statusLabel || fixture.status,
+    kickoffAt: fixture.utcDateTime || null, lastUpdatedAt: result.generatedAt,
+    confidence: `${result.confidenceScore}%`, confidenceScore: result.confidenceScore,
+    risk: result.status === "available" ? "Medio" : "Alto", requiresReview: true,
+    reasoning: `Proyección ${result.projection.expectedTotal}; rango sugerido ${result.projection.suggestedRange}.`,
+    sourceModule: "yellow_cards", source: result.source,
+    originMenu: "Dashboard", originSection: "Tarjetas amarillas",
+    supportingData: [`Promedio esperado ${result.projection.expectedTotal}`, `Rango ${result.projection.suggestedRange}`],
+    contradictingData: result.warnings || []
+  };
+}
+
+function goalHalfProjectionLeg() {
+  const fixture = selectedFixture();
+  const result = state.goalHalfByFixture.get(fixture?.id);
+  const selectedHalf = result?.projection?.selectedHalf;
+  if (!fixture || !result?.projection || !["Primera mitad", "Segunda mitad"].includes(selectedHalf)) return null;
+  const first = selectedHalf === "Primera mitad";
+  const support = first ? result.projection.firstHalfSupport : result.projection.secondHalfSupport;
+  return {
+    id: `${fixture.id}:goal-half:${first ? "first" : "second"}`,
+    fixtureId: fixture.id, league: fixture.leagueName, leagueId: fixture.leagueId,
+    country: fixture.country, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: "Gol por mitad", selection: `Habrá gol en la ${first ? "primera" : "segunda"} mitad`,
+    marketCode: "goal_by_half", selectionCode: first ? "goal_first_half" : "goal_second_half",
+    decimalOdds: null, originalOdds: null, updatedOdds: null, impliedProbability: null,
+    modelProbability: null, estimatedProbability: null, expectedValue: null,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null,
+    lastUpdatedAt: result.generatedAt, confidence: `${result.confidenceScore}%`, confidenceScore: result.confidenceScore,
+    risk: result.status === "available" ? "Medio" : "Alto", requiresReview: true,
+    reasoning: result.projection.explanation, sourceModule: "goal_half_projection", source: result.source,
+    originMenu: "Dashboard", originSection: "Gol por mitad",
+    supportingData: [`${selectedHalf}: ${support}% de respaldo ponderado`],
+    contradictingData: result.warnings || []
+  };
+}
+
+function renderYellowCardsWithPick(result = {}) {
+  renderYellowCards(result);
+  if (yellowCardsProjectionLeg()) elements.yellowCardsContent.insertAdjacentHTML("afterbegin", '<div class="module-pick-action"><span>Pick conservador basado en el límite inferior del rango; queda pendiente de cuota.</span><button class="button button--primary button--compact" type="button" data-add-yellow-cards-pick>Agregar pick</button></div>');
+}
+
+function renderGoalHalfWithPick(result = {}) {
+  renderGoalHalf(result);
+  if (goalHalfProjectionLeg()) elements.goalHalfContent.insertAdjacentHTML("afterbegin", '<div class="module-pick-action"><span>Tendencia principal de la muestra; queda pendiente de cuota.</span><button class="button button--primary button--compact" type="button" data-add-goal-half-pick>Agregar pick</button></div>');
+}
+
+function addYellowCardsProjectionPick() {
+  const leg = yellowCardsProjectionLeg();
+  if (leg) appendPickToParlay(leg, "Pick de tarjetas amarillas agregado a Mi parlay.");
+}
+
+function addGoalHalfProjectionPick() {
+  const leg = goalHalfProjectionLeg();
+  if (leg) appendPickToParlay(leg, "Pick de gol por mitad agregado a Mi parlay.");
+}
+
 async function loadGoalHalf(forceRefresh = false) {
   const fixture = selectedFixture(); if (!fixture || state.isLoadingGoalHalf) return;
   if (!forceRefresh && state.goalHalfByFixture.has(fixture.id)) return showModuleReady(elements.showGoalHalf, elements.goalHalfContent);
@@ -4988,7 +5096,7 @@ async function loadGoalHalf(forceRefresh = false) {
   try {
     const result = await footballDataService.getGoalHalfModel(fixture, forceRefresh);
     state.goalHalfByFixture.set(fixture.id, result);
-    renderGoalHalf(result);
+    renderGoalHalfWithPick(result);
     if (forceRefresh) elements.goalHalfContent.hidden = wasHidden;
     else showModuleReady(elements.showGoalHalf, elements.goalHalfContent);
     if (forceRefresh) showNotice("Gol por mitad actualizado.");
@@ -5015,7 +5123,7 @@ async function loadYellowCards(forceRefresh = false) {
   try {
     const result = await footballDataService.getYellowCardsModel(fixture, forceRefresh);
     state.yellowCardsByFixture.set(fixture.id, result);
-    renderYellowCards(result);
+    renderYellowCardsWithPick(result);
     if (forceRefresh) elements.yellowCardsContent.hidden = wasHidden;
     else showModuleReady(elements.showYellowCards, elements.yellowCardsContent);
     if (forceRefresh) showNotice("Tarjetas amarillas actualizadas.");
@@ -5782,6 +5890,8 @@ elements.teamGoalsContent.addEventListener("click", (event) => {
 elements.showCorners.addEventListener("click", () => toggleReadyModule(elements.showCorners, elements.cornersContent));
 elements.showYellowCards.addEventListener("click", () => toggleReadyModule(elements.showYellowCards, elements.yellowCardsContent));
 elements.showGoalHalf.addEventListener("click", () => toggleReadyModule(elements.showGoalHalf, elements.goalHalfContent));
+elements.yellowCardsContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-yellow-cards-pick]")) addYellowCardsProjectionPick(); });
+elements.goalHalfContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-goal-half-pick]")) addGoalHalfProjectionPick(); });
 elements.cornersContent.addEventListener("click", (event) => { const add = event.target.closest("[data-add-corners]"); const save = event.target.closest("[data-save-corners]"); const addExpected = event.target.closest("[data-add-expected-corners]"); const saveExpected = event.target.closest("[data-save-expected-corners]"); if (add) addCornerPick(add.dataset.addCorners); if (save) saveCornerPick(save.dataset.saveCorners); if (addExpected) addExpectedCornersPick(); if (saveExpected) saveExpectedCornersPick(); });
 elements.showSpecificMarkets.addEventListener("click", () => loadSpecificMarkets(true));
 elements.specificMarketsContent.addEventListener("click", (event) => {
@@ -6063,7 +6173,7 @@ document.addEventListener("click", (event) => {
     elements.savedParlaysSection.hidden = state.savedTab !== "parlays";
     elements.trashResultsSection.hidden = state.savedTab !== "trash";
     elements.savedDateFilterPanel.hidden = !["individual", "parlays"].includes(state.savedTab);
-    elements.performanceMonthFilterPanel.hidden = !["origins-won", "origins-lost", "competitions", "types-won", "types-lost"].includes(state.savedTab);
+    elements.performanceMonthFilterPanel.hidden = !["origins-won", "origins-lost", "competitions", "types-won", "types-lost", "historical-validator"].includes(state.savedTab);
   }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);
@@ -6291,6 +6401,7 @@ async function initializeApp() {
   elements.dateFrom.value ||= today;
   elements.dateTo.value ||= today;
   elements.savedDateFilter.value = state.savedDateFilter;
+  elements.performanceMonthFilter.value = state.performanceMonthFilter;
   elements.competition.value = "all";
   elements.season.value = "auto";
   syncCompetitionCheckboxes();

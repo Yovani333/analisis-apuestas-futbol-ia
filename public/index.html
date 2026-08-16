@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de análisis responsable de apuestas de fútbol con datos, API-Football y modelos internos." />
     <title>Análisis de Apuestas de Fútbol con Datos</title>
-  <link rel="stylesheet" href="styles.css?v=20260725-coverage-picks-v1" />
+  <link rel="stylesheet" href="styles.css?v=20260815-monthly-picks-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -544,15 +544,15 @@
         <section id="pick-types-lost" class="pick-type-summary" aria-label="Conteo de tipos de picks perdidos"></section>
       </section>
       <section id="origin-recommendations-section" class="saved-bets-section" hidden>
-        <div class="saved-section-toolbar"><div><h3>Mejores picks por resultados</h3><p>Comparación retrospectiva de ganados y perdidos por selección y origen. No garantiza resultados futuros.</p></div><button id="update-origin-recommendations" class="button button--primary" type="button">Actualizar datos</button></div>
+        <div class="saved-section-toolbar"><div><h3>Mejores picks por resultados</h3><p>Comparación del mes actual de ganados y perdidos por selección y origen. No garantiza resultados futuros.</p></div><button id="update-origin-recommendations" class="button button--primary" type="button">Actualizar datos</button></div>
         <section id="origin-recommendations" class="origin-recommendations" aria-label="Mejores picks y picks no recomendados"></section>
       </section>
       <section id="best-combination-section" class="saved-bets-section" hidden>
-        <div class="saved-section-toolbar"><div><h3>Mejor combinación</h3><p>Analiza resultados guardados para proponer competiciones, orígenes y mercados compatibles.</p></div><button id="run-best-combination-analysis" class="button button--primary" type="button">Análisis</button></div>
+        <div class="saved-section-toolbar"><div><h3>Mejor combinación</h3><p>Analiza únicamente resultados del mes actual para proponer competiciones, orígenes y mercados compatibles.</p></div><button id="run-best-combination-analysis" class="button button--primary" type="button">Análisis</button></div>
         <section id="best-combination-results" class="best-combination-results" aria-live="polite"><div class="saved-empty"><h3>Análisis pendiente</h3><p>Presiona “Análisis” para estudiar únicamente los resultados de Mis apuestas.</p></div></section>
       </section>
       <section id="historical-validator-section" class="saved-bets-section" hidden>
-        <div class="saved-section-toolbar"><div><h3>Validador histórico del pick y parlay</h3><p>Contrasta selecciones pendientes con resultados guardados por origen, mercado y competición.</p></div></div>
+        <div class="saved-section-toolbar"><div><h3>Validador histórico del pick y parlay</h3><p>Contrasta selecciones pendientes con resultados guardados del mes seleccionado o de todo el historial.</p></div></div>
         <section id="historical-validator" class="historical-validator" aria-label="Validador histórico del pick y parlay"></section>
       </section>
       <section id="saved-parlays-section" class="saved-bets-section" hidden>
@@ -698,6 +698,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260805-best-bets-v1"></script>
+    <script type="module" src="app.js?v=20260815-monthly-picks-v1"></script>
   </body>
 </html>

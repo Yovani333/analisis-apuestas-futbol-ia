@@ -74,6 +74,15 @@ test("el cupon agregado se abre minimizado y solo el FAB lo maximiza", () => {
   assert.match(app, /parlayFab\.addEventListener\("click", \(\) => renderParlayDraft\(true, false\)\)/);
 });
 
+test("Tarjetas amarillas y Gol por mitad permiten agregar su proyección al cupón", () => {
+  assert.match(app, /data-add-yellow-cards-pick/);
+  assert.match(app, /function yellowCardsProjectionLeg/);
+  assert.match(app, /sourceModule: "yellow_cards"/);
+  assert.match(app, /data-add-goal-half-pick/);
+  assert.match(app, /function goalHalfProjectionLeg/);
+  assert.match(app, /sourceModule: "goal_half_projection"/);
+});
+
 test("guardar desde el cupon permanece en la vista actual", () => {
   const saveCurrentParlay = app.slice(app.indexOf("function saveCurrentParlay()"), app.indexOf("function oddsUpdateHtml"));
   assert.match(saveCurrentParlay, /renderSavedPicks\(\)/);

@@ -194,9 +194,9 @@ test("Mis apuestas separa picks, resultados por origen, competición, mejores pi
   assert.match(app, /Picks ganados/);
   assert.match(app, /Picks perdidos/);
   assert.match(app, /deletedPermanently: true/);
-  assert.match(app, /calculateOriginRecommendations\(allRows\)/);
-  assert.match(app, /buildBestCombinationAnalysis\(state\.savedPicks, state\.savedParlays\)/);
-  assert.match(app, /buildHistoricalPickValidator\(state\.savedPicks, state\.savedParlays\)/);
+  assert.match(app, /calculateOriginRecommendations\(calculateOriginPerformance\(currentMonth\.picks, currentMonth\.parlays\)\)/);
+  assert.match(app, /buildBestCombinationAnalysis\(currentMonth\.picks, currentMonth\.parlays\)/);
+  assert.match(app, /buildHistoricalPickValidator\(state\.savedPicks, state\.savedParlays, new Date\(\),/);
   assert.match(app, /historicalValidatorSection\.hidden = state\.savedTab !== "historical-validator"/);
   assert.match(html, /id="competition-main"><option value="all" selected>Todas las competiciones/);
   assert.match(html, /id="origin-picks-dialog"/);
@@ -243,7 +243,7 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260725-coverage-picks-v1/);
+  assert.match(html, /styles\.css\?v=20260815-monthly-picks-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
 });
@@ -263,6 +263,10 @@ test("resultados históricos permiten filtrar por mes y abrir picks por competic
   assert.match(app, /data-view-competition-picks/);
   assert.match(app, /showCompetitionPicksDialog/);
   assert.match(app, /<th>Origen<\/th>/);
+  assert.match(app, /historical-validator"\]\.includes\(state\.savedTab\)/);
+  assert.match(app, /competition-general-summary/);
+  assert.match(app, /currentMonthPerformanceData\(\)/);
+  assert.match(app, /buildBestCombinationAnalysis\(currentMonth\.picks, currentMonth\.parlays\)/);
 });
 
 test("las señales históricas identifican mejores y peores resultados", () => {

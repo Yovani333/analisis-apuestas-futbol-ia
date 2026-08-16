@@ -34,6 +34,11 @@ test("la recomendación de forma conserva el mismo título como origen", () => {
   assert.equal(pickOriginLabel("recent_form"), "Estadísticas / forma");
 });
 
+test("identifica los orígenes de tarjetas amarillas y gol por mitad", () => {
+  assert.equal(pickOriginLabel("yellow_cards"), "Tarjetas amarillas");
+  assert.equal(pickOriginLabel("goal_half_projection"), "Gol por mitad");
+});
+
 test("conserva compatibilidad con el origen textual legado", () => {
   assert.equal(pickOriginLabel("Picks basados en datos"), "Picks basados en datos");
   assert.equal(pickOriginDefinition("Picks basados en datos").status, "legacy_alias");

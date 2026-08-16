@@ -25,7 +25,8 @@ test("el control desplegable conserva dimensiones estables y foco visible", () =
 });
 
 test("cada competición muestra y abre hasta dos orígenes líderes", () => {
-  assert.match(app, /calculateCompetitionOriginLeaders\(state\.savedPicks, state\.savedParlays/);
+  assert.match(app, /const currentMonthHistory = currentMonthPerformanceData\(\)/);
+  assert.match(app, /calculateCompetitionOriginLeaders\(currentMonthHistory\.picks, currentMonthHistory\.parlays/);
   assert.match(app, /data-competition-origin=/);
   assert.match(app, /leader\.winRate}% · \$\{leader\.won}\/\$\{leader\.evaluated}/);
   assert.match(app, /openCompetitionOrigin\(/);

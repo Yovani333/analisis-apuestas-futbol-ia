@@ -72,6 +72,20 @@ test("mantiene marcador y minuto mientras el fixture siga en vivo", () => {
   assert.equal(updated.finalScore, undefined);
 });
 
+test("liquida tarjetas amarillas y gol por mitad con datos oficiales", () => {
+  const result = {
+    finished: true,
+    regulationGoals: { home: 2, away: 1 },
+    halftimeScore: { home: 0, away: 0 },
+    cards: { breakdown: { home: { yellow: 2 }, away: { yellow: 3 } } }
+  };
+  assert.equal(settlePickResult({ selectionCode: "over_yellow_cards", selection: "Más de 3.5 tarjetas amarillas" }, result), "won");
+  assert.equal(settlePickResult({ selectionCode: "goal_first_half", selection: "Habrá gol en la primera mitad" }, result), "lost");
+  assert.equal(settlePickResult({ selectionCode: "goal_second_half", selection: "Habrá gol en la segunda mitad" }, result), "won");
+  assert.equal(canAutomaticallySettlePick({ selectionCode: "over_yellow_cards" }), true);
+  assert.equal(canAutomaticallySettlePick({ selectionCode: "goal_second_half" }), true);
+});
+
 test("no convierte un marcador ausente en cero a cero", () => {
   const updated = applyFixtureStatusUpdate({ fixtureId: 40, fixtureStatus: "En vivo" }, {
     finished: true,
@@ -106,6 +120,15 @@ test("validador histórico separa muestras suficientes, provisionales e insufici
   assert.equal(report.activeValidations[0].dimensions.origin.maturity, "sufficient");
   assert.equal(report.activeValidations[0].dimensions.exact.winRate, 80);
   assert.equal(report.activeValidations[0].decision, "favorable");
+});
+
+test("validador histórico permite limitar solamente la muestra de resultados por mes", () => {
+  const july = { id: "july", fixtureId: 1, sourceModule: "recent_form", market: "Total", selection: "Más de 1.5", league: "MLS", date: "2026-07-10", result: "won" };
+  const august = { id: "august", fixtureId: 2, sourceModule: "recent_form", market: "Total", selection: "Más de 1.5", league: "MLS", date: "2026-08-10", result: "lost" };
+  const active = { id: "active-month", fixtureId: 3, sourceModule: "recent_form", market: "Total", selection: "Más de 1.5", league: "MLS", date: "2026-08-20", result: "pending", fixtureStatus: "Programado" };
+  const report = buildHistoricalPickValidator([july, august, active], [], new Date("2026-08-15T12:00:00Z"), { historicalPicks: [august], historicalParlays: [] });
+  assert.deepEqual(report.historical, { evaluated: 1, won: 0, lost: 1, winRate: 0, maturity: "insufficient" });
+  assert.equal(report.activeValidations.length, 1);
 });
 
 test("validador histórico marca evitar cuando una dimensión robusta es desfavorable", () => {
