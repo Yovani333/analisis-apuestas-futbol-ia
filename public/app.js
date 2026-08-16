@@ -2,16 +2,16 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260805-best-bets-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, createSavedParlay, createSavedPick,
+  assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, calculateTestParlayMetrics, createSavedParlay, createSavedPick, isTestParlay,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
   permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260815-monthly-picks-v1";
+} from "./parlay-store.js?v=20260815-test-parlays-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginKey, pickOriginLabel } from "./pick-origins.js?v=20260815-monthly-picks-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260724-parlay-trash-v1";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260815-test-parlays-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260722-corners-v2";
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
 import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260719-remove-invalid-v1";
@@ -20,7 +20,7 @@ import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2
 import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.js?v=20260722-recent-form-v1";
 import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=20260725-xg-btts-v2";
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
-import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260805-best-bets-v1";
+import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260815-test-parlays-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -106,6 +106,7 @@ const state = {
   },
   cloudApplying: false
 };
+state.parlayDraftIsTest = Boolean(state.preferences.parlayDraftIsTest);
 
 const elements = {
   form: document.querySelector("#filters-form"),
@@ -189,9 +190,13 @@ const elements = {
   parlayFab: document.querySelector("#open-parlay-slip"),
   parlayFabCount: document.querySelector("#parlay-fab-count"),
   parlayName: document.querySelector("#parlay-name"),
+  parlayTestMode: document.querySelector("#parlay-test-mode"),
   saveParlay: document.querySelector("#save-parlay"),
   savedParlayCount: document.querySelector("#saved-parlay-count"),
   savedParlaysList: document.querySelector("#saved-parlays-list"),
+  testParlaysList: document.querySelector("#test-parlays-list"),
+  testParlayMetrics: document.querySelector("#test-parlay-metrics"),
+  updateTestParlayResults: document.querySelector("#update-test-parlay-results"),
   savedPicksList: document.querySelector("#saved-picks-list"),
   trashParlaysList: document.querySelector("#trash-parlays-list"),
   historyMetrics: document.querySelector("#history-metrics"),
@@ -237,6 +242,7 @@ const elements = {
   pickTypesLostSection: document.querySelector("#pick-types-lost-section"),
   historicalValidatorSection: document.querySelector("#historical-validator-section"),
   savedParlaysSection: document.querySelector("#saved-parlays-section"),
+  testParlaysSection: document.querySelector("#test-parlays-section"),
   trashResultsSection: document.querySelector("#trash-results-section")
 };
 
@@ -614,6 +620,7 @@ function applyCloudState(remoteState) {
       ? filterValidEvidenceSnapshots(state.evidenceSnapshots)
       : filterValidEvidenceSnapshots(remoteState.evidenceSnapshots || state.evidenceSnapshots || []);
     state.preferences = { ...state.preferences, ...(remoteState.preferences || {}) };
+    state.parlayDraftIsTest = Boolean(state.preferences.parlayDraftIsTest);
     state.parlayDraft = remoteState.parlayDraft || [];
     state.savedPicks = remoteState.savedPicks || [];
     state.savedParlays = remoteState.savedParlays || [];
@@ -632,6 +639,7 @@ function applyCloudState(remoteState) {
     renderParlayDraft();
     renderSavedPicks();
     renderSavedParlays();
+    renderTestParlays();
     renderAlerts();
     renderAuditFixtureOptions();
     renderFavoriteTeams();
@@ -707,12 +715,13 @@ function clearLocalAccountData() {
   state.cloudApplying = true;
   try {
     state.parlayDraft = [];
+    state.parlayDraftIsTest = false;
     state.savedPicks = [];
     state.savedParlays = [];
     state.evidenceSnapshots = [];
     state.evidenceLibrary = [];
     state.alerts = [];
-    state.preferences = { theme: state.preferences.theme || "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true };
+    state.preferences = { theme: state.preferences.theme || "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, parlayDraftIsTest: false };
     saveParlayDraft([]);
     saveSavedPicks([]);
     saveSavedParlays([]);
@@ -722,7 +731,7 @@ function clearLocalAccountData() {
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(state.preferences));
     elements.accountName.value = "";
     elements.accountDailyLimit.value = "none";
-    renderParlayDraft(); renderSavedPicks(); renderSavedParlays(); renderAuditFixtureOptions();
+    renderParlayDraft(); renderSavedPicks(); renderSavedParlays(); renderTestParlays(); renderAuditFixtureOptions();
   } finally { state.cloudApplying = false; }
 }
 
@@ -1327,7 +1336,7 @@ function activePickCountForFixture(fixture) {
   const fixtureId = String(fixture.id);
   const individual = state.savedPicks.filter((pick) => !pick.trashed && !pick.deletedPermanently
     && pick.result === "pending" && String(pick.fixtureId) === fixtureId).length;
-  const parlayLegs = state.savedParlays.filter((parlay) => !parlay.trashed && !parlay.deletedPermanently)
+  const parlayLegs = state.savedParlays.filter((parlay) => !parlay.trashed && !parlay.deletedPermanently && !isTestParlay(parlay))
     .flatMap((parlay) => Array.isArray(parlay.legs) ? parlay.legs : [])
     .filter((leg) => leg.result === "pending" && String(leg.fixtureId) === fixtureId).length;
   return individual + parlayLegs;
@@ -2951,6 +2960,7 @@ elements.deleteConfirmationDialog?.addEventListener("cancel", (event) => {
 
 function persistParlayDraft() {
   state.preferences.parlayDraftUpdatedAt = new Date().toISOString();
+  state.preferences.parlayDraftIsTest = Boolean(state.parlayDraftIsTest);
   writeLocalJson(PREFERENCES_KEY, state.preferences);
   saveParlayDraft(state.parlayDraft);
   queueCloudSync();
@@ -3038,8 +3048,9 @@ function renderParlayDraft(open = false, minimized = true) {
   elements.parlayFab.hidden = count === 0 || !elements.parlaySlip.hidden;
   elements.saveParlay.disabled = count < 1;
   elements.saveParlay.textContent = "Agregar";
-  elements.parlayName.disabled = count === 1;
-  elements.parlayName.placeholder = count === 1 ? "Se guardará como pick individual" : "Ej. Mundial · Jornada 2";
+  elements.parlayName.disabled = count === 1 && !state.parlayDraftIsTest;
+  elements.parlayTestMode.checked = Boolean(state.parlayDraftIsTest);
+  elements.parlayName.placeholder = count === 1 && !state.parlayDraftIsTest ? "Se guardará como pick individual" : "Ej. Prueba de mercados";
 
   if (!count) {
     elements.parlaySlip.hidden = true;
@@ -3192,7 +3203,7 @@ function saveCurrentParlay() {
     showNotice("Agrega al menos una selección al cupón.");
     return;
   }
-  if (state.parlayDraft.length === 1) {
+  if (state.parlayDraft.length === 1 && !state.parlayDraftIsTest) {
     const [leg] = state.parlayDraft;
     const duplicate = hasDuplicatePick(state.savedPicks, leg);
     if (duplicate && !window.confirm("Este pick ya está guardado. ¿Deseas guardar otro registro igual?")) return;
@@ -3208,15 +3219,18 @@ function saveCurrentParlay() {
     showNotice("Pick agregado a individuales.");
     return;
   }
-  state.savedParlays.unshift(createSavedParlay(elements.parlayName.value, state.parlayDraft));
+  state.savedParlays.unshift(createSavedParlay(elements.parlayName.value, state.parlayDraft, new Date(), { isTest: state.parlayDraftIsTest }));
   state.parlayDraft = [];
+  const savedAsTest = state.parlayDraftIsTest;
+  state.parlayDraftIsTest = false;
   elements.parlayName.value = "";
   persistSavedParlays();
   persistParlayDraft();
   renderParlayDraft();
   renderSavedParlays();
+  renderTestParlays();
   refreshActivePickIndicators();
-  showNotice("Parlay guardado. Ya puedes registrar sus resultados.");
+  showNotice(savedAsTest ? "Parlay guardado en Pruebas. No afectará las estadísticas reales." : "Parlay guardado. Ya puedes registrar sus resultados.");
 }
 
 function oddsUpdateHtml(item) {
@@ -3250,9 +3264,19 @@ function activeSavedParlays() {
   return state.savedParlays.filter((parlay) => !parlay.trashed && !parlay.deletedPermanently);
 }
 
-function savedLegsNeedingRefresh() {
-  return [...activeSavedPicks(), ...activeSavedParlays().flatMap((parlay) => parlay.legs || [])]
+function productionSavedParlays() {
+  return activeSavedParlays().filter((parlay) => !isTestParlay(parlay));
+}
+
+function savedLegsNeedingRefresh(testOnly = null) {
+  const picks = testOnly === true ? [] : activeSavedPicks();
+  const parlays = activeSavedParlays().filter((parlay) => testOnly === null || isTestParlay(parlay) === testOnly);
+  return [...picks, ...parlays.flatMap((parlay) => parlay.legs || [])]
     .filter((leg) => needsFixtureStatusRefresh(leg) || needsSettlementRefresh(leg));
+}
+
+function scopedLegsNeedingRefresh(testOnly = false) {
+  return savedLegsNeedingRefresh(testOnly);
 }
 
 function updateSavedDateFilterStatus() {
@@ -3266,7 +3290,7 @@ function updateSavedDateFilterStatus() {
 function renderSavedPicks() {
   const activePicks = activeSavedPicks();
   const visiblePicks = filterPicksByFixtureDate(activePicks, state.savedDateFilter);
-  elements.savedParlayCount.textContent = activeSavedParlays().length + activePicks.length;
+  elements.savedParlayCount.textContent = productionSavedParlays().length + activePicks.length;
   elements.updateIndividualResults.disabled = state.savedPicks.length === 0;
   updateSavedDateFilterStatus();
   if (!visiblePicks.length) {
@@ -3481,7 +3505,7 @@ function renderOriginPerformance() {
 }
 
 function renderSavedParlays() {
-  const allActiveParlays = activeSavedParlays();
+  const allActiveParlays = productionSavedParlays();
   const resultOrder = Object.freeze({ pending: 0, won: 1, void: 2, lost: 3 });
   const activeParlays = filterParlaysByFixtureDate(allActiveParlays, state.savedDateFilter)
     .sort((left, right) => (resultOrder[calculateParlayResult(left.legs)] ?? 2) - (resultOrder[calculateParlayResult(right.legs)] ?? 2));
@@ -3498,7 +3522,7 @@ function renderSavedParlays() {
     <article><span>Acierto</span><strong>${metrics.winRate === null ? "—" : `${metrics.winRate}%`}</strong></article>
     <article><span>Unidades teóricas</span><strong class="${metrics.theoreticalUnits >= 0 ? "value-positive" : "value-negative"}">${metrics.theoreticalUnits}</strong></article>`;
   renderOriginPerformance();
-  elements.updateParlayResults.disabled = savedLegsNeedingRefresh().length === 0;
+  elements.updateParlayResults.disabled = scopedLegsNeedingRefresh(false).length === 0;
   if (!activeParlays.length) {
     elements.savedParlaysList.innerHTML = state.savedDateFilter && allActiveParlays.length
       ? '<div class="saved-empty"><h3>Sin parlays en esta fecha</h3><p>Prueba otra fecha o selecciona “Mostrar todas”.</p></div>'
@@ -3530,6 +3554,35 @@ function renderSavedParlays() {
   }).join("");
   persistSavedParlays();
   renderTrashParlays();
+}
+
+function renderTestParlays() {
+  const tests = activeSavedParlays().filter((parlay) => isTestParlay(parlay));
+  const visible = filterParlaysByFixtureDate(tests, state.savedDateFilter);
+  const metrics = calculateTestParlayMetrics(tests);
+  elements.testParlayMetrics.innerHTML = `
+    <article><span>Pruebas</span><strong>${metrics.total}</strong></article>
+    <article><span>Pendientes</span><strong>${metrics.pending}</strong></article>
+    <article><span>Ganadas / perdidas</span><strong>${metrics.won} / ${metrics.lost}</strong></article>
+    <article><span>Acierto de parlays</span><strong>${metrics.parlayWinRate === null ? "—" : `${metrics.parlayWinRate}%`}</strong></article>
+    <article><span>Acierto de selecciones</span><strong>${metrics.legHitRate === null ? "—" : `${metrics.legHitRate}%`}</strong></article>
+    <article><span>Selecciones promedio</span><strong>${metrics.averageSelections ?? "—"}</strong></article>
+    ${metrics.marketPerformance.length ? `<div class="test-market-performance"><h4>Rendimiento por tipo de pick</h4><div>${metrics.marketPerformance.map((row) => `<article><span>${escapeHtml(row.market)}</span><strong>${row.winRate}%</strong><small>${row.won} ganados · ${row.lost} perdidos · ${row.evaluated} evaluados</small></article>`).join("")}</div></div>` : ""}`;
+  elements.updateTestParlayResults.disabled = scopedLegsNeedingRefresh(true).length === 0;
+  if (!visible.length) {
+    elements.testParlaysList.innerHTML = tests.length && state.savedDateFilter
+      ? '<div class="saved-empty"><h3>Sin pruebas en esta fecha</h3><p>Selecciona “Mostrar todas” para consultar el historial de pruebas.</p></div>'
+      : '<div class="saved-empty"><h3>Sin parlays de prueba</h3><p>Marca “Prueba” en el cupón antes de agregarlo.</p></div>';
+    return;
+  }
+  elements.testParlaysList.innerHTML = visible.map((parlay) => {
+    const result = calculateParlayResult(parlay.legs || []);
+    const progress = calculateParlayWinProgress(parlay.legs || []);
+    return `<details class="saved-parlay saved-parlay--test saved-parlay--${result}" data-test-parlay-id="${escapeHtml(parlay.id)}">
+      <summary class="saved-parlay__header"><div><span>PRUEBA · ${parlay.legs.length} selecciones</span><h3>${escapeHtml(parlay.name)}</h3><time datetime="${escapeHtml(parlay.createdAt)}">Guardado ${escapeHtml(formatUpdatedAt(parlay.createdAt))}</time></div><div class="saved-parlay__summary"><span class="parlay-win-progress"><small>Acierto</small><strong>${displayValue(progress.percentage)}%</strong><small>${progress.won}/${progress.total}</small></span><strong class="result-badge result-badge--${result}">${resultLabels[result]}</strong></div></summary>
+      <div class="saved-parlay__legs">${(parlay.legs || []).map((leg, index) => `<section class="saved-leg saved-leg--${escapeHtml(leg.result)}"><div class="saved-leg__index">${index + 1}</div><div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span><small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)} · ${escapeHtml(resultLabels[leg.result] || "Pendiente")}${savedLegScoreHtml(leg)}</small><small>Origen ${escapeHtml(pickOriginLabel(leg))}</small></div></section>`).join("")}</div>
+    </details>`;
+  }).join("");
 }
 
 function parlayTotalOdds(legs, key) {
@@ -3564,12 +3617,12 @@ function renderBestCombinationAnalysis() {
   elements.bestCombinationResults.innerHTML = `<div class="best-combination-summary"><article><span>Resultados evaluados</span><strong>${analysis.evaluatedPicks}</strong></article><article><span>Máximo recomendado</span><strong>${analysis.maxSelections} selecciones</strong></article><article><span>Estado</span><strong>${analysis.status === "available" ? "Disponible" : analysis.status === "provisional" ? "Provisional" : "Sin evidencia"}</strong></article></div><section class="best-combination-block"><header><h3>Combinación sugerida</h3><p>Una selección por competición para reducir dependencia.</p></header><div class="best-combination-grid">${combination || '<p class="muted-text">No existen al menos dos combinaciones con muestra mínima y rendimiento favorable.</p>'}</div></section><div class="best-combination-columns"><section class="best-combination-block best-combination-block--avoid"><header><h3>Competiciones que no conviene mezclar</h3></header><ul>${avoidCompetitions || '<li>Sin competiciones desfavorables con muestra suficiente.</li>'}</ul></section><section class="best-combination-block best-combination-block--avoid"><header><h3>Picks que conviene evitar</h3></header><ul>${avoidPicks || '<li>Sin picks desfavorables con muestra suficiente.</li>'}</ul></section></div><section class="best-combination-block"><header><h3>Qué evitar</h3></header><ul>${analysis.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></section>`;
 }
 
-async function updateSavedParlayResults({ automatic = false } = {}) {
+async function updateSavedParlayResults({ automatic = false, testOnly = false } = {}) {
   if (state.isUpdatingSavedResults) {
     if (!automatic) showNotice("La actualizacion de Mis apuestas ya esta en curso.");
     return;
   }
-  const legsToUpdate = savedLegsNeedingRefresh();
+  const legsToUpdate = scopedLegsNeedingRefresh(testOnly);
   const fixtureIds = [...new Set(legsToUpdate.map((leg) => leg.fixtureId))];
   if (!fixtureIds.length) {
     if (!automatic) showNotice("No hay picks pendientes. Los resultados resueltos compatibles ya fueron verificados con el marcador reglamentario.");
@@ -3578,7 +3631,9 @@ async function updateSavedParlayResults({ automatic = false } = {}) {
   state.isUpdatingSavedResults = true;
   state.preferences.performancePreviousRanks = currentPerformanceRankings();
   writeLocalJson(PREFERENCES_KEY, state.preferences);
-  const updateButtons = [elements.updateIndividualResults, elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateCompetitionResults, elements.updateParlayResults];
+  const updateButtons = testOnly
+    ? [elements.updateTestParlayResults]
+    : [elements.updateIndividualResults, elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateCompetitionResults, elements.updateParlayResults];
   updateButtons.forEach((button) => { button.disabled = true; button.textContent = "Consultando resultados…"; });
   try {
     const fixtureIdsNeedingDetails = new Set(legsToUpdate
@@ -3690,8 +3745,8 @@ async function updateSavedParlayResults({ automatic = false } = {}) {
         unverifiable += 1;
       }
     };
-    activeSavedPicks().forEach(updateLeg);
-    activeSavedParlays().forEach((parlay) => {
+    if (!testOnly) activeSavedPicks().forEach(updateLeg);
+    activeSavedParlays().filter((parlay) => isTestParlay(parlay) === testOnly).forEach((parlay) => {
       parlay.legs.forEach(updateLeg);
       parlay.result = calculateParlayResult(parlay.legs);
       parlay.lastCheckedAt = new Date().toISOString();
@@ -3701,6 +3756,7 @@ async function updateSavedParlayResults({ automatic = false } = {}) {
     persistSavedPicks();
     renderSavedPicks();
     renderSavedParlays();
+    renderTestParlays();
     refreshActivePickIndicators();
     const summary = [];
     if (statusUpdated) summary.push(`${statusUpdated} estado(s) o marcador(es) actualizados`);
@@ -3715,7 +3771,8 @@ async function updateSavedParlayResults({ automatic = false } = {}) {
     elements.updateOriginLostResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
     elements.updateOriginRecommendations.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
     elements.updateCompetitionResults.disabled = state.savedParlays.length === 0 && state.savedPicks.length === 0;
-    elements.updateParlayResults.disabled = savedLegsNeedingRefresh().length === 0;
+    elements.updateParlayResults.disabled = scopedLegsNeedingRefresh(false).length === 0;
+    elements.updateTestParlayResults.disabled = scopedLegsNeedingRefresh(true).length === 0;
     updateButtons.forEach((button) => { button.textContent = "Actualizar datos"; });
   }
 }
@@ -3743,9 +3800,10 @@ function switchView(view) {
     if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   if (view === "saved") {
-    if (state.savedTab === "parlays") state.expandedParlays.clear();
+    if (["parlays", "tests"].includes(state.savedTab)) state.expandedParlays.clear();
     renderSavedPicks();
     renderSavedParlays();
+    renderTestParlays();
   }
   if (view === "team-goal-insights") renderTeamGoalInsights();
   if (view === "favorite-teams") renderFavoriteTeams();
@@ -5990,20 +6048,28 @@ document.querySelector("#parlay-slip-close").addEventListener("click", () => {
 elements.parlayMinimize.addEventListener("click", () => {
   setParlayMinimized(!elements.parlaySlip.classList.contains("parlay-slip--minimized"));
 });
+elements.parlayTestMode.addEventListener("change", () => {
+  state.parlayDraftIsTest = elements.parlayTestMode.checked;
+  persistParlayDraft();
+  renderParlayDraft(true, false);
+});
 elements.parlayFab.addEventListener("click", () => renderParlayDraft(true, false));
 elements.saveParlay.addEventListener("click", saveCurrentParlay);
 [elements.updateIndividualResults, elements.updateOriginResults, elements.updateOriginLostResults, elements.updateOriginRecommendations, elements.updateCompetitionResults, elements.updateParlayResults]
-  .forEach((button) => button.addEventListener("click", updateSavedParlayResults));
+  .forEach((button) => button.addEventListener("click", () => void updateSavedParlayResults()));
+elements.updateTestParlayResults.addEventListener("click", () => void updateSavedParlayResults({ testOnly: true }));
 elements.applySavedDateFilter.addEventListener("click", () => {
   state.savedDateFilter = elements.savedDateFilter.value;
   renderSavedPicks();
   renderSavedParlays();
+  renderTestParlays();
 });
 elements.clearSavedDateFilter.addEventListener("click", () => {
   state.savedDateFilter = state.savedDateFilter ? "" : pacificToday();
   elements.savedDateFilter.value = state.savedDateFilter;
   renderSavedPicks();
   renderSavedParlays();
+  renderTestParlays();
 });
 elements.applyPerformanceMonthFilter.addEventListener("click", () => {
   state.performanceMonthFilter = elements.performanceMonthFilter.value;
@@ -6201,7 +6267,7 @@ document.addEventListener("click", (event) => {
   const savedTab = event.target.closest("[data-saved-tab]");
   if (savedTab) {
     state.savedTab = savedTab.dataset.savedTab;
-    if (state.savedTab === "parlays") state.expandedParlays.clear();
+    if (["parlays", "tests"].includes(state.savedTab)) state.expandedParlays.clear();
     document.querySelectorAll("[data-saved-tab]").forEach((button) => button.classList.toggle("saved-tab--active", button === savedTab));
     elements.savedIndividualSection.hidden = state.savedTab !== "individual";
     elements.originResultsSection.hidden = state.savedTab !== "origins-won";
@@ -6213,8 +6279,9 @@ document.addEventListener("click", (event) => {
     elements.bestCombinationSection.hidden = state.savedTab !== "best-combination";
     elements.historicalValidatorSection.hidden = state.savedTab !== "historical-validator";
     elements.savedParlaysSection.hidden = state.savedTab !== "parlays";
+    elements.testParlaysSection.hidden = state.savedTab !== "tests";
     elements.trashResultsSection.hidden = state.savedTab !== "trash";
-    elements.savedDateFilterPanel.hidden = !["individual", "parlays"].includes(state.savedTab);
+    elements.savedDateFilterPanel.hidden = !["individual", "parlays", "tests"].includes(state.savedTab);
     elements.performanceMonthFilterPanel.hidden = !["origins-won", "origins-lost", "competitions", "types-won", "types-lost", "historical-validator"].includes(state.savedTab);
   }
   const viewButton = event.target.closest("[data-view]");
@@ -6453,6 +6520,7 @@ async function initializeApp() {
   renderParlayDraft();
   renderSavedPicks();
   renderSavedParlays();
+  renderTestParlays();
   applyTeamPerformanceVisibility(teamPerformanceVisible());
   await initializeCloudAccount();
   const runtime = await footballDataService.getRuntime();

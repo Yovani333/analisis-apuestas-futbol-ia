@@ -23,7 +23,8 @@ function compactHistoryRecord(pick = {}) {
 export function buildBestBetsHistoryRecords(savedPicks = [], savedParlays = []) {
   const rows = [
     ...(Array.isArray(savedPicks) ? savedPicks : []),
-    ...(Array.isArray(savedParlays) ? savedParlays : []).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : [])
+    ...(Array.isArray(savedParlays) ? savedParlays : []).filter((parlay) => parlay?.isTest !== true)
+      .flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : [])
   ].map(compactHistoryRecord).filter(Boolean);
   const unique = new Map();
   for (const row of rows) {

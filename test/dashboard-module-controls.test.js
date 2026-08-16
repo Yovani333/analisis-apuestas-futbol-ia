@@ -96,7 +96,8 @@ test("guardar desde el cupon permanece en la vista actual", () => {
   assert.match(saveCurrentParlay, /renderSavedParlays\(\)/);
   assert.doesNotMatch(saveCurrentParlay, /switchView\("saved"\)/);
   assert.match(saveCurrentParlay, /showNotice\("Pick agregado a individuales\."\)/);
-  assert.match(saveCurrentParlay, /showNotice\("Parlay guardado\. Ya puedes registrar sus resultados\."\)/);
+  assert.match(saveCurrentParlay, /"Parlay guardado\. Ya puedes registrar sus resultados\."/);
+  assert.match(saveCurrentParlay, /"Parlay guardado en Pruebas\. No afectará las estadísticas reales\."/);
 });
 
 test("Dashboard prioriza la calidad canonica y no convierte datos ausentes en cero", () => {

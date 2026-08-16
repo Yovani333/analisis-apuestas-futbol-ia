@@ -7,6 +7,14 @@ export const SAVED_PICKS_KEY = "football-ai.saved-picks.v1";
 export const LEG_RESULTS = Object.freeze(["pending", "won", "lost", "void"]);
 export const SETTLEMENT_VERIFICATION_VERSION = "regulation-score-v3";
 
+export function isTestParlay(parlay = {}) {
+  return parlay?.isTest === true;
+}
+
+function productionParlays(parlays = []) {
+  return parlays.filter((parlay) => !isTestParlay(parlay));
+}
+
 const AUTO_SETTLEMENT_CODES = new Set([
   "home_dnb", "away_dnb", "home_win", "draw", "away_win", "1X", "X2", "12",
   "home_over_0_5", "home_over_1_5", "away_over_0_5", "away_over_1_5",
@@ -294,7 +302,8 @@ export function settlePickResult(leg, fixtureResult) {
 }
 
 export function calculateHistoryMetrics(parlays = []) {
-  const settled = parlays.filter((parlay) => ["won", "lost", "void"].includes(calculateParlayResult(parlay.legs)));
+  const production = productionParlays(parlays);
+  const settled = production.filter((parlay) => ["won", "lost", "void"].includes(calculateParlayResult(parlay.legs)));
   const won = settled.filter((parlay) => calculateParlayResult(parlay.legs) === "won");
   const lost = settled.filter((parlay) => calculateParlayResult(parlay.legs) === "lost");
   const theoreticalUnits = settled.reduce((total, parlay) => {
@@ -305,7 +314,7 @@ export function calculateHistoryMetrics(parlays = []) {
     return odds.every((odd) => odd > 1) ? total + odds.reduce((product, odd) => product * odd, 1) - 1 : total;
   }, 0);
   return {
-    total: parlays.length,
+    total: production.length,
     settled: settled.length,
     won: won.length,
     lost: lost.length,
@@ -315,7 +324,7 @@ export function calculateHistoryMetrics(parlays = []) {
 }
 
 export function calculateParlayLegCounts(parlays = []) {
-  const legs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
+  const legs = productionParlays(parlays).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
   return {
     won: legs.filter((leg) => leg?.result === "won").length,
     lost: legs.filter((leg) => leg?.result === "lost").length
@@ -343,7 +352,7 @@ export function filterParlaysByFixtureDate(parlays = [], date = "") {
   return date ? parlays.filter((parlay) => (parlay.legs || []).some((leg) => fixtureDateValue(leg) === date)) : [...parlays];
 }
 
-export function createSavedParlay(name, legs, now = new Date()) {
+export function createSavedParlay(name, legs, now = new Date(), options = {}) {
   const id = globalThis.crypto?.randomUUID?.() || `parlay-${now.getTime()}`;
   return {
     id,
@@ -351,6 +360,7 @@ export function createSavedParlay(name, legs, now = new Date()) {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     result: "pending",
+    isTest: options.isTest === true,
     notes: "",
     collapsed: true,
     legs: legs.map((leg) => ({
@@ -385,7 +395,7 @@ function originPerformanceCategory(pick = {}) {
 
 export function calculateOriginPerformance(picks = [], parlays = []) {
   const groups = new Map();
-  const parlayLegs = parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
+  const parlayLegs = productionParlays(parlays).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
   const rows = [...picks.map((pick) => ({ pick, kind: "individual" })), ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))];
   const leadLabel = (pick) => {
     const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || "");
@@ -473,7 +483,7 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
     .replace(/[^a-z0-9]+/g, " ").trim();
   const allRows = [
     ...picks.map((pick) => ({ pick, kind: "individual", activeEligible: !pick?.trashed })),
-    ...parlays.flatMap((parlay) => [
+    ...productionParlays(parlays).flatMap((parlay) => [
       ...(Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay", activeEligible: !parlay?.trashed })) : [])
     ])
   ];
@@ -550,7 +560,7 @@ export function calculateCompetitionOriginLeaders(picks = [], parlays = [], { le
   const targetCompetitions = new Set(competitions.map(normalizeCompetition).filter(Boolean));
   const rows = [
     ...picks.map((pick) => ({ pick, kind: "individual" })),
-    ...parlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay" })) : [])
+    ...productionParlays(parlays).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay" })) : [])
   ];
   const groups = new Map();
   for (const { pick, kind } of rows) {
@@ -625,7 +635,7 @@ function teamGoalRanking(records, goalKey, limit) {
 
 export function calculateParlayTeamGoalLeaders(parlays = [], { limit = 5 } = {}) {
   const uniqueFixtures = new Map();
-  for (const parlay of parlays) {
+  for (const parlay of productionParlays(parlays)) {
     if (parlay?.trashed || parlay?.deletedPermanently) continue;
     for (const leg of Array.isArray(parlay?.legs) ? parlay.legs : []) {
       const score = parseRegulationScore(leg.finalScore);
@@ -679,7 +689,7 @@ export function classifyParlayPickType(pick = {}) {
 
 export function calculateParlayPickTypePerformance(parlays = []) {
   const groups = new Map();
-  for (const parlay of parlays) {
+  for (const parlay of productionParlays(parlays)) {
     const legs = Array.isArray(parlay?.legs) ? parlay.legs : [];
     for (const leg of legs) {
       if (!['won', 'lost'].includes(leg?.result)) continue;
@@ -745,9 +755,10 @@ export function calculateOriginRecommendations(performanceRows = []) {
 }
 
 export function buildBestCombinationAnalysis(picks = [], parlays = []) {
+  const production = productionParlays(parlays);
   const settled = [
     ...picks.map((pick) => ({ pick, kind: "individual" })),
-    ...parlays.flatMap((parlay) => (Array.isArray(parlay?.legs) ? parlay.legs : []).map((pick) => ({ pick, kind: "parlay" })))
+    ...production.flatMap((parlay) => (Array.isArray(parlay?.legs) ? parlay.legs : []).map((pick) => ({ pick, kind: "parlay" })))
   ].filter(({ pick }) => ["won", "lost"].includes(pick?.result));
   const groups = new Map();
   for (const { pick, kind } of settled) {
@@ -768,7 +779,7 @@ export function buildBestCombinationAnalysis(picks = [], parlays = []) {
   const avoid = ranked.filter((row) => row.evaluated >= 3 && row.winRate < 50).sort((a, b) => a.winRate - b.winRate || b.evaluated - a.evaluated);
   const observing = ranked.filter((row) => row.evaluated < 3 || (row.winRate >= 50 && row.winRate < 60));
   const sizeGroups = new Map();
-  for (const parlay of parlays) {
+  for (const parlay of production) {
     const result = calculateParlayResult(parlay?.legs || []);
     if (!['won', 'lost'].includes(result)) continue;
     const size = (parlay.legs || []).length;
@@ -791,7 +802,7 @@ export function buildBestCombinationAnalysis(picks = [], parlays = []) {
     bestCombination.push(row);
     if (bestCombination.length >= maxSelections) break;
   }
-  const competitionRows = calculateCompetitionPerformance(picks, parlays);
+  const competitionRows = calculateCompetitionPerformance(picks, production);
   const avoidCompetitions = competitionRows.filter((row) => row.evaluated >= 3 && row.winRate < 50)
     .sort((a, b) => a.winRate - b.winRate || b.evaluated - a.evaluated);
   return {
@@ -906,9 +917,9 @@ function historicalValidationForPick(pick, settled, context = {}) {
 
 export function buildHistoricalPickValidator(picks = [], parlays = [], now = new Date(), options = {}) {
   const activePicks = picks.filter((pick) => !pick?.trashed && !pick?.deletedPermanently);
-  const activeParlays = parlays.filter((parlay) => !parlay?.trashed && !parlay?.deletedPermanently);
+  const activeParlays = productionParlays(parlays).filter((parlay) => !parlay?.trashed && !parlay?.deletedPermanently);
   const historicalPicks = Array.isArray(options.historicalPicks) ? options.historicalPicks : activePicks;
-  const historicalParlays = Array.isArray(options.historicalParlays) ? options.historicalParlays : activeParlays;
+  const historicalParlays = productionParlays(Array.isArray(options.historicalParlays) ? options.historicalParlays : activeParlays);
   const settled = [
     ...historicalPicks.filter((pick) => ["won", "lost"].includes(pick?.result)),
     ...historicalParlays.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []).filter((pick) => ["won", "lost"].includes(pick?.result))
@@ -939,6 +950,44 @@ export function buildHistoricalPickValidator(picks = [], parlays = [], now = new
     historical: historicalSample(settled),
     activeValidations: validations,
     parlaySizePerformance: [...sizeGroups.values()].sort((a, b) => a.order - b.order)
+  };
+}
+
+export function calculateTestParlayMetrics(parlays = []) {
+  const tests = parlays.filter((parlay) => isTestParlay(parlay) && !parlay?.trashed && !parlay?.deletedPermanently);
+  const results = tests.map((parlay) => calculateParlayResult(parlay?.legs || []));
+  const legs = tests.flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
+  const wonLegs = legs.filter((leg) => leg?.result === "won").length;
+  const lostLegs = legs.filter((leg) => leg?.result === "lost").length;
+  const voidLegs = legs.filter((leg) => leg?.result === "void").length;
+  const settledParlays = results.filter((result) => ["won", "lost", "void"].includes(result)).length;
+  const wonParlays = results.filter((result) => result === "won").length;
+  const lostParlays = results.filter((result) => result === "lost").length;
+  const marketGroups = new Map();
+  for (const leg of legs.filter((item) => ["won", "lost"].includes(item?.result))) {
+    const market = classifyParlayPickType(leg) || originPerformanceCategory(leg);
+    const row = marketGroups.get(market) || { market, evaluated: 0, won: 0, lost: 0, winRate: 0 };
+    row.evaluated += 1;
+    row[leg.result] += 1;
+    row.winRate = Number((row.won / row.evaluated * 100).toFixed(1));
+    marketGroups.set(market, row);
+  }
+  return {
+    total: tests.length,
+    pending: results.filter((result) => result === "pending").length,
+    settled: settledParlays,
+    won: wonParlays,
+    lost: lostParlays,
+    void: results.filter((result) => result === "void").length,
+    parlayWinRate: wonParlays + lostParlays ? Number((wonParlays / (wonParlays + lostParlays) * 100).toFixed(1)) : null,
+    totalLegs: legs.length,
+    wonLegs,
+    lostLegs,
+    voidLegs,
+    pendingLegs: legs.filter((leg) => leg?.result === "pending").length,
+    legHitRate: wonLegs + lostLegs ? Number((wonLegs / (wonLegs + lostLegs) * 100).toFixed(1)) : null,
+    averageSelections: tests.length ? Number((legs.length / tests.length).toFixed(1)) : null,
+    marketPerformance: [...marketGroups.values()].sort((a, b) => b.evaluated - a.evaluated || b.winRate - a.winRate || a.market.localeCompare(b.market, "es"))
   };
 }
 

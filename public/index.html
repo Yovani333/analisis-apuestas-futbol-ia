@@ -511,7 +511,7 @@
         </div>
         <div class="saved-view__actions"><button class="button button--secondary" type="button" data-view="dashboard">Volver al dashboard</button></div>
       </section>
-      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-won">Resultados por origen Ganados</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-lost">Resultados por origen Perdidos</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="competitions">Resultados por competición</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="types-won">Tipos ganados</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="types-lost">Tipos perdidos</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origin-recommendations">Mejores picks</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="best-combination">Mejor combinación</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="historical-validator">Validador histórico</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
+      <div class="saved-tabs" role="tablist"><button class="button button--secondary saved-tab saved-tab--active" type="button" data-saved-tab="individual">Picks individuales</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-won">Resultados por origen Ganados</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origins-lost">Resultados por origen Perdidos</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="competitions">Resultados por competición</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="types-won">Tipos ganados</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="types-lost">Tipos perdidos</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="origin-recommendations">Mejores picks</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="best-combination">Mejor combinación</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="historical-validator">Validador histórico</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="parlays">Parlays</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="tests">Pruebas</button><button class="button button--secondary saved-tab" type="button" data-saved-tab="trash">Papelera</button></div>
       <section id="saved-date-filter-panel" class="saved-date-filter" aria-label="Buscar apuestas por fecha">
         <div><label for="saved-date-filter">Fecha del partido</label><input id="saved-date-filter" type="date" /></div>
         <button id="apply-saved-date-filter" class="button button--primary" type="button">Buscar</button>
@@ -564,6 +564,11 @@
         <div class="saved-section-toolbar"><div><h3>Parlays</h3><p>Actualiza cuotas, marcadores y el resultado de todas las selecciones del parlay.</p></div><button id="update-parlay-results" class="button button--primary" type="button">Actualizar datos</button></div>
         <section id="history-metrics" class="history-metrics" aria-label="Rendimiento histórico"></section>
         <div id="saved-parlays-list" class="saved-parlays-list"></div>
+      </section>
+      <section id="test-parlays-section" class="saved-bets-section" hidden>
+        <div class="saved-section-toolbar"><div><h3>Pruebas de parlays</h3><p>Seguimiento aislado. Estos resultados no afectan históricos, recomendaciones ni señales de competiciones.</p></div><button id="update-test-parlay-results" class="button button--primary" type="button">Actualizar datos</button></div>
+        <section id="test-parlay-metrics" class="history-metrics" aria-label="Estadísticas de parlays de prueba"></section>
+        <div id="test-parlays-list" class="saved-parlays-list"></div>
       </section>
       <section id="trash-results-section" class="saved-bets-section" hidden><div id="trash-parlays-list" class="saved-parlays-list"></div></section>
     </main>
@@ -692,6 +697,7 @@
       </div>
       <div id="parlay-draft-list" class="parlay-draft-list"></div>
       <div class="parlay-slip__footer">
+        <label class="parlay-test-option"><input id="parlay-test-mode" type="checkbox" /> <span><strong>Marcar como prueba</strong><small>No contará en resultados históricos ni recomendaciones.</small></span></label>
         <label for="parlay-name">Nombre del parlay</label>
         <input id="parlay-name" type="text" maxlength="60" placeholder="Ej. Mundial · Jornada 2" />
         <p>Registro informativo: guardar una selección no realiza ninguna apuesta ni garantiza resultados.</p>
@@ -703,6 +709,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260815-goal-intervals-v1"></script>
+    <script type="module" src="app.js?v=20260815-test-parlays-v1"></script>
   </body>
 </html>

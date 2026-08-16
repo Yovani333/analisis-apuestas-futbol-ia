@@ -17,6 +17,14 @@ test("incluye legs concluidos de parlays sin datos personales", () => {
   assert.equal("stake" in rows[0], false);
 });
 
+test("excluye del selector los parlays marcados como prueba", () => {
+  const rows = buildBestBetsHistoryRecords([], [{
+    id: "test-parlay", isTest: true,
+    legs: [{ fixtureId: 9, market: "Total", selection: "Más de 1.5", result: "won" }]
+  }]);
+  assert.deepEqual(rows, []);
+});
+
 test("filtra candidatos por clasificación, liga y mercado", () => {
   const report = { candidates: [
     { id: "a", classification: "APTO", leagueName: "MLS", marketKey: "btts" },

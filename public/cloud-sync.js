@@ -42,7 +42,7 @@ const PICK_SYNC_KEYS = new Set([
 ]);
 const PARLAY_SYNC_KEYS = new Set([
   "id", "name", "createdAt", "updatedAt", "result", "notes", "collapsed",
-  "lastCheckedAt", "trashed", "deletedAt", "deletedPermanently", "restoredAt"
+  "isTest", "lastCheckedAt", "trashed", "deletedAt", "deletedPermanently", "restoredAt"
 ]);
 const AUDIT_SUMMARY_KEYS = new Set([
   "evaluablePicks", "decisivePicks", "discardedPicks", "counterfactualAssessable",

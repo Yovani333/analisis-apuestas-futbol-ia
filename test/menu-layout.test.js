@@ -40,8 +40,8 @@ test("el menu lateral es fijo en escritorio y funciona como cajon accesible en m
 test("Mis apuestas no actualiza al entrar y conserva el control manual", () => {
   const savedSwitch = app.slice(app.indexOf('if (view === "saved")'), app.indexOf('if (view === "team-goal-insights")'));
   assert.doesNotMatch(savedSwitch, /updateSavedParlayResults/);
-  assert.match(app, /function savedLegsNeedingRefresh\(\)/);
-  assert.match(app, /elements\.updateParlayResults\.disabled = savedLegsNeedingRefresh\(\)\.length === 0/);
+  assert.match(app, /function savedLegsNeedingRefresh\(testOnly = null\)/);
+  assert.match(app, /elements\.updateParlayResults\.disabled = scopedLegsNeedingRefresh\(false\)\.length === 0/);
   assert.match(app, /needsFixtureStatusRefresh\(leg\) \|\| needsSettlementRefresh\(leg\)/);
   assert.match(html, /id="update-individual-results"[\s\S]*Actualizar datos/);
   assert.match(html, /id="update-parlay-results"[\s\S]*Actualizar datos/);
@@ -285,4 +285,13 @@ test("Picks recomendados muestra equis roja solo con respaldo histórico desfavo
   assert.match(app, /assessPickHistoricalRecommendation\(pick, performanceRows\)/);
   assert.match(app, /collection-pick--historical-avoid/);
   assert.match(app, /Menos recomendado por historial/);
+});
+
+test("Mis apuestas incluye parlays de prueba aislados", () => {
+  assert.match(html, /data-saved-tab="tests">Pruebas/);
+  assert.match(html, /id="test-parlays-section"/);
+  assert.match(html, /id="test-parlay-metrics"/);
+  assert.match(html, /id="parlay-test-mode" type="checkbox"/);
+  assert.match(app, /calculateTestParlayMetrics\(tests\)/);
+  assert.match(app, /isTestParlay\(parlay\) === testOnly/);
 });

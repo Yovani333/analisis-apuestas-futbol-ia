@@ -20,6 +20,15 @@ test("combina datos locales y remotos sin duplicar identificadores", () => {
   assert.equal(merged.savedParlays.length, 2);
 });
 
+test("la sincronización conserva la marca de parlay de prueba", () => {
+  const compacted = compactCloudStateForSync({
+    savedParlays: [{ id: "test-parlay", isTest: true, legs: [{ id: "leg-1", result: "pending" }] }]
+  });
+  assert.equal(compacted.savedParlays[0].isTest, true);
+  const merged = mergeCloudState({ savedParlays: [] }, { saved_parlays: compacted.savedParlays });
+  assert.equal(merged.savedParlays[0].isTest, true);
+});
+
 test("sincronizar conserva parlays locales aunque la copia remota este vacia", () => {
   const merged = mergeCloudState(
     { savedParlays: [{ id: "local-only", name: "Parlay local", updatedAt: "2026-07-13T02:00:00Z" }] },

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFixtureStatusUpdate, assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
+import { applyFixtureStatusUpdate, assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, calculateTestParlayMetrics, canAutomaticallySettlePick, classifyParlayPickType, createSavedParlay, createSavedPick, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, isTestParlay, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg, permanentlyDeleteRemovedParlayLeg, pickIdentity, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, SETTLEMENT_VERIFICATION_VERSION, settleLegResult, settlePickResult } from "../public/parlay-store.js";
 
 test("calcula el porcentaje ganado de un parlay aunque el resultado general sea perdido", () => {
   assert.deepEqual(calculateParlayWinProgress([
@@ -632,4 +632,48 @@ test("equipos goleadores y goleados deduplica fixtures y separa localía", () =>
   assert.equal(result.scorers.away[0].team, "Ataque FC");
   assert.equal(result.conceded.away[0].team, "Defensa FC");
   assert.equal(result.conceded.away[0].average, 3);
+});
+
+test("los parlays de prueba quedan aislados de todos los históricos productivos", () => {
+  const testParlay = createSavedParlay("Laboratorio", [
+    { id: "test-won", fixtureId: 901, league: "MLS", market: "Total de goles", selection: "Más de 1.5", sourceModule: "h2h" },
+    { id: "test-lost", fixtureId: 902, league: "MLS", market: "Ambos anotan", selection: "Sí", sourceModule: "xg_btts" }
+  ], new Date("2026-08-15T10:00:00Z"), { isTest: true });
+  testParlay.legs[0].result = "won";
+  testParlay.legs[1].result = "lost";
+
+  assert.equal(isTestParlay(testParlay), true);
+  assert.equal(calculateHistoryMetrics([testParlay]).total, 0);
+  assert.deepEqual(calculateParlayLegCounts([testParlay]), { won: 0, lost: 0 });
+  assert.deepEqual(calculateOriginPerformance([], [testParlay]), []);
+  assert.deepEqual(calculateCompetitionPerformance([], [testParlay]), []);
+  assert.deepEqual(calculateParlayPickTypePerformance([testParlay]), []);
+  assert.equal(buildBestCombinationAnalysis([], [testParlay]).evaluatedPicks, 0);
+  assert.equal(buildHistoricalPickValidator([], [testParlay]).historical.evaluated, 0);
+  assert.equal(calculateParlayTeamGoalLeaders([testParlay]).fixturesUsed, 0);
+});
+
+test("las pruebas conservan estadísticas separadas por parlay, selección y mercado", () => {
+  const won = createSavedParlay("Prueba ganada", [
+    { id: "w1", market: "Total de goles", selection: "Más de 1.5" },
+    { id: "w2", market: "Total de goles", selection: "Más de 1.5" }
+  ], new Date("2026-08-15T10:00:00Z"), { isTest: true });
+  won.legs.forEach((leg) => { leg.result = "won"; });
+  const lost = createSavedParlay("Prueba perdida", [
+    { id: "l1", market: "Ambos anotan", selection: "Sí" },
+    { id: "l2", market: "Resultado 1X2", selection: "Local gana" }
+  ], new Date("2026-08-15T11:00:00Z"), { isTest: true });
+  lost.legs[0].result = "won";
+  lost.legs[1].result = "lost";
+
+  const metrics = calculateTestParlayMetrics([won, lost]);
+  assert.equal(metrics.total, 2);
+  assert.equal(metrics.won, 1);
+  assert.equal(metrics.lost, 1);
+  assert.equal(metrics.parlayWinRate, 50);
+  assert.equal(metrics.wonLegs, 3);
+  assert.equal(metrics.lostLegs, 1);
+  assert.equal(metrics.legHitRate, 75);
+  assert.equal(metrics.averageSelections, 2);
+  assert.ok(metrics.marketPerformance.some((row) => row.market === "Más de 1.5 - total" && row.won === 2));
 });
