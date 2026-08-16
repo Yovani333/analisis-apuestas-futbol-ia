@@ -170,6 +170,7 @@ const elements = {
   showCorners: document.querySelector("#show-corners"), refreshCorners: document.querySelector("#refresh-corners"), cornersStatus: document.querySelector("#corners-status"), cornersContent: document.querySelector("#corners-content"),
   showYellowCards: document.querySelector("#show-yellow-cards"), refreshYellowCards: document.querySelector("#refresh-yellow-cards"), yellowCardsStatus: document.querySelector("#yellow-cards-status"), yellowCardsContent: document.querySelector("#yellow-cards-content"),
   showGoalHalf: document.querySelector("#show-goal-half"), refreshGoalHalf: document.querySelector("#refresh-goal-half"), goalHalfStatus: document.querySelector("#goal-half-status"), goalHalfContent: document.querySelector("#goal-half-content"),
+  showGoalIntervals: document.querySelector("#show-goal-intervals"), refreshGoalIntervals: document.querySelector("#refresh-goal-intervals"), goalIntervalsStatus: document.querySelector("#goal-intervals-status"), goalIntervalsContent: document.querySelector("#goal-intervals-content"),
   showSpecificMarkets: document.querySelector("#show-specific-markets"), specificMarketsStatus: document.querySelector("#specific-markets-status"), specificMarketsContent: document.querySelector("#specific-markets-content"),
   teamPerformanceTitle: document.querySelector("#team-performance-title"), teamPerformanceStatus: document.querySelector("#team-performance-status"),
   teamPerformanceContent: document.querySelector("#team-performance-content"), toggleTeamPerformance: document.querySelector("#toggle-team-performance"), refreshTeamPerformance: document.querySelector("#refresh-team-performance"),
@@ -1722,13 +1723,19 @@ function renderFixtureData() {
   if (savedYellowCards) { elements.showYellowCards.textContent = "Mostrar"; elements.showYellowCards.classList.remove("button--ready"); }
   elements.showYellowCards.setAttribute("aria-expanded", "false");
   elements.refreshGoalHalf.disabled = false;
+  elements.refreshGoalIntervals.disabled = false;
   elements.showGoalHalf.disabled = state.isLoadingGoalHalf;
+  elements.showGoalIntervals.disabled = state.isLoadingGoalHalf;
   const savedGoalHalf = state.goalHalfByFixture.get(fixture.id);
-  if (savedGoalHalf) renderGoalHalfWithPick(savedGoalHalf);
+  if (savedGoalHalf) { renderGoalHalfWithPick(savedGoalHalf); renderGoalIntervals(savedGoalHalf); }
   else { elements.goalHalfStatus.className = "status-badge status-badge--unavailable"; elements.goalHalfStatus.textContent = "No disponible"; elements.goalHalfContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar datos” para estimar la mitad con mayor tendencia de gol; después usa Mostrar u Ocultar.</div>'; }
+  if (!savedGoalHalf) { elements.goalIntervalsStatus.className = "status-badge status-badge--unavailable"; elements.goalIntervalsStatus.textContent = "No disponible"; elements.goalIntervalsContent.innerHTML = '<div class="research-empty">Pulsa “Actualizar datos” para comparar los rangos de gol de ambos equipos; después usa Mostrar u Ocultar.</div>'; }
   elements.goalHalfContent.hidden = true;
+  elements.goalIntervalsContent.hidden = true;
   if (savedGoalHalf) { elements.showGoalHalf.textContent = "Mostrar"; elements.showGoalHalf.classList.remove("button--ready"); }
+  if (savedGoalHalf) { elements.showGoalIntervals.textContent = "Mostrar"; elements.showGoalIntervals.classList.remove("button--ready"); }
   elements.showGoalHalf.setAttribute("aria-expanded", "false");
+  elements.showGoalIntervals.setAttribute("aria-expanded", "false");
   if (savedCorners) { elements.showCorners.textContent = "Mostrar"; elements.showCorners.classList.remove("button--ready"); }
   elements.showCorners.setAttribute("aria-expanded", "false");
   elements.showSpecificMarkets.disabled = state.isLoadingSpecificMarkets;
@@ -5014,6 +5021,27 @@ function renderGoalHalf(result = {}) {
   elements.goalHalfContent.innerHTML = `<div class="corner-summary"><strong>Mitad con mayor señal: ${escapeHtml(projection.selectedHalf || "No disponible")}</strong><span>1T ${displayValue(projection.firstHalfSupport, 0)}% · 2T ${displayValue(projection.secondHalfSupport, 0)}% · Confianza ${displayValue(result.confidenceScore, 0)}/100</span></div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="corner-grid">${team(result.teams?.home || {}, selectedFixture()?.home || "Local")}${team(result.teams?.away || {}, selectedFixture()?.away || "Visitante")}</div><div class="detail-note detail-note--info"><strong>Uso responsable</strong><span>${escapeHtml(projection.explanation || "Tendencia contextual basada en eventos oficiales de goles previos. No es probabilidad completa ni pick automático.")}</span></div>${sampleRows.length ? `<section class="detail-section"><h3>Muestra usada</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "Goles 1T", "Goles 2T"], sampleRows)}</section>` : ""}`;
 }
 
+function renderGoalIntervals(result = {}) {
+  const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
+  elements.goalIntervalsStatus.className = `status-badge status-badge--${statusClass(status)}`;
+  elements.goalIntervalsStatus.textContent = status;
+  const comparison = result.intervalComparison;
+  if (!comparison?.rows?.length) {
+    elements.goalIntervalsContent.innerHTML = `<div class="research-empty">${escapeHtml(result.warning || "No existen eventos suficientes para comparar rangos de tiempo.")}</div>`;
+    return;
+  }
+  const fixture = selectedFixture();
+  const homeName = fixture?.home || "Local";
+  const awayName = fixture?.away || "Visitante";
+  const rows = comparison.rows.map((row) => [
+    row.label,
+    `${displayValue(row.homeGoals, 0)} goles · ${displayValue(row.homeWeightedRate, 0)}%`,
+    `${displayValue(row.awayGoals, 0)} goles · ${displayValue(row.awayWeightedRate, 0)}%`,
+    `${displayValue(row.combinedSupport, 0)}%`
+  ]);
+  elements.goalIntervalsContent.innerHTML = `<div class="goal-interval-summary"><span>Rango con mayor señal conjunta</span><strong>${escapeHtml(comparison.strongestInterval || "Sin tendencia clara")}</strong><small>Respaldo ponderado ${displayValue(comparison.strongestSupport, 0)}%</small></div><div class="goal-interval-table">${detailTable(["Rango", homeName, awayName, "Señal conjunta"], rows)}</div><div class="detail-note detail-note--info"><strong>Cómo interpretarlo</strong><span>Los porcentajes indican la frecuencia ponderada con que cada equipo marcó en ese intervalo durante sus partidos previos de la misma competición. Es evidencia contextual, no una probabilidad garantizada.</span></div>`;
+}
+
 function yellowCardsProjectionLeg() {
   const fixture = selectedFixture();
   const result = state.yellowCardsByFixture.get(fixture?.id);
@@ -5088,26 +5116,38 @@ async function loadGoalHalf(forceRefresh = false) {
   const fixture = selectedFixture(); if (!fixture || state.isLoadingGoalHalf) return;
   if (!forceRefresh && state.goalHalfByFixture.has(fixture.id)) return showModuleReady(elements.showGoalHalf, elements.goalHalfContent);
   const wasHidden = elements.goalHalfContent.hidden;
+  const intervalsWereHidden = elements.goalIntervalsContent.hidden;
   state.isLoadingGoalHalf = true;
   elements.refreshGoalHalf.disabled = true;
+  elements.refreshGoalIntervals.disabled = true;
   elements.showGoalHalf.disabled = true;
+  elements.showGoalIntervals.disabled = true;
   elements.goalHalfStatus.className = "status-badge status-badge--processing";
   elements.goalHalfStatus.textContent = forceRefresh ? "Actualizando" : "Procesando";
+  elements.goalIntervalsStatus.className = "status-badge status-badge--processing";
+  elements.goalIntervalsStatus.textContent = forceRefresh ? "Actualizando" : "Procesando";
   try {
     const result = await footballDataService.getGoalHalfModel(fixture, forceRefresh);
     state.goalHalfByFixture.set(fixture.id, result);
     renderGoalHalfWithPick(result);
+    renderGoalIntervals(result);
     if (forceRefresh) elements.goalHalfContent.hidden = wasHidden;
+    if (forceRefresh) elements.goalIntervalsContent.hidden = intervalsWereHidden;
     else showModuleReady(elements.showGoalHalf, elements.goalHalfContent);
     if (forceRefresh) showNotice("Gol por mitad actualizado.");
   } catch (error) {
     renderGoalHalf({ status: "not_available", warning: error.message });
+    renderGoalIntervals({ status: "not_available", warning: error.message });
     elements.goalHalfContent.hidden = forceRefresh ? wasHidden : false;
+    elements.goalIntervalsContent.hidden = forceRefresh ? intervalsWereHidden : false;
   } finally {
     state.isLoadingGoalHalf = false;
     elements.showGoalHalf.disabled = !selectedFixture();
+    elements.showGoalIntervals.disabled = !selectedFixture();
     elements.refreshGoalHalf.disabled = !selectedFixture();
+    elements.refreshGoalIntervals.disabled = !selectedFixture();
     elements.showGoalHalf.textContent = elements.goalHalfContent.hidden ? "Mostrar" : "Ocultar";
+    elements.showGoalIntervals.textContent = elements.goalIntervalsContent.hidden ? "Mostrar" : "Ocultar";
   }
 }
 
@@ -5846,6 +5886,7 @@ elements.refreshTeamPerformance.addEventListener("click", () => loadTeamPerforma
 elements.refreshCorners.addEventListener("click", () => loadCorners(true));
 elements.refreshYellowCards.addEventListener("click", () => loadYellowCards(true));
 elements.refreshGoalHalf.addEventListener("click", () => loadGoalHalf(true));
+elements.refreshGoalIntervals.addEventListener("click", () => loadGoalHalf(true));
 elements.refreshFixtureStatuses.addEventListener("click", refreshFixtureStatuses);
 elements.refreshLiveNow.addEventListener("click", refreshLiveDataNow);
 elements.collectPickInfo.addEventListener("click", collectPickInformation);
@@ -5890,6 +5931,7 @@ elements.teamGoalsContent.addEventListener("click", (event) => {
 elements.showCorners.addEventListener("click", () => toggleReadyModule(elements.showCorners, elements.cornersContent));
 elements.showYellowCards.addEventListener("click", () => toggleReadyModule(elements.showYellowCards, elements.yellowCardsContent));
 elements.showGoalHalf.addEventListener("click", () => toggleReadyModule(elements.showGoalHalf, elements.goalHalfContent));
+elements.showGoalIntervals.addEventListener("click", () => toggleReadyModule(elements.showGoalIntervals, elements.goalIntervalsContent));
 elements.yellowCardsContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-yellow-cards-pick]")) addYellowCardsProjectionPick(); });
 elements.goalHalfContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-goal-half-pick]")) addGoalHalfProjectionPick(); });
 elements.cornersContent.addEventListener("click", (event) => { const add = event.target.closest("[data-add-corners]"); const save = event.target.closest("[data-save-corners]"); const addExpected = event.target.closest("[data-add-expected-corners]"); const saveExpected = event.target.closest("[data-save-expected-corners]"); if (add) addCornerPick(add.dataset.addCorners); if (save) saveCornerPick(save.dataset.saveCorners); if (addExpected) addExpectedCornersPick(); if (saveExpected) saveExpectedCornersPick(); });

@@ -134,6 +134,9 @@ test("Dashboard incluye gol por mitad con actualizacion manual", () => {
   assert.match(dashboard, /id="goal-half-panel"/);
   assert.match(html, /id="refresh-goal-half"[\s\S]*Actualizar datos/);
   assert.match(html, /id="show-goal-half"[\s\S]*Mostrar/);
+  assert.match(dashboard, /id="goal-intervals-panel"/);
+  assert.match(html, /id="refresh-goal-intervals"[\s\S]*Actualizar datos/);
+  assert.match(html, /id="show-goal-intervals"[\s\S]*Mostrar/);
   assert.match(app, /getGoalHalfModel\(fixture, forceRefresh\)/);
   assert.match(app, /refreshGoalHalf\.addEventListener\("click", \(\) => loadGoalHalf\(true\)\)/);
 });
@@ -243,7 +246,7 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260815-monthly-picks-v1/);
+  assert.match(html, /styles\.css\?v=20260815-goal-intervals-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
 });

@@ -1617,6 +1617,12 @@ body {
 .yellow-cards-panel .eyebrow { color: #a77a10; }
 .goal-half-panel { grid-column: 1 / -1; border-top: 4px solid #2d8be0; }
 .goal-half-panel .eyebrow { color: #2563eb; }
+.goal-intervals-panel { grid-column: 1 / -1; border-top: 4px solid #16a3a3; }
+.goal-intervals-panel .eyebrow { color: #0f8585; }
+.goal-interval-summary { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; align-items: center; gap: 12px; margin-bottom: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-soft); }
+.goal-interval-summary span, .goal-interval-summary small { color: var(--muted); }
+.goal-interval-summary strong { color: var(--success); font-size: 1.05rem; }
+.goal-interval-table { overflow-x: auto; overscroll-behavior-inline: contain; }
 .corner-summary { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; margin-bottom: 10px; font-size: .72rem; background: var(--warning-soft); border: 1px solid #f2dda3; border-radius: 7px; }
 .module-pick-action { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-soft); }
 .module-pick-action span { color: var(--muted); font-size: .72rem; }
@@ -2915,6 +2921,7 @@ body {
 :root[data-theme="dark"] .favorite-team-metric__track { background: #2b3b4f; }
 
 @media (max-width: 760px) {
+  .goal-interval-summary { grid-template-columns: 1fr; align-items: start; }
   .favorite-teams-grid { grid-template-columns: 1fr; }
   .favorite-teams-note { flex-direction: column; }
   .favorite-team-card > header { grid-template-columns: auto minmax(0, 1fr); }

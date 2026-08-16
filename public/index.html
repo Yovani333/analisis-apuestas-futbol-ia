@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de análisis responsable de apuestas de fútbol con datos, API-Football y modelos internos." />
     <title>Análisis de Apuestas de Fútbol con Datos</title>
-  <link rel="stylesheet" href="styles.css?v=20260815-monthly-picks-v1" />
+  <link rel="stylesheet" href="styles.css?v=20260815-goal-intervals-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -296,6 +296,11 @@
         <section id="goal-half-panel" class="panel goal-half-panel advanced-module-panel" aria-labelledby="goal-half-title">
           <div class="panel-heading"><div><p class="eyebrow">Ritmo de anotacion</p><h2 id="goal-half-title">Gol por mitad</h2></div><div class="panel-actions"><button id="refresh-goal-half" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button><button id="show-goal-half" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="goal-half-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
           <div id="goal-half-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para estimar en que mitad hay mayor tendencia de gol.</div></div>
+        </section>
+
+        <section id="goal-intervals-panel" class="panel goal-intervals-panel advanced-module-panel" aria-labelledby="goal-intervals-title">
+          <div class="panel-heading"><div><p class="eyebrow">Comparativa temporal</p><h2 id="goal-intervals-title">Posible gol por rango de tiempo</h2></div><div class="panel-actions"><button id="refresh-goal-intervals" class="button button--secondary button--compact" type="button" disabled>Actualizar datos</button><button id="show-goal-intervals" class="button button--secondary button--compact" type="button" aria-expanded="false" disabled>Mostrar</button><span id="goal-intervals-status" class="status-badge status-badge--unavailable">No disponible</span></div></div>
+          <div id="goal-intervals-content" aria-live="polite" hidden><div class="research-empty">Selecciona un partido para comparar los rangos de tiempo con mayor frecuencia de gol de ambos equipos.</div></div>
         </section>
 
         <section id="team-performance-panel" class="panel team-performance-panel" aria-labelledby="team-performance-title">
@@ -698,6 +703,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260815-monthly-picks-v1"></script>
+    <script type="module" src="app.js?v=20260815-goal-intervals-v1"></script>
   </body>
 </html>

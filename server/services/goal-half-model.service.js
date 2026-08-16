@@ -3,6 +3,14 @@ import { competitionLabel, isSameCompetition } from "./competition-scope.service
 
 const RECENCY_WEIGHTS = [1, 0.9, 0.8, 0.7, 0.6];
 const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
+const GOAL_INTERVALS = Object.freeze([
+  { key: "0_15", label: "0-15", min: 0, max: 15 },
+  { key: "16_30", label: "16-30", min: 16, max: 30 },
+  { key: "31_45", label: "31-45+", min: 31, max: 45 },
+  { key: "46_60", label: "46-60", min: 46, max: 60 },
+  { key: "61_75", label: "61-75", min: 61, max: 75 },
+  { key: "76_90", label: "76-90+", min: 76, max: 90 }
+]);
 
 const number = (value) => {
   if (value === null || value === undefined || value === "") return null;
@@ -62,6 +70,12 @@ function eventHalf(event) {
   return null;
 }
 
+function eventInterval(event) {
+  const elapsed = number(event?.time?.elapsed ?? event?.elapsed);
+  if (elapsed === null || elapsed > 90) return null;
+  return GOAL_INTERVALS.find((interval) => elapsed >= interval.min && elapsed <= interval.max)?.key || null;
+}
+
 function selectPreviousFixtures(rows, fixture, teamId, limit = 5) {
   const targetDateMs = Date.parse(fixture?.utcDateTime || fixture?.date || fixture?.fixture?.date || "");
   if (!Number.isFinite(targetDateMs)) return [];
@@ -87,6 +101,7 @@ function summarizeRows(rows, teamId, eventsByFixture) {
   let totalWeight = 0;
   let firstGoals = 0;
   let secondGoals = 0;
+  const intervalTotals = new Map(GOAL_INTERVALS.map((interval) => [interval.key, { goals: 0, weightedMatches: 0 }]));
 
   rows.forEach((row, index) => {
     const id = fixtureIdOf(row);
@@ -95,11 +110,17 @@ function summarizeRows(rows, teamId, eventsByFixture) {
     let matchSecond = 0;
     let teamFirst = 0;
     let teamSecond = 0;
+    const teamGoalIntervals = new Set();
     for (const event of events) {
       if (!isGoalEvent(event)) continue;
       const half = eventHalf(event);
       if (!half) continue;
       const isTeamGoal = String(event?.team?.id || "") === String(teamId || "");
+      const interval = isTeamGoal ? eventInterval(event) : null;
+      if (interval) {
+        intervalTotals.get(interval).goals += 1;
+        teamGoalIntervals.add(interval);
+      }
       if (half === "first") {
         matchFirst += 1;
         if (isTeamGoal) teamFirst += 1;
@@ -112,6 +133,7 @@ function summarizeRows(rows, teamId, eventsByFixture) {
     if (!events.length) excludedNoEvents += 1;
     const weight = RECENCY_WEIGHTS[index] ?? 0.5;
     totalWeight += weight;
+    teamGoalIntervals.forEach((interval) => { intervalTotals.get(interval).weightedMatches += weight; });
     if (matchFirst > 0) weightedFirst += weight;
     if (matchSecond > 0) weightedSecond += weight;
     firstGoals += matchFirst;
@@ -136,7 +158,35 @@ function summarizeRows(rows, teamId, eventsByFixture) {
     secondHalfGoalRate: totalWeight ? round((weightedSecond / totalWeight) * 100, 0) : null,
     firstHalfGoals: firstGoals,
     secondHalfGoals: secondGoals,
+    intervals: GOAL_INTERVALS.map((interval) => ({
+      key: interval.key,
+      label: interval.label,
+      goals: intervalTotals.get(interval.key).goals,
+      weightedMatchRate: totalWeight ? round(intervalTotals.get(interval.key).weightedMatches / totalWeight * 100, 0) : null
+    })),
     fixturesUsed
+  };
+}
+
+function buildIntervalComparison(home, away) {
+  const rows = GOAL_INTERVALS.map((interval) => {
+    const homeInterval = home.intervals?.find((row) => row.key === interval.key) || {};
+    const awayInterval = away.intervals?.find((row) => row.key === interval.key) || {};
+    return {
+      key: interval.key,
+      label: interval.label,
+      homeGoals: homeInterval.goals || 0,
+      awayGoals: awayInterval.goals || 0,
+      homeWeightedRate: homeInterval.weightedMatchRate ?? 0,
+      awayWeightedRate: awayInterval.weightedMatchRate ?? 0,
+      combinedSupport: round(((homeInterval.weightedMatchRate ?? 0) + (awayInterval.weightedMatchRate ?? 0)) / 2, 0)
+    };
+  });
+  const strongest = [...rows].sort((a, b) => b.combinedSupport - a.combinedSupport || (b.homeGoals + b.awayGoals) - (a.homeGoals + a.awayGoals))[0];
+  return {
+    rows,
+    strongestInterval: strongest?.combinedSupport > 0 ? strongest.label : null,
+    strongestSupport: strongest?.combinedSupport || 0
   };
 }
 
@@ -215,6 +265,7 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
   if (home.excludedOtherCompetitions || away.excludedOtherCompetitions) warnings.push("Se excluyeron partidos de otras competiciones.");
   if (home.excludedNoEvents || away.excludedNoEvents) warnings.push("Algunos partidos no devolvieron eventos de API-Football.");
   const projection = buildProjection(home, away);
+  const intervalComparison = buildIntervalComparison(home, away);
   const confidenceScore = Math.min(86, Math.max(45, 42 + minSample * 6 + projection.difference));
   const status = minSample >= 5 && projection.selectedHalf !== "Sin tendencia clara" ? "available" : "partial";
   return {
@@ -225,6 +276,7 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
     fixtureId,
     teams: { home, away },
     projection,
+    intervalComparison,
     confidenceScore,
     quality: resolveModuleQuality({ score: confidenceScore, status, notes: warnings }),
     warnings,

@@ -44,6 +44,24 @@ test("detecta segunda mitad como tendencia cuando concentra mas goles recientes"
   assert.equal(result.projection.secondHalfSupport, 100);
   assert.equal(result.teams.home.useful, 5);
   assert.equal(result.teams.away.useful, 5);
+  assert.equal(result.intervalComparison.rows.length, 6);
+});
+
+test("compara los intervalos de gol desde la perspectiva de ambos equipos", async () => {
+  const homeFixtures = [1, 2, 3, 4, 5].map((id, index) => fixture(id, 1, 10 + id, `2026-07-${25 - index}T20:00:00Z`));
+  const awayFixtures = [6, 7, 8, 9, 10].map((id, index) => fixture(id, 2, 20 + id, `2026-07-${25 - index}T20:00:00Z`, false));
+  const events = {};
+  homeFixtures.forEach((row) => { events[row.fixture.id] = [goal(1, 12), goal(99, 55)]; });
+  awayFixtures.forEach((row) => { events[row.fixture.id] = [goal(2, 68), goal(99, 82)]; });
+  const result = await calculateGoalHalfModel(targetFixture, dependencies(homeFixtures, awayFixtures, events));
+  const early = result.intervalComparison.rows.find((row) => row.key === "0_15");
+  const late = result.intervalComparison.rows.find((row) => row.key === "61_75");
+  assert.equal(early.homeGoals, 5);
+  assert.equal(early.awayGoals, 0);
+  assert.equal(late.homeGoals, 0);
+  assert.equal(late.awayGoals, 5);
+  assert.equal(early.homeWeightedRate, 100);
+  assert.equal(late.awayWeightedRate, 100);
 });
 
 test("no recomienda cuando algun equipo tiene menos de tres partidos previos oficiales", async () => {
