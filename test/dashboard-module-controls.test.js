@@ -91,6 +91,10 @@ test("la comparativa de gol por intervalo reutiliza Gol por mitad sin otra fuent
   assert.match(app, /Gol en el primer tiempo/);
   assert.match(app, /Gol en el segundo tiempo/);
   assert.match(app, /strongestHalfSelection/);
+  assert.match(app, /data-add-goal-interval-pick/);
+  assert.match(app, /function goalIntervalProjectionLeg/);
+  assert.match(app, /sourceModule: "goal_interval_projection"/);
+  assert.match(app, /originSection: "Posible gol por rango de tiempo"/);
 });
 
 test("guardar desde el cupon permanece en la vista actual", () => {

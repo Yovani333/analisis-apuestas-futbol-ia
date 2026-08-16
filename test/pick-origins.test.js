@@ -37,6 +37,7 @@ test("la recomendación de forma conserva el mismo título como origen", () => {
 test("identifica los orígenes de tarjetas amarillas y gol por mitad", () => {
   assert.equal(pickOriginLabel("yellow_cards"), "Tarjetas amarillas");
   assert.equal(pickOriginLabel("goal_half_projection"), "Gol por mitad");
+  assert.equal(pickOriginLabel("goal_interval_projection"), "Posible gol por rango de tiempo");
 });
 
 test("conserva compatibilidad con el origen textual legado", () => {

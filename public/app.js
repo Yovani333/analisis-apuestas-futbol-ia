@@ -5095,6 +5095,14 @@ function renderGoalHalf(result = {}) {
   elements.goalHalfContent.innerHTML = `<div class="corner-summary"><strong>Mitad con mayor señal: ${escapeHtml(projection.selectedHalf || "No disponible")}</strong><span>1T ${displayValue(projection.firstHalfSupport, 0)}% · 2T ${displayValue(projection.secondHalfSupport, 0)}% · Confianza ${displayValue(result.confidenceScore, 0)}/100</span></div>${result.warnings?.length ? `<div class="data-picks-warnings">${result.warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}<div class="corner-grid">${team(result.teams?.home || {}, selectedFixture()?.home || "Local")}${team(result.teams?.away || {}, selectedFixture()?.away || "Visitante")}</div><div class="detail-note detail-note--info"><strong>Uso responsable</strong><span>${escapeHtml(projection.explanation || "Tendencia contextual basada en eventos oficiales de goles previos. No es probabilidad completa ni pick automático.")}</span></div>${sampleRows.length ? `<section class="detail-section"><h3>Muestra usada</h3>${detailTable(["Equipo", "Fecha", "Rival", "Sede", "Goles 1T", "Goles 2T"], sampleRows)}</section>` : ""}`;
 }
 
+function goalIntervalHalfSelection(comparison = {}) {
+  if (comparison.strongestHalfSelection) return comparison.strongestHalfSelection;
+  const strongestKey = comparison.rows?.find((row) => row.label === comparison.strongestInterval)?.key;
+  if (["0_15", "16_30", "31_45"].includes(strongestKey)) return "Gol en el primer tiempo";
+  if (["46_60", "61_75", "76_90"].includes(strongestKey)) return "Gol en el segundo tiempo";
+  return null;
+}
+
 function renderGoalIntervals(result = {}) {
   const status = result.status === "available" ? "Disponible" : result.status === "partial" ? "Parcial" : "No disponible";
   elements.goalIntervalsStatus.className = `status-badge status-badge--${statusClass(status)}`;
@@ -5113,11 +5121,11 @@ function renderGoalIntervals(result = {}) {
     `${displayValue(row.awayGoals, 0)} goles · ${displayValue(row.awayWeightedRate, 0)}%`,
     `${displayValue(row.combinedSupport, 0)}%`
   ]);
-  const strongestKey = comparison.rows.find((row) => row.label === comparison.strongestInterval)?.key;
-  const halfSelection = comparison.strongestHalfSelection || (["0_15", "16_30", "31_45"].includes(strongestKey)
-    ? "Gol en el primer tiempo"
-    : ["46_60", "61_75", "76_90"].includes(strongestKey) ? "Gol en el segundo tiempo" : null);
-  elements.goalIntervalsContent.innerHTML = `<div class="goal-interval-summary"><span>Rango con mayor señal conjunta</span><strong>${escapeHtml(comparison.strongestInterval || "Sin tendencia clara")}</strong><div class="goal-interval-summary__support"><small>Respaldo ponderado ${displayValue(comparison.strongestSupport, 0)}%</small>${halfSelection ? `<b>${escapeHtml(halfSelection)}</b>` : ""}</div></div><div class="goal-interval-table">${detailTable(["Rango", homeName, awayName, "Señal conjunta"], rows)}</div><div class="detail-note detail-note--info"><strong>Cómo interpretarlo</strong><span>Los porcentajes indican la frecuencia ponderada con que cada equipo marcó en ese intervalo durante sus partidos previos de la misma competición. La mitad indicada corresponde al rango con mayor señal conjunta. Es evidencia contextual, no una probabilidad garantizada.</span></div>`;
+  const halfSelection = goalIntervalHalfSelection(comparison);
+  const addAction = goalIntervalProjectionLeg(result)
+    ? '<div class="module-pick-action"><span>Selección basada en el rango con mayor señal conjunta; queda pendiente de cuota.</span><button class="button button--primary button--compact" type="button" data-add-goal-interval-pick>Agregar pick</button></div>'
+    : "";
+  elements.goalIntervalsContent.innerHTML = `${addAction}<div class="goal-interval-summary"><span>Rango con mayor señal conjunta</span><strong>${escapeHtml(comparison.strongestInterval || "Sin tendencia clara")}</strong><div class="goal-interval-summary__support"><small>Respaldo ponderado ${displayValue(comparison.strongestSupport, 0)}%</small>${halfSelection ? `<b>${escapeHtml(halfSelection)}</b>` : ""}</div></div><div class="goal-interval-table">${detailTable(["Rango", homeName, awayName, "Señal conjunta"], rows)}</div><div class="detail-note detail-note--info"><strong>Cómo interpretarlo</strong><span>Los porcentajes indican la frecuencia ponderada con que cada equipo marcó en ese intervalo durante sus partidos previos de la misma competición. La mitad indicada corresponde al rango con mayor señal conjunta. Es evidencia contextual, no una probabilidad garantizada.</span></div>`;
 }
 
 function yellowCardsProjectionLeg() {
@@ -5170,6 +5178,32 @@ function goalHalfProjectionLeg() {
   };
 }
 
+function goalIntervalProjectionLeg(result = null) {
+  const fixture = selectedFixture();
+  const model = result || state.goalHalfByFixture.get(fixture?.id);
+  const comparison = model?.intervalComparison;
+  const selection = goalIntervalHalfSelection(comparison);
+  if (!fixture || !comparison?.strongestInterval || !selection || !(Number(comparison.strongestSupport) > 0)) return null;
+  const first = selection === "Gol en el primer tiempo";
+  return {
+    id: `${fixture.id}:goal-interval:${first ? "first" : "second"}`,
+    fixtureId: fixture.id, league: fixture.leagueName, leagueId: fixture.leagueId,
+    country: fixture.country, home: fixture.home, away: fixture.away, date: fixture.date,
+    market: "Gol por rango de tiempo", selection: `Habrá gol en el ${first ? "primer" : "segundo"} tiempo`,
+    marketCode: "goal_by_half", selectionCode: first ? "goal_first_half" : "goal_second_half",
+    decimalOdds: null, originalOdds: null, updatedOdds: null, impliedProbability: null,
+    modelProbability: null, estimatedProbability: null, expectedValue: null,
+    fixtureStatus: fixture.statusLabel || fixture.status, kickoffAt: fixture.utcDateTime || null,
+    lastUpdatedAt: model.generatedAt, confidence: `${model.confidenceScore}%`, confidenceScore: model.confidenceScore,
+    risk: model.status === "available" ? "Medio" : "Alto", requiresReview: true,
+    reasoning: `El rango ${comparison.strongestInterval} presenta la mayor señal conjunta con ${comparison.strongestSupport}% de respaldo ponderado.`,
+    sourceModule: "goal_interval_projection", source: model.source,
+    originMenu: "Dashboard", originSection: "Posible gol por rango de tiempo",
+    supportingData: [`Rango ${comparison.strongestInterval}`, `${comparison.strongestSupport}% de respaldo ponderado`, selection],
+    contradictingData: model.warnings || []
+  };
+}
+
 function renderYellowCardsWithPick(result = {}) {
   renderYellowCards(result);
   if (yellowCardsProjectionLeg()) elements.yellowCardsContent.insertAdjacentHTML("afterbegin", '<div class="module-pick-action"><span>Pick conservador basado en el límite inferior del rango; queda pendiente de cuota.</span><button class="button button--primary button--compact" type="button" data-add-yellow-cards-pick>Agregar pick</button></div>');
@@ -5188,6 +5222,11 @@ function addYellowCardsProjectionPick() {
 function addGoalHalfProjectionPick() {
   const leg = goalHalfProjectionLeg();
   if (leg) appendPickToParlay(leg, "Pick de gol por mitad agregado a Mi parlay.");
+}
+
+function addGoalIntervalProjectionPick() {
+  const leg = goalIntervalProjectionLeg();
+  if (leg) appendPickToParlay(leg, "Pick de posible gol por rango de tiempo agregado a Mi parlay.");
 }
 
 async function loadGoalHalf(forceRefresh = false) {
@@ -6012,6 +6051,7 @@ elements.showGoalHalf.addEventListener("click", () => toggleReadyModule(elements
 elements.showGoalIntervals.addEventListener("click", () => toggleReadyModule(elements.showGoalIntervals, elements.goalIntervalsContent));
 elements.yellowCardsContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-yellow-cards-pick]")) addYellowCardsProjectionPick(); });
 elements.goalHalfContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-goal-half-pick]")) addGoalHalfProjectionPick(); });
+elements.goalIntervalsContent.addEventListener("click", (event) => { if (event.target.closest("[data-add-goal-interval-pick]")) addGoalIntervalProjectionPick(); });
 elements.cornersContent.addEventListener("click", (event) => { const add = event.target.closest("[data-add-corners]"); const save = event.target.closest("[data-save-corners]"); const addExpected = event.target.closest("[data-add-expected-corners]"); const saveExpected = event.target.closest("[data-save-expected-corners]"); if (add) addCornerPick(add.dataset.addCorners); if (save) saveCornerPick(save.dataset.saveCorners); if (addExpected) addExpectedCornersPick(); if (saveExpected) saveExpectedCornersPick(); });
 elements.showSpecificMarkets.addEventListener("click", () => loadSpecificMarkets(true));
 elements.specificMarketsContent.addEventListener("click", (event) => {
