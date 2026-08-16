@@ -82,11 +82,8 @@ test("liquida tarjetas amarillas y gol por mitad con datos oficiales", () => {
   assert.equal(settlePickResult({ selectionCode: "over_yellow_cards", selection: "Más de 3.5 tarjetas amarillas" }, result), "won");
   assert.equal(settlePickResult({ selectionCode: "goal_first_half", selection: "Habrá gol en la primera mitad" }, result), "lost");
   assert.equal(settlePickResult({ selectionCode: "goal_second_half", selection: "Habrá gol en la segunda mitad" }, result), "won");
-  assert.equal(settlePickResult({ selectionCode: "no_goal_first_half", selection: "No habrá anotación en el primer tiempo" }, result), "won");
-  assert.equal(settlePickResult({ selectionCode: "no_goal_first_half", selection: "No habrá anotación en el primer tiempo" }, { ...result, halftimeScore: { home: 1, away: 0 } }), "lost");
   assert.equal(canAutomaticallySettlePick({ selectionCode: "over_yellow_cards" }), true);
   assert.equal(canAutomaticallySettlePick({ selectionCode: "goal_second_half" }), true);
-  assert.equal(canAutomaticallySettlePick({ selectionCode: "no_goal_first_half" }), true);
 });
 
 test("no convierte un marcador ausente en cero a cero", () => {

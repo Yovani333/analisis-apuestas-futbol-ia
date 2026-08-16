@@ -76,19 +76,6 @@ function eventInterval(event) {
   return GOAL_INTERVALS.find((interval) => elapsed >= interval.min && elapsed <= interval.max)?.key || null;
 }
 
-function halftimeGoalsFromFixture(row) {
-  const score = row?.score?.halftime || row?.halftimeScore;
-  const home = number(score?.home);
-  const away = number(score?.away);
-  return home === null || away === null ? null : home + away;
-}
-
-function weightedNoGoalRate(rows = []) {
-  const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
-  if (!totalWeight) return null;
-  return round(rows.reduce((sum, row) => sum + (row.goals === 0 ? row.weight : 0), 0) / totalWeight * 100, 0);
-}
-
 function selectPreviousFixtures(rows, fixture, teamId, limit = 5) {
   const targetDateMs = Date.parse(fixture?.utcDateTime || fixture?.date || fixture?.fixture?.date || "");
   if (!Number.isFinite(targetDateMs)) return [];
@@ -106,7 +93,7 @@ function selectPreviousFixtures(rows, fixture, teamId, limit = 5) {
     .slice(0, limit);
 }
 
-function summarizeRows(rows, teamId, eventsByFixture, expectedVenue) {
+function summarizeRows(rows, teamId, eventsByFixture) {
   const fixturesUsed = [];
   let excludedNoEvents = 0;
   let weightedFirst = 0;
@@ -114,7 +101,6 @@ function summarizeRows(rows, teamId, eventsByFixture, expectedVenue) {
   let totalWeight = 0;
   let firstGoals = 0;
   let secondGoals = 0;
-  const verifiedFirstHalfRows = [];
   const intervalTotals = new Map(GOAL_INTERVALS.map((interval) => [interval.key, { goals: 0, weightedMatches: 0 }]));
 
   rows.forEach((row, index) => {
@@ -152,15 +138,6 @@ function summarizeRows(rows, teamId, eventsByFixture, expectedVenue) {
     if (matchSecond > 0) weightedSecond += weight;
     firstGoals += matchFirst;
     secondGoals += matchSecond;
-    const halftimeGoals = halftimeGoalsFromFixture(row);
-    if (halftimeGoals !== null || events.length > 0) {
-      const venue = venueFor(row, teamId);
-      verifiedFirstHalfRows.push({
-        goals: halftimeGoals ?? matchFirst,
-        weight: weight * (venue === expectedVenue ? 1 : 0.8),
-        comparableVenue: venue === expectedVenue
-      });
-    }
     fixturesUsed.push({
       fixtureId: id,
       date: fixtureDateOf(row)?.slice(0, 10) || "",
@@ -174,9 +151,6 @@ function summarizeRows(rows, teamId, eventsByFixture, expectedVenue) {
     });
   });
 
-  const comparableFirstHalfRows = verifiedFirstHalfRows.filter((row) => row.comparableVenue);
-  const verifiedWeight = verifiedFirstHalfRows.reduce((sum, row) => sum + row.weight, 0);
-
   return {
     useful: rows.length,
     excludedNoEvents,
@@ -184,16 +158,6 @@ function summarizeRows(rows, teamId, eventsByFixture, expectedVenue) {
     secondHalfGoalRate: totalWeight ? round((weightedSecond / totalWeight) * 100, 0) : null,
     firstHalfGoals: firstGoals,
     secondHalfGoals: secondGoals,
-    verifiedFirstHalfMatches: verifiedFirstHalfRows.length,
-    firstHalfNoGoalMatches: verifiedFirstHalfRows.filter((row) => row.goals === 0).length,
-    firstHalfNoGoalRate: weightedNoGoalRate(verifiedFirstHalfRows),
-    recentThreeFirstHalfNoGoalRate: weightedNoGoalRate(verifiedFirstHalfRows.slice(0, 3)),
-    recentTwoFirstHalfNoGoalRate: weightedNoGoalRate(verifiedFirstHalfRows.slice(0, 2)),
-    comparableVenueMatches: comparableFirstHalfRows.length,
-    comparableVenueFirstHalfNoGoalRate: weightedNoGoalRate(comparableFirstHalfRows),
-    weightedFirstHalfGoalsPerMatch: verifiedWeight
-      ? round(verifiedFirstHalfRows.reduce((sum, row) => sum + row.goals * row.weight, 0) / verifiedWeight, 2)
-      : null,
     intervals: GOAL_INTERVALS.map((interval) => ({
       key: interval.key,
       label: interval.label,
@@ -255,84 +219,6 @@ function buildProjection(home, away) {
   };
 }
 
-function buildFirstHalfNoGoalProjection(home, away, intervalComparison) {
-  const minSample = Math.min(home.verifiedFirstHalfMatches || 0, away.verifiedFirstHalfMatches || 0);
-  if (minSample < 4) {
-    return {
-      status: "INSUFFICIENT_DATA",
-      recommendedSelection: null,
-      confidence: "Baja",
-      homeSampleSize: home.verifiedFirstHalfMatches || 0,
-      awaySampleSize: away.verifiedFirstHalfMatches || 0,
-      warnings: ["Se requieren al menos 4 partidos por equipo con marcador de descanso o eventos verificables."],
-      explanation: "No se interpreta la ausencia de eventos como un primer tiempo sin goles."
-    };
-  }
-
-  const warnings = [];
-  const homeNoGoal = number(home.firstHalfNoGoalRate) ?? 0;
-  const awayNoGoal = number(away.firstHalfNoGoalRate) ?? 0;
-  const overallSupport = round((homeNoGoal + awayNoGoal) / 2, 0);
-  const recentSupport = round(((number(home.recentThreeFirstHalfNoGoalRate) ?? 0) + (number(away.recentThreeFirstHalfNoGoalRate) ?? 0)) / 2, 0);
-  const recentTwoSupport = round(((number(home.recentTwoFirstHalfNoGoalRate) ?? 0) + (number(away.recentTwoFirstHalfNoGoalRate) ?? 0)) / 2, 0);
-  const hasComparableVenue = home.comparableVenueMatches >= 2 && away.comparableVenueMatches >= 2;
-  const contextualSupport = hasComparableVenue
-    ? round(((number(home.comparableVenueFirstHalfNoGoalRate) ?? 0) + (number(away.comparableVenueFirstHalfNoGoalRate) ?? 0)) / 2, 0)
-    : overallSupport;
-  const averageFirstHalfGoals = round(((number(home.weightedFirstHalfGoalsPerMatch) ?? 0) + (number(away.weightedFirstHalfGoalsPerMatch) ?? 0)) / 2, 2);
-  const lowGoalSupport = Math.max(0, Math.min(100, round(100 - (averageFirstHalfGoals / 1.2 * 100), 0)));
-  const firstHalfIntervalContradiction = intervalComparison?.strongestHalf === "Primera mitad"
-    && Number(intervalComparison?.strongestSupport) >= 50;
-
-  let supportScore = overallSupport * 0.45 + recentSupport * 0.25 + contextualSupport * 0.20 + lowGoalSupport * 0.10;
-  if (!hasComparableVenue) {
-    supportScore -= 5;
-    warnings.push("Hay menos de 2 partidos con localía comparable para alguno de los equipos.");
-  }
-  if (Math.min(homeNoGoal, awayNoGoal) < 60) supportScore -= 8;
-  if (firstHalfIntervalContradiction) {
-    supportScore -= 12;
-    warnings.push("El rango con mayor señal conjunta se encuentra en la primera mitad.");
-  }
-  supportScore = Math.max(0, Math.min(100, round(supportScore, 0)));
-
-  const requiredConditions = {
-    sufficientSample: minSample >= 4,
-    bothTeamsStable: homeNoGoal >= 60 && awayNoGoal >= 60,
-    overallSupport: overallSupport >= 68,
-    recentSupport: recentSupport >= 65,
-    recentTwoNotContradictory: recentTwoSupport >= 50,
-    lowFirstHalfAverage: averageFirstHalfGoals <= 0.75,
-    noIntervalContradiction: !firstHalfIntervalContradiction,
-    minimumScore: supportScore >= 70
-  };
-  const recommended = Object.values(requiredConditions).every(Boolean);
-  const confidence = recommended && minSample >= 5 && hasComparableVenue && supportScore >= 80 ? "Alta"
-    : recommended ? "Media" : "Baja";
-  if (!recommended) warnings.push("La señal no supera todos los filtros conservadores de estabilidad, recencia y baja anotación.");
-
-  return {
-    status: recommended ? "RECOMMENDED" : "NO_BET",
-    recommendedSelection: recommended ? "No habrá anotación en el primer tiempo" : null,
-    confidence,
-    homeSampleSize: home.verifiedFirstHalfMatches,
-    awaySampleSize: away.verifiedFirstHalfMatches,
-    homeNoGoalRate: homeNoGoal,
-    awayNoGoalRate: awayNoGoal,
-    overallSupport,
-    recentSupport,
-    recentTwoSupport,
-    contextualSupport,
-    averageFirstHalfGoals,
-    supportScore,
-    requiredConditions,
-    warnings,
-    explanation: recommended
-      ? `Ambos equipos sostienen primeros tiempos sin gol, con ${overallSupport}% de respaldo conjunto, ${recentSupport}% en los tres partidos más recientes y ${averageFirstHalfGoals} goles promedio en 1T.`
-      : "La ausencia de gol en el primer tiempo no tiene respaldo suficientemente estable para recomendarse."
-  };
-}
-
 export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, options = {}) {
   const getPreviousFixtures = dependencies.getPreviousFixtures;
   const getFixtureEvents = dependencies.getFixtureEvents;
@@ -343,7 +229,7 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
     return {
       status: "not_available",
       sourceModule: "goal_half_projection",
-      modelVersion: "goal-half-events-v3-no-first-half",
+      modelVersion: "goal-half-events-v2-same-competition",
       fixtureId,
       quality: resolveModuleQuality({ status: "not_available" }),
       warning: "Gol por mitad no disponible: faltan fixture, equipos o servicios de eventos oficiales.",
@@ -362,8 +248,8 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
     id,
     await getFixtureEvents(id).catch(() => [])
   ])));
-  const home = summarizeRows(homeFixtures, homeTeamId, eventsByFixture, "Local");
-  const away = summarizeRows(awayFixtures, awayTeamId, eventsByFixture, "Visitante");
+  const home = summarizeRows(homeFixtures, homeTeamId, eventsByFixture);
+  const away = summarizeRows(awayFixtures, awayTeamId, eventsByFixture);
   home.excludedOtherCompetitions = homeRows.filter((row) => !isSameCompetition(row, fixture)).length;
   away.excludedOtherCompetitions = awayRows.filter((row) => !isSameCompetition(row, fixture)).length;
   const warnings = [];
@@ -373,7 +259,7 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
       status: "not_available",
       source: "API-Football fixture events",
       sourceModule: "goal_half_projection",
-      modelVersion: "goal-half-events-v3-no-first-half",
+      modelVersion: "goal-half-events-v2-same-competition",
       fixtureId,
       teams: { home, away },
       projection: null,
@@ -387,19 +273,17 @@ export async function calculateGoalHalfModel(fixture = {}, dependencies = {}, op
   if (home.excludedNoEvents || away.excludedNoEvents) warnings.push("Algunos partidos no devolvieron eventos de API-Football.");
   const projection = buildProjection(home, away);
   const intervalComparison = buildIntervalComparison(home, away);
-  const firstHalfNoGoalProjection = buildFirstHalfNoGoalProjection(home, away, intervalComparison);
   const confidenceScore = Math.min(86, Math.max(45, 42 + minSample * 6 + projection.difference));
   const status = minSample >= 5 && projection.selectedHalf !== "Sin tendencia clara" ? "available" : "partial";
   return {
     status,
     source: "API-Football fixture events + modelo interno",
     sourceModule: "goal_half_projection",
-    modelVersion: "goal-half-events-v3-no-first-half",
+    modelVersion: "goal-half-events-v2-same-competition",
     fixtureId,
     teams: { home, away },
     projection,
     intervalComparison,
-    firstHalfNoGoalProjection,
     confidenceScore,
     quality: resolveModuleQuality({ score: confidenceScore, status, notes: warnings }),
     warnings,

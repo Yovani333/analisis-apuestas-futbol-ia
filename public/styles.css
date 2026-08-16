@@ -1639,15 +1639,6 @@ body {
 .goal-interval-summary strong { color: var(--success); font-size: 1.05rem; }
 .goal-interval-summary__support { display: grid; gap: 3px; justify-items: end; }
 .goal-interval-summary__support b { color: var(--primary-strong); font-size: .72rem; }
-.goal-no-first-half-analysis { display: grid; gap: 10px; margin: 12px 0; padding: 12px; background: var(--surface-soft); border: 1px solid var(--border); border-left: 4px solid var(--warning); border-radius: 7px; }
-.goal-no-first-half-analysis--recommended { border-left-color: var(--success); }
-.goal-no-first-half-analysis > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.goal-no-first-half-analysis h3, .goal-no-first-half-analysis p { margin: 0; }
-.goal-no-first-half-analysis header small, .goal-no-first-half-analysis p { color: var(--muted); font-size: .67rem; }
-.goal-no-first-half-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
-.goal-no-first-half-metrics > span { display: grid; gap: 3px; padding: 8px; color: var(--muted); font-size: .58rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
-.goal-no-first-half-metrics strong { color: var(--text); font-size: .78rem; }
-.goal-no-first-half-metrics small { color: var(--muted); font-size: .56rem; }
 .goal-interval-table { overflow-x: auto; overscroll-behavior-inline: contain; }
 .corner-summary { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; margin-bottom: 10px; font-size: .72rem; background: var(--warning-soft); border: 1px solid #f2dda3; border-radius: 7px; }
 .module-pick-action { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-soft); }
@@ -2955,8 +2946,6 @@ body {
 @media (max-width: 760px) {
   .goal-interval-summary { grid-template-columns: 1fr; align-items: start; }
   .goal-interval-summary__support { justify-items: start; }
-  .goal-no-first-half-analysis > header { align-items: flex-start; flex-direction: column; }
-  .goal-no-first-half-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .favorite-teams-grid { grid-template-columns: 1fr; }
   .favorite-teams-note { flex-direction: column; }
   .favorite-team-card > header { grid-template-columns: auto minmax(0, 1fr); }
