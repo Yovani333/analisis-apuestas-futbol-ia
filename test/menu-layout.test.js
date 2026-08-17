@@ -297,8 +297,11 @@ test("Mis apuestas incluye parlays de prueba aislados", () => {
   assert.match(app, /data-parlay-test-toggle/);
   assert.match(app, /setParlayTestMode/);
   assert.match(app, /Todas sus selecciones quedaron fuera de los históricos reales/);
-  assert.match(app, /data-test-fixture-status/);
-  assert.match(app, /data-save-test-fixture-status/);
-  assert.match(app, /setTestParlayLegFixtureStatus/);
-  assert.match(app, /El resultado del pick no fue modificado/);
+  assert.match(app, /data-test-manual-result/);
+  assert.match(app, /data-save-test-manual-result/);
+  assert.match(app, /setTestParlayLegManualResult/);
+  assert.match(app, /Resultado de prueba guardado/);
+  assert.match(app, /Postergado/);
+  assert.match(app, /Cancelado/);
+  assert.doesNotMatch(app, /data-test-fixture-status/);
 });

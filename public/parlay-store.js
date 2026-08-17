@@ -19,29 +19,26 @@ export function setParlayTestMode(parlay = {}, isTest = false, now = new Date())
   };
 }
 
-const MANUAL_TEST_FIXTURE_STATUSES = new Set(["Programado", "En vivo", "Finalizado", "Postergado", "Suspendido", "Cancelado"]);
+const MANUAL_TEST_RESULTS = new Set(["won", "lost", "postponed", "cancelled"]);
 
-export function setTestParlayLegFixtureStatus(parlay = {}, legId, fixtureStatus, now = new Date()) {
-  if (!isTestParlay(parlay) || !MANUAL_TEST_FIXTURE_STATUSES.has(fixtureStatus)) return parlay;
+export function setTestParlayLegManualResult(parlay = {}, legId, manualResult, now = new Date()) {
+  if (!isTestParlay(parlay) || !MANUAL_TEST_RESULTS.has(manualResult)) return parlay;
   let changed = false;
   const updatedAt = now.toISOString();
   const legs = (parlay.legs || []).map((leg) => {
     if (String(leg.id) !== String(legId)) return leg;
     changed = true;
-    const updatedLeg = {
+    return {
       ...leg,
-      fixtureStatus,
-      fixtureStatusSource: "manual_test",
-      fixtureStatusUpdatedAt: updatedAt,
+      result: ["postponed", "cancelled"].includes(manualResult) ? "void" : manualResult,
+      manualTestResult: manualResult,
+      resultSource: "manual",
+      settlementVerificationStatus: "manual_test",
+      resultUpdatedAt: updatedAt,
       updatedAt
     };
-    if (fixtureStatus !== "En vivo") {
-      delete updatedLeg.liveScore;
-      delete updatedLeg.liveElapsed;
-    }
-    return updatedLeg;
   });
-  return changed ? { ...parlay, legs, updatedAt } : parlay;
+  return changed ? { ...parlay, legs, result: calculateParlayResult(legs), updatedAt } : parlay;
 }
 
 function productionParlays(parlays = []) {
