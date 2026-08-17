@@ -54,3 +54,12 @@ test("el Dashboard expone ejecución manual y no la dispara al inicializar", () 
   const initializeBody = app.slice(app.indexOf("async function initializeApp()"));
   assert.doesNotMatch(initializeBody, /generateBestBetsReport\(\)/);
 });
+
+test("el historial de mejores apuestas excluye picks individuales de prueba", () => {
+  const rows = buildBestBetsHistoryRecords([
+    { fixtureId: 10, leagueId: 253, market: "Total", selection: "Más de 1.5", result: "won", isTest: true },
+    { fixtureId: 11, leagueId: 253, market: "Total", selection: "Más de 1.5", result: "lost", isTest: false }
+  ], []);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].fixtureId, 11);
+});

@@ -1806,6 +1806,11 @@ body {
 .saved-pick strong { font-size: .76rem; overflow-wrap: anywhere; }
 .saved-pick__result-control { display: grid; gap: 4px; margin-top: 4px; color: var(--muted); font-size: .64rem; }
 .saved-pick__result-control select { min-width: 118px; }
+.saved-pick-test-toggle { display: inline-flex; align-items: center; gap: 7px; margin-top: 6px; padding: 5px 7px; color: var(--text); font-size: .64rem; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.saved-pick-test-toggle input { width: 16px; min-height: 16px; margin: 0; accent-color: var(--warning); }
+.saved-pick-test-toggle > span { display: grid; gap: 1px; }
+.saved-pick-test-toggle small { color: var(--muted); font-size: .56rem; }
+.saved-pick--test { border-color: color-mix(in srgb, var(--warning) 65%, var(--border)); }
 .saved-market-metrics { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px !important; }
 .saved-market-metrics > span { display: grid; gap: 2px; padding: 6px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
 .saved-parlay__summary { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }

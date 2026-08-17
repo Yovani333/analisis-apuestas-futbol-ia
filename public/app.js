@@ -2,16 +2,16 @@ import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?
 import { footballDataService } from "./services.js?v=20260805-best-bets-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
-  assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, calculateTestParlayMetrics, createSavedParlay, createSavedPick, isTestParlay,
+  assessPickHistoricalRecommendation, buildBestCombinationAnalysis, buildHistoricalPickValidator, calculateCompetitionOriginLeaders, calculateCompetitionPerformance, calculateHistoryMetrics, calculateOriginPerformance, calculateOriginRecommendations, calculateParlayLegCounts, calculateParlayPickTypePerformance, calculateParlayResult, calculateParlayTeamGoalLeaders, calculateParlayWinProgress, calculateTestParlayMetrics, createSavedParlay, createSavedPick, isTestParlay, isTestPick,
   applyFixtureStatusUpdate, filterParlaysByFixtureDate, filterParlaysByFixtureMonth, filterPicksByFixtureDate, filterPicksByFixtureMonth, hasDuplicatePick, loadParlayDraft, loadSavedParlays, loadSavedPicks, moveParlayToTrash, needsFixtureStatusRefresh, needsSettlementRefresh, normalizePickLeg,
-  permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, setParlayTestMode, setTestParlayLegManualResult, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
-} from "./parlay-store.js?v=20260816-test-manual-result-v1";
+  permanentlyDeleteRemovedParlayLeg, removeParlayLeg, resolveSelectionCode, restoreParlayFromTrash, restoreRemovedParlayLeg, saveParlayDraft, saveSavedParlays, saveSavedPicks, setParlayTestMode, setSavedPickTestMode, setTestParlayLegManualResult, SETTLEMENT_VERIFICATION_VERSION, settlePickResult
+} from "./parlay-store.js?v=20260816-individual-test-mode-v1";
 import { EVIDENCE_SNAPSHOTS_KEY, evidenceSnapshotToText, latestEvidenceForFixture, loadEvidenceSnapshots, saveEvidenceSnapshot } from "./evidence-store.js?v=20260719-remove-invalid-v1";
 import { infoTooltip, initializeInfoTooltips, labelWithTooltip } from "./info-tooltip.js?v=20260704-v3";
 import { collapseGuideModules, resetModuleButton } from "./guide-state.js?v=20260704-v1";
 import { pickOriginKey, pickOriginLabel } from "./pick-origins.js?v=20260815-monthly-picks-v1";
 import { findLowestOdds } from "./odds-monitor.js?v=20260703";
-import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260815-test-parlays-v1";
+import { cloudSyncClient, mergeCloudState } from "./cloud-sync.js?v=20260816-individual-test-mode-v1";
 import { buildExpectedCornersPick } from "./expected-corners-pick.js?v=20260722-corners-v2";
 import { activeFavoriteTeams, isFavoriteTeam, toggleFavoriteTeam } from "./favorite-teams.js?v=20260718-favorite-teams-v1";
 import { pendingEvidenceForCompetition, summarizeEvidenceByCompetition } from "./evidence-readiness.js?v=20260719-remove-invalid-v1";
@@ -20,7 +20,7 @@ import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2
 import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.js?v=20260722-recent-form-v1";
 import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=20260725-xg-btts-v2";
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
-import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260815-test-parlays-v1";
+import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260816-individual-test-mode-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -1335,7 +1335,7 @@ function activePickCountForFixture(fixture) {
   if (!fixture?.id || !["scheduled", "live"].includes(fixture.status)) return 0;
   const fixtureId = String(fixture.id);
   const individual = state.savedPicks.filter((pick) => !pick.trashed && !pick.deletedPermanently
-    && pick.result === "pending" && String(pick.fixtureId) === fixtureId).length;
+    && !isTestPick(pick) && pick.result === "pending" && String(pick.fixtureId) === fixtureId).length;
   const parlayLegs = state.savedParlays.filter((parlay) => !parlay.trashed && !parlay.deletedPermanently && !isTestParlay(parlay))
     .flatMap((parlay) => Array.isArray(parlay.legs) ? parlay.legs : [])
     .filter((leg) => leg.result === "pending" && String(leg.fixtureId) === fixtureId).length;
@@ -3301,11 +3301,11 @@ function renderSavedPicks() {
     return;
   }
   const preferredOrigins = favoriteOriginKeys();
-  elements.savedPicksList.innerHTML = visiblePicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); const favoriteOrigin = isActiveSavedPick(pick) && preferredOrigins.has(pickOriginKey(pick)); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}" data-pick-id="${escapeHtml(pick.id)}">
+  elements.savedPicksList.innerHTML = visiblePicks.map((storedPick) => { const pick = applyAnalysisTiming(storedPick); const favoriteOrigin = !isTestPick(pick) && isActiveSavedPick(pick) && preferredOrigins.has(pickOriginKey(pick)); return `<article class="saved-pick saved-pick--${escapeHtml(pick.result || "pending")}${isTestPick(pick) ? " saved-pick--test" : ""}" data-pick-id="${escapeHtml(pick.id)}">
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}${savedLegScoreHtml(pick)}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong>${favoriteOrigin ? '<span class="favorite-origin-badge" title="Origen favorito por su historial evaluado" aria-label="Origen favorito por su historial evaluado">⚽ Origen favorito</span>' : ""}<label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
+    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong>${favoriteOrigin ? '<span class="favorite-origin-badge" title="Origen favorito por su historial evaluado" aria-label="Origen favorito por su historial evaluado">⚽ Origen favorito</span>' : ""}<label class="saved-pick-test-toggle" title="Los picks de prueba no afectan los históricos reales"><input type="checkbox" data-pick-test-toggle ${isTestPick(pick) ? "checked" : ""} /><span><strong>Prueba</strong><small>Excluir de estadísticas reales</small></span></label><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`; }).join("");
 }
@@ -6221,8 +6221,22 @@ elements.testParlaysList.addEventListener("click", (event) => {
   updateTestManualResult(parlayCard.dataset.testParlayId, legRow.dataset.testLegId, select.value);
 });
 elements.savedPicksList.addEventListener("change", (event) => {
-  const select = event.target.closest("[data-pick-result]");
+  const testToggle = event.target.closest("[data-pick-test-toggle]");
   const card = event.target.closest("[data-pick-id]");
+  if (testToggle && card) {
+    const index = state.savedPicks.findIndex((item) => item.id === card.dataset.pickId);
+    if (index < 0) return;
+    state.savedPicks[index] = setSavedPickTestMode(state.savedPicks[index], testToggle.checked);
+    persistSavedPicks();
+    renderSavedPicks();
+    renderOriginPerformance();
+    refreshActivePickIndicators();
+    showNotice(testToggle.checked
+      ? "Pick individual marcado como prueba y excluido de los históricos reales."
+      : "Pick individual reincorporado a los históricos reales.");
+    return;
+  }
+  const select = event.target.closest("[data-pick-result]");
   if (!select || !card) return;
   const pick = state.savedPicks.find((item) => item.id === card.dataset.pickId);
   if (!pick) return;

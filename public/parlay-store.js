@@ -11,6 +11,18 @@ export function isTestParlay(parlay = {}) {
   return parlay?.isTest === true;
 }
 
+export function isTestPick(pick = {}) {
+  return pick?.isTest === true;
+}
+
+export function setSavedPickTestMode(pick = {}, isTest = false, now = new Date()) {
+  return {
+    ...pick,
+    isTest: Boolean(isTest),
+    updatedAt: now.toISOString()
+  };
+}
+
 export function setParlayTestMode(parlay = {}, isTest = false, now = new Date()) {
   return {
     ...parlay,
@@ -43,6 +55,10 @@ export function setTestParlayLegManualResult(parlay = {}, legId, manualResult, n
 
 function productionParlays(parlays = []) {
   return parlays.filter((parlay) => !isTestParlay(parlay));
+}
+
+function productionPicks(picks = []) {
+  return picks.filter((pick) => !isTestPick(pick));
 }
 
 const AUTO_SETTLEMENT_CODES = new Set([
@@ -409,6 +425,7 @@ export function createSavedPick(leg, now = new Date()) {
     updatedOdds: leg.updatedOdds ?? null,
     fixtureStatus: leg.fixtureStatus || "No disponible",
     result: leg.result || "pending",
+    isTest: leg.isTest === true,
     savedAt: now.toISOString(),
     updatedAt: now.toISOString()
   };
@@ -426,7 +443,7 @@ function originPerformanceCategory(pick = {}) {
 export function calculateOriginPerformance(picks = [], parlays = []) {
   const groups = new Map();
   const parlayLegs = productionParlays(parlays).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs : []);
-  const rows = [...picks.map((pick) => ({ pick, kind: "individual" })), ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))];
+  const rows = [...productionPicks(picks).map((pick) => ({ pick, kind: "individual" })), ...parlayLegs.map((pick) => ({ pick, kind: "parlay" }))];
   const leadLabel = (pick) => {
     const kickoff = Date.parse(pick.kickoffAt || pick.utcDateTime || "");
     const added = Date.parse(pick.addedAt || pick.savedAt || pick.createdAt || "");
@@ -512,7 +529,7 @@ export function calculateCompetitionPerformance(picks = [], parlays = []) {
     .replace(/\b(uefa|conmebol|clasificacion|qualification|qualifying)\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ").trim();
   const allRows = [
-    ...picks.map((pick) => ({ pick, kind: "individual", activeEligible: !pick?.trashed })),
+    ...productionPicks(picks).map((pick) => ({ pick, kind: "individual", activeEligible: !pick?.trashed })),
     ...productionParlays(parlays).flatMap((parlay) => [
       ...(Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay", activeEligible: !parlay?.trashed })) : [])
     ])
@@ -589,7 +606,7 @@ export function calculateCompetitionOriginLeaders(picks = [], parlays = [], { le
   const targetLeagueIds = new Set(leagueIds.filter((value) => value !== null && value !== undefined && value !== "").map(String));
   const targetCompetitions = new Set(competitions.map(normalizeCompetition).filter(Boolean));
   const rows = [
-    ...picks.map((pick) => ({ pick, kind: "individual" })),
+    ...productionPicks(picks).map((pick) => ({ pick, kind: "individual" })),
     ...productionParlays(parlays).flatMap((parlay) => Array.isArray(parlay?.legs) ? parlay.legs.map((pick) => ({ pick, kind: "parlay" })) : [])
   ];
   const groups = new Map();
@@ -787,7 +804,7 @@ export function calculateOriginRecommendations(performanceRows = []) {
 export function buildBestCombinationAnalysis(picks = [], parlays = []) {
   const production = productionParlays(parlays);
   const settled = [
-    ...picks.map((pick) => ({ pick, kind: "individual" })),
+    ...productionPicks(picks).map((pick) => ({ pick, kind: "individual" })),
     ...production.flatMap((parlay) => (Array.isArray(parlay?.legs) ? parlay.legs : []).map((pick) => ({ pick, kind: "parlay" })))
   ].filter(({ pick }) => ["won", "lost"].includes(pick?.result));
   const groups = new Map();
@@ -946,9 +963,9 @@ function historicalValidationForPick(pick, settled, context = {}) {
 }
 
 export function buildHistoricalPickValidator(picks = [], parlays = [], now = new Date(), options = {}) {
-  const activePicks = picks.filter((pick) => !pick?.trashed && !pick?.deletedPermanently);
+  const activePicks = productionPicks(picks).filter((pick) => !pick?.trashed && !pick?.deletedPermanently);
   const activeParlays = productionParlays(parlays).filter((parlay) => !parlay?.trashed && !parlay?.deletedPermanently);
-  const historicalPicks = Array.isArray(options.historicalPicks) ? options.historicalPicks : activePicks;
+  const historicalPicks = productionPicks(Array.isArray(options.historicalPicks) ? options.historicalPicks : activePicks);
   const historicalParlays = productionParlays(Array.isArray(options.historicalParlays) ? options.historicalParlays : activeParlays);
   const settled = [
     ...historicalPicks.filter((pick) => ["won", "lost"].includes(pick?.result)),

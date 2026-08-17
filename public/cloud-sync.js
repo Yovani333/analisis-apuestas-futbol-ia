@@ -38,7 +38,7 @@ const PICK_SYNC_KEYS = new Set([
   "finalScore", "liveScore", "liveMinute", "score", "notes", "addedAt", "savedAt",
   "createdAt", "updatedAt", "lastCheckedAt", "resolvedAt", "trashed", "deletedAt",
   "deletedPermanently", "restoredAt", "removedFromParlayAt", "restoredToParlayAt",
-  "purgedAt", "analysisTiming", "oddsMovement", "goalThreatScore"
+  "purgedAt", "analysisTiming", "oddsMovement", "goalThreatScore", "isTest"
 ]);
 const PARLAY_SYNC_KEYS = new Set([
   "id", "name", "createdAt", "updatedAt", "result", "notes", "collapsed",

@@ -305,3 +305,10 @@ test("Mis apuestas incluye parlays de prueba aislados", () => {
   assert.match(app, /Cancelado/);
   assert.doesNotMatch(app, /data-test-fixture-status/);
 });
+
+test("Picks individuales permite marcar cada selección como prueba", () => {
+  assert.match(app, /data-pick-test-toggle/);
+  assert.match(app, /setSavedPickTestMode/);
+  assert.match(app, /Pick individual marcado como prueba y excluido de los históricos reales/);
+  assert.match(app, /!isTestPick\(pick\).*pick\.result === "pending"/s);
+});

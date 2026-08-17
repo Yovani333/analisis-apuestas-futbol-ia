@@ -29,6 +29,13 @@ test("la sincronización conserva la marca de parlay de prueba", () => {
   assert.equal(merged.savedParlays[0].isTest, true);
 });
 
+test("la sincronización conserva la marca de pick individual de prueba", () => {
+  const compacted = compactCloudStateForSync({
+    savedPicks: [{ id: "test-pick", isTest: true, result: "won" }]
+  });
+  assert.equal(compacted.savedPicks[0].isTest, true);
+});
+
 test("sincronizar conserva parlays locales aunque la copia remota este vacia", () => {
   const merged = mergeCloudState(
     { savedParlays: [{ id: "local-only", name: "Parlay local", updatedAt: "2026-07-13T02:00:00Z" }] },
