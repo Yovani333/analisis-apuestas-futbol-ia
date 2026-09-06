@@ -581,7 +581,8 @@ apiRouter.post("/best-bets/generate", requireLiveMode, bestBetsLimiter, asyncRou
   const historyRecords = (Array.isArray(req.body?.historyRecords) ? req.body.historyRecords : []).slice(0, 1000).map((row) => ({
     fixtureId: String(row.fixtureId || ""), leagueId: row.leagueId ?? null, marketKey: String(row.marketKey || row.marketCode || ""),
     market: String(row.market || ""), originModule: String(row.originModule || ""), sourceModule: String(row.sourceModule || ""),
-    selectionKey: String(row.selectionKey || row.selectionCode || ""), modelVersion: String(row.modelVersion || ""), outcome: String(row.outcome || row.result || "")
+    selectionKey: String(row.selectionKey || row.selectionCode || ""), modelVersion: String(row.modelVersion || ""),
+    occurredAt: String(row.occurredAt || row.kickoffAt || row.date || ""), outcome: String(row.outcome || row.result || "")
   }));
   const fixturePackages = [];
   const errors = [];

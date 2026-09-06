@@ -16,6 +16,7 @@ function compactHistoryRecord(pick = {}) {
     selectionKey: pick.selectionKey || pick.selectionCode || pick.selection || null,
     originModule: pick.originModule || pick.sourceModule || pick.origin || null,
     modelVersion: pick.modelVersion || null,
+    occurredAt: pick.kickoffAt || pick.utcDateTime || pick.fixtureDate || pick.date || null,
     result
   };
 }

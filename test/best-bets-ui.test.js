@@ -13,7 +13,7 @@ test("compacta historial concluido sin incluir pendientes ni duplicados", () => 
 
 test("incluye legs concluidos de parlays sin datos personales", () => {
   const rows = buildBestBetsHistoryRecords([], [{ name: "Privado", stake: 99, legs: [{ fixtureId: 8, leagueId: 71, market: "Total", marketCode: "over_under_2_5", result: "lost" }] }]);
-  assert.deepEqual(rows, [{ fixtureId: 8, leagueId: 71, market: "Total", marketKey: "over_under_2_5", selectionKey: null, originModule: null, modelVersion: null, result: "LOST" }]);
+  assert.deepEqual(rows, [{ fixtureId: 8, leagueId: 71, market: "Total", marketKey: "over_under_2_5", selectionKey: null, originModule: null, modelVersion: null, occurredAt: null, result: "LOST" }]);
   assert.equal("stake" in rows[0], false);
 });
 
@@ -62,4 +62,11 @@ test("el historial de mejores apuestas excluye picks individuales de prueba", ()
   ], []);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].fixtureId, 11);
+});
+
+test("conserva la fecha necesaria para separar el rendimiento mensual", () => {
+  const rows = buildBestBetsHistoryRecords([
+    { fixtureId: 12, leagueId: 253, market: "Total", result: "won", kickoffAt: "2026-09-05T20:00:00Z" }
+  ], []);
+  assert.equal(rows[0].occurredAt, "2026-09-05T20:00:00Z");
 });

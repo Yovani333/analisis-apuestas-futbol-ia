@@ -36,7 +36,30 @@ function wilsonLowerBound(hits, total, z = 1.96) {
   return clamp((center - margin) / denominator * 100);
 }
 
-export function historicalReliabilityFor(candidate = {}, records = [], config = BEST_BETS_CONFIG) {
+function pacificMonthKey(value) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return String(value).slice(0, 7);
+  const date = value instanceof Date ? value : new Date(value || "");
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Tijuana", year: "numeric", month: "2-digit"
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  return year && month ? `${year}-${month}` : null;
+}
+
+function reliabilitySample(rows, config) {
+  const hits = rows.filter((row) => ["HIT", "WON"].includes(String(row.outcome || row.result || "").toUpperCase())).length;
+  const total = rows.length;
+  const hitRatePct = total ? round(hits / total * 100) : null;
+  const lowerBoundPct = wilsonLowerBound(hits, total);
+  const status = total >= config.thresholds.adequateHistoricalSample ? "adequate"
+    : total >= config.thresholds.minimumHistoricalSample ? "provisional" : "insufficient";
+  const score = status === "adequate" ? round(lowerBoundPct) : status === "provisional" ? round((lowerBoundPct + 50) / 2) : 35;
+  return { sampleSize: total, hits, misses: total - hits, hitRatePct, lowerBoundPct: lowerBoundPct === null ? null : round(lowerBoundPct), score, status };
+}
+
+export function historicalReliabilityFor(candidate = {}, records = [], config = BEST_BETS_CONFIG, now = new Date()) {
   const leagueId = String(candidate.leagueId || "");
   const marketKey = normalized(candidate.marketKey || candidate.market);
   const source = normalized(candidate.originModule || candidate.sourceModule || candidate.origin);
@@ -54,16 +77,19 @@ export function historicalReliabilityFor(candidate = {}, records = [], config = 
   const eligible = modelVersion
     ? matchingContext.filter((row) => normalized(row.modelVersion) === modelVersion)
     : matchingContext;
-  const hits = eligible.filter((row) => ["HIT", "WON"].includes(String(row.outcome || row.result || "").toUpperCase())).length;
-  const total = eligible.length;
-  const hitRatePct = total ? round(hits / total * 100) : null;
-  const lowerBoundPct = wilsonLowerBound(hits, total);
-  const status = total >= config.thresholds.adequateHistoricalSample ? "adequate"
-    : total >= config.thresholds.minimumHistoricalSample ? "provisional" : "insufficient";
-  const score = status === "adequate" ? round(lowerBoundPct) : status === "provisional" ? round((lowerBoundPct + 50) / 2) : 35;
+  const currentMonth = pacificMonthKey(now);
+  const monthlyEligible = eligible.filter((row) => pacificMonthKey(row.occurredAt || row.kickoffAt || row.date) === currentMonth);
+  const monthly = reliabilitySample(monthlyEligible, config);
+  const allTime = reliabilitySample(eligible, config);
+  const usesAllTimeFallback = monthly.sampleSize < config.thresholds.minimumHistoricalSample;
+  const primary = usesAllTimeFallback ? allTime : monthly;
   return {
-    sampleSize: total, hits, misses: total - hits, hitRatePct,
-    lowerBoundPct: lowerBoundPct === null ? null : round(lowerBoundPct), score, status,
+    ...primary,
+    basis: usesAllTimeFallback ? "all_time_fallback" : "current_month",
+    period: currentMonth,
+    currentMonth: monthly,
+    allTime,
+    usesAllTimeFallback,
     modelVersion: candidate.modelVersion || null,
     excludedByVersion: Math.max(0, matchingContext.length - eligible.length)
   };
@@ -150,7 +176,7 @@ function adaptCandidate(candidate = {}, fixturePackage = {}, historyRecords = []
     sourceModule: "best_bets_selector", backingModels: candidate.backingModels || [],
     independentFamilies: candidate.independentFamilies || candidate.backingModels || []
   };
-  adapted.historicalReliability = historicalReliabilityFor(adapted, historyRecords, config);
+  adapted.historicalReliability = historicalReliabilityFor(adapted, historyRecords, config, now);
   adapted.oddsAgeMinutes = oddsAgeMinutes(candidate, now);
   adapted.riskScore = riskScoreFor({ ...adapted, contradictions: adapted.warnings });
   adapted.selectorScore = scoreCandidate(adapted, config);

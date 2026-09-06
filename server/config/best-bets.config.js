@@ -1,4 +1,4 @@
-export const BEST_BETS_CONFIG_VERSION = "best-bets-config-v1";
+export const BEST_BETS_CONFIG_VERSION = "best-bets-config-v2-monthly-history";
 
 // Pesos explícitos del selector. No modifican la probabilidad de ningún modelo:
 // ordenan candidatos ya calculados y suman exactamente 100 puntos.
@@ -35,7 +35,7 @@ export const BEST_BETS_THRESHOLDS = Object.freeze({
 
 export const BEST_BETS_CONFIG = Object.freeze({
   version: BEST_BETS_CONFIG_VERSION,
-  modelVersion: "best-bets-selector-v1",
+  modelVersion: "best-bets-selector-v2-monthly-history",
   weights: BEST_BETS_WEIGHTS,
   thresholds: BEST_BETS_THRESHOLDS,
   supportedMarketKeys: Object.freeze([

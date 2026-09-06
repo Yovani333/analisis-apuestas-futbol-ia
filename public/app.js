@@ -1438,6 +1438,14 @@ function bestBetsPercent(value) {
   return Number.isFinite(number) ? `${number.toFixed(1)}%` : "No disponible";
 }
 
+function bestBetsHistoryLabel(reliability = {}) {
+  const monthly = reliability.currentMonth?.sampleSize ?? 0;
+  const allTime = reliability.allTime?.sampleSize ?? reliability.sampleSize ?? 0;
+  return reliability.basis === "current_month"
+    ? `mes ${reliability.period || "actual"} n=${monthly} · histórico n=${allTime}`
+    : `histórico n=${allTime} · mes ${reliability.period || "actual"} n=${monthly} insuficiente`;
+}
+
 function populateBestBetsFilters(report) {
   const leagues = [...new Set((report.candidates || []).map((candidate) => candidate.leagueName).filter(Boolean))].sort();
   const markets = [...new Map((report.candidates || []).filter((candidate) => candidate.marketKey).map((candidate) => [candidate.marketKey, candidate.market || candidate.marketKey])).entries()];
@@ -1497,8 +1505,8 @@ function renderBestBets({ refreshFilters = false } = {}) {
       <td><strong>Modelo ${escapeHtml(bestBetsPercent(candidate.modelProbabilityPct))}</strong><small>Implícita justa ${escapeHtml(bestBetsPercent(candidate.normalizedImpliedProbabilityPct))}</small></td>
       <td><strong>${candidate.odds ? escapeHtml(Number(candidate.odds).toFixed(2)) : "No disponible"}</strong><small>Justa ${candidate.fairOdds ? escapeHtml(Number(candidate.fairOdds).toFixed(2)) : "—"} · ${escapeHtml(candidate.bookmaker || "Casa no indicada")}</small></td>
       <td><strong>Edge ${escapeHtml(bestBetsPercent(candidate.edgePct))}</strong><small>EV ${escapeHtml(bestBetsPercent(candidate.expectedValuePct))}</small></td>
-      <td><strong>Calidad ${escapeHtml(candidate.dataQualityScore)}/100</strong><small>Riesgo ${escapeHtml(candidate.riskScore)}/100 · historial n=${escapeHtml(candidate.historicalReliability?.sampleSize ?? 0)}</small></td>
-      <td class="best-bets-table__actions"><button class="button button--secondary button--compact" type="button" data-view-best-bet="${escapeHtml(detailId)}" aria-expanded="false">Ver evidencia</button>${approved ? `<button class="button button--primary button--compact" type="button" data-add-best-bet="${escapeHtml(candidate.id)}">Agregar</button>` : ""}<div id="${escapeHtml(detailId)}" class="best-bets-evidence" hidden><strong>Desglose</strong><ul>${evidence}</ul><small>Fiabilidad histórica: ${escapeHtml(candidate.historicalReliability?.status || "insuficiente")} · configuración ${escapeHtml(candidate.configVersion || "no disponible")}</small></div></td>
+      <td><strong>Calidad ${escapeHtml(candidate.dataQualityScore)}/100</strong><small>Riesgo ${escapeHtml(candidate.riskScore)}/100 · ${escapeHtml(bestBetsHistoryLabel(candidate.historicalReliability))}</small></td>
+      <td class="best-bets-table__actions"><button class="button button--secondary button--compact" type="button" data-view-best-bet="${escapeHtml(detailId)}" aria-expanded="false">Ver evidencia</button>${approved ? `<button class="button button--primary button--compact" type="button" data-add-best-bet="${escapeHtml(candidate.id)}">Agregar</button>` : ""}<div id="${escapeHtml(detailId)}" class="best-bets-evidence" hidden><strong>Desglose</strong><ul>${evidence}</ul><small>Fiabilidad: ${escapeHtml(candidate.historicalReliability?.status || "insuficiente")} · ${escapeHtml(bestBetsHistoryLabel(candidate.historicalReliability))} · configuración ${escapeHtml(candidate.configVersion || "no disponible")}</small></div></td>
     </tr>`;
   }).join("");
   elements.bestBetsContent.innerHTML = highlight + (rows ? `<table class="best-bets-table"><thead><tr><th>Partido</th><th>Selección</th><th>Estado</th><th>Probabilidades</th><th>Cuota</th><th>Valor</th><th>Control</th><th>Acciones</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="best-bets-empty">No hay candidatos para los filtros seleccionados.</div>');

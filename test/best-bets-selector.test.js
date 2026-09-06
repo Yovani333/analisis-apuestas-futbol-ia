@@ -69,3 +69,22 @@ test("no mezcla silenciosamente resultados de versiones distintas", () => {
   assert.equal(reliability.sampleSize, 1);
   assert.equal(reliability.excludedByVersion, 1);
 });
+
+test("usa el mes actual como señal principal cuando alcanza la muestra mínima", () => {
+  const current = Array.from({ length: 10 }, (_, index) => ({ leagueId: 253, marketKey: "btts", outcome: index < 3 ? "HIT" : "MISS", occurredAt: `2030-08-${String(index + 1).padStart(2, "0")}T18:00:00Z` }));
+  const old = Array.from({ length: 30 }, (_, index) => ({ leagueId: 253, marketKey: "btts", outcome: "HIT", occurredAt: `2030-07-${String((index % 28) + 1).padStart(2, "0")}T18:00:00Z` }));
+  const reliability = historicalReliabilityFor({ leagueId: 253, marketKey: "btts" }, [...old, ...current], BEST_BETS_CONFIG, new Date("2030-08-20T18:00:00Z"));
+  assert.equal(reliability.basis, "current_month");
+  assert.equal(reliability.sampleSize, 10);
+  assert.equal(reliability.hitRatePct, 30);
+  assert.equal(reliability.allTime.sampleSize, 40);
+});
+
+test("usa todo el historial como respaldo cuando el mes todavía es insuficiente", () => {
+  const current = Array.from({ length: 5 }, (_, index) => ({ leagueId: 253, marketKey: "btts", outcome: "MISS", occurredAt: `2030-08-0${index + 1}T18:00:00Z` }));
+  const old = Array.from({ length: 30 }, (_, index) => ({ leagueId: 253, marketKey: "btts", outcome: index < 22 ? "HIT" : "MISS", occurredAt: `2030-07-${String((index % 28) + 1).padStart(2, "0")}T18:00:00Z` }));
+  const reliability = historicalReliabilityFor({ leagueId: 253, marketKey: "btts" }, [...old, ...current], BEST_BETS_CONFIG, new Date("2030-08-20T18:00:00Z"));
+  assert.equal(reliability.basis, "all_time_fallback");
+  assert.equal(reliability.currentMonth.sampleSize, 5);
+  assert.equal(reliability.sampleSize, 35);
+});
