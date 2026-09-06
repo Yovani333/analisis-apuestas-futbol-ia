@@ -64,6 +64,14 @@ export function evaluatePickOutcome(pick = {}, result = {}) {
   const { home, away } = score;
   const total = home + away;
   const key = pick.selectionKey || pick.selectionCode;
+  if (["goal_first_half", "goal_second_half"].includes(key)) {
+    const halftime = result.halftimeScore || result.score?.halftime;
+    const halftimeHome = number(halftime?.home);
+    const halftimeAway = number(halftime?.away);
+    if (halftimeHome === null || halftimeAway === null) return "DATA_INSUFFICIENT";
+    const firstHalfGoals = halftimeHome + halftimeAway;
+    return (key === "goal_first_half" ? firstHalfGoals > 0 : total - firstHalfGoals > 0) ? "HIT" : "MISS";
+  }
   if (["home_dnb", "away_dnb"].includes(key) && home === away) return "VOID";
 
   const simpleResult = {

@@ -29,6 +29,8 @@ function modelVersion(snapshot, pick) {
 }
 
 function pickIdentity(pick = {}) {
+  const auditPickKey = normalizedText(pick.auditPickKey);
+  if (auditPickKey) return `audit:${auditPickKey}`;
   const selectionKey = normalizedText(pick.selectionKey);
   if (selectionKey) return `key:${selectionKey}`;
   return `text:${normalizedKey(pick.market)}:${normalizedKey(pick.selection || pick.pick)}`;
@@ -148,7 +150,9 @@ export function exportNeuralTrainingDataset({ snapshots = [], audits = {} } = {}
       continue;
     }
     const records = auditRecordMap(audit);
-    const picks = Array.isArray(snapshot.modules?.dataPicks?.picks) ? snapshot.modules.dataPicks.picks : [];
+    const legacyPicks = Array.isArray(snapshot.modules?.dataPicks?.picks) ? snapshot.modules.dataPicks.picks : [];
+    const supplementalPicks = snapshot.modules?.auditRecommendations?.picks;
+    const picks = Array.isArray(supplementalPicks) ? [...legacyPicks, ...supplementalPicks] : legacyPicks;
     for (const pick of picks) {
       const record = records.get(pickIdentity(pick));
       if (!record) {

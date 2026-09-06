@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   automaticEvidenceInternals,
   createAutomaticEvidenceSnapshot,
+  createServerMultiOriginEvidenceSnapshot,
   createServerEvidenceSnapshot,
   evidenceWindowStatus,
   runAutomaticEvidenceCycle
@@ -51,10 +52,11 @@ test("crea evidencia automatica auditable sin proveedor externo ni datos actuale
   assert.equal(snapshot.currentFixtureStatisticsUsed, false);
   assert.equal(snapshot.openAiUsed, false);
   assert.ok(snapshot.modules.dataPicks);
-  assert.equal(snapshot.version, 3);
-  assert.equal(snapshot.captureManifest.schemaVersion, "pre-match-evidence-v3");
+  assert.equal(snapshot.version, 4);
+  assert.equal(snapshot.captureManifest.schemaVersion, "pre-match-evidence-v4");
   assert.equal(snapshot.captureManifest.qualityScore, 70);
   assert.equal(snapshot.captureManifest.modules.dataPicks.itemCount, snapshot.modules.dataPicks.picks.length);
+  assert.equal(snapshot.captureManifest.modules.auditRecommendations.itemCount, snapshot.modules.auditRecommendations.picks.length);
 });
 
 test("evidencia manual y automatica comparten el mismo constructor y datos deportivos", () => {
@@ -65,6 +67,17 @@ test("evidencia manual y automatica comparten el mismo constructor y datos depor
   assert.deepEqual(manual.fixture, automatic.fixture);
   assert.equal(manual.auditMetadata.captureMode, "manual_server");
   assert.equal(manual.auditMetadata.dataSource, "api-football");
+});
+
+test("la captura productiva congela también la salida de gol por mitad", async () => {
+  const snapshot = await createServerMultiOriginEvidenceSnapshot(dataset(), NOW, {
+    captureMode: "manual_server",
+    targetLeadMinutes: null,
+    getPreviousFixtures: async () => [],
+    getFixtureEvents: async () => []
+  });
+  assert.equal(snapshot.modules.goalHalf.sourceModule, "goal_half_projection");
+  assert.equal(snapshot.modules.auditRecommendations.schemaVersion, "multi-origin-recommendations-v1");
 });
 
 test("registra solo fixtures programados futuros y calcula la hora objetivo", () => {

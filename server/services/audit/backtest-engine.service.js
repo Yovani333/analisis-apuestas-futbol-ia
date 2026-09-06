@@ -201,6 +201,7 @@ function buildBacktestResult(dataset, fixtureResult, generated, metadata = {}) {
     return {
       fixtureId: String(dataset.fixture?.id || ""), date: dataset.fixture?.date || "", match: `${dataset.fixture?.home || "Local"} vs ${dataset.fixture?.away || "Visitante"}`,
       league: dataset.fixture?.leagueName || "", market: pick.market, pick: pick.selection, selectionKey: pick.selectionKey,
+      auditPickKey: pick.auditPickKey || null,
       odds: pick.decimalOdds, impliedProbability: pick.impliedProbabilityPct, modelProbability: pick.modelProbabilityPct,
       expectedValue: pick.expectedValuePct, conservativeExpectedValue: pick.conservativeExpectedValuePct ?? null,
       confidence: pick.confidenceScore, statisticalConfidence: pick.statisticalConfidenceScore ?? null,
@@ -229,8 +230,12 @@ export function runSavedEvidenceBacktest(evidence, fixtureResult) {
   if (!evidence?.fixture?.id || evidence.fixture.status !== "scheduled") throw new TypeError("La evidencia prepartido no es válida.");
   if (evidence.currentFixtureStatisticsUsed !== false || evidence.openAiUsed !== false) throw new TypeError("La evidencia contiene fuentes no permitidas para backtesting.");
   validateEvidenceTiming(evidence);
-  const generated = evidence.modules?.dataPicks;
-  if (!generated || !Array.isArray(generated.picks)) throw new TypeError("La evidencia no contiene picks basados en datos.");
+  const supplemental = evidence.modules?.auditRecommendations;
+  const legacy = evidence.modules?.dataPicks;
+  const generated = supplemental
+    ? { ...supplemental, picks: [...(legacy?.picks || []), ...(supplemental.picks || [])] }
+    : legacy;
+  if (!generated || !Array.isArray(generated.picks)) throw new TypeError("La evidencia no contiene recomendaciones auditables.");
   const dataset = { fixture: evidence.fixture, dataQuality: evidence.dataQuality, researchData: evidence.researchData || {}, preMatch: evidence.preMatch || {}, marketAnalysis: evidence.marketAnalysis || [] };
   return buildBacktestResult(dataset, fixtureResult, generated, { mode: "saved_pre_match_evidence", capturedAt: evidence.capturedAt });
 }

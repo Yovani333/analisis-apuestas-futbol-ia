@@ -92,3 +92,32 @@ test("es determinista y elimina snapshots duplicados del mismo fixture y version
   assert.equal(first.fingerprint, second.fingerprint);
   assert.deepEqual(first.rows, second.rows);
 });
+
+test("separa la misma selección cuando fue capturada por orígenes distintos", () => {
+  const pick = snapshot().modules.dataPicks.picks[0];
+  const evidence = snapshot({
+    modules: {
+      dataPicks: { ...snapshot().modules.dataPicks, picks: [] },
+      auditRecommendations: {
+        schemaVersion: "multi-origin-recommendations-v1",
+        picks: [
+          { ...pick, auditPickKey: "h2h:over_2_5", sourceModule: "h2h" },
+          { ...pick, auditPickKey: "recent_form:over_2_5", sourceModule: "recent_form" }
+        ]
+      }
+    }
+  });
+  const audits = {
+    "snapshot-1": {
+      fixtureId: "100",
+      records: [
+        { auditPickKey: "h2h:over_2_5", selectionKey: "over_2_5", outcome: "HIT" },
+        { auditPickKey: "recent_form:over_2_5", selectionKey: "over_2_5", outcome: "MISS" }
+      ]
+    }
+  };
+  const result = exportNeuralTrainingDataset({ snapshots: [evidence], audits });
+  assert.equal(result.summary.trainableRows, 2);
+  assert.deepEqual(result.rows.map((row) => row.sourceModule).sort(), ["h2h", "recent_form"]);
+  assert.equal(new Set(result.rows.map((row) => row.rowId)).size, 2);
+});

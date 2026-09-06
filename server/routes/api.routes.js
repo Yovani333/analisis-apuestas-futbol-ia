@@ -38,7 +38,7 @@ import {
   listAllCloudEvidenceSnapshots, listCloudEvidenceAuditLabels, listCloudEvidenceSnapshots, listCloudNeuralEvidenceSnapshots, saveCloudEvidenceSnapshots,
   saveCloudState, saveEvidenceAuditLabels, signInCloudUser, signOutCloudUser, signUpCloudUser
 } from "../services/cloud-sync.service.js";
-import { createServerEvidenceSnapshot, runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
+import { createServerMultiOriginEvidenceSnapshot, runAutomaticEvidenceCycle } from "../services/automatic-evidence.service.js";
 import { loadEvidenceLibrary } from "../services/audit/evidence-library.service.js";
 import { BEST_BETS_CONFIG } from "../config/best-bets.config.js";
 import { selectBestBets } from "../services/best-bets-selector.service.js";
@@ -138,6 +138,7 @@ async function loadCloudNeuralDataset(authorization) {
   for (const label of storedLabels.labels || []) {
     if (!audits[label.snapshot_id]) audits[label.snapshot_id] = { fixtureId: label.fixture_id, records: [] };
     audits[label.snapshot_id].records.push({
+      auditPickKey: String(label.pick_key || "").startsWith("audit:") ? String(label.pick_key).slice(6) : null,
       selectionKey: label.selection_key,
       market: label.market,
       pick: label.selection,
@@ -161,6 +162,7 @@ async function loadCloudNeuralExploratoryDataset(authorization) {
   for (const label of storedLabels.labels || []) {
     if (!audits[label.snapshot_id]) audits[label.snapshot_id] = { fixtureId: label.fixture_id, records: [] };
     audits[label.snapshot_id].records.push({
+      auditPickKey: String(label.pick_key || "").startsWith("audit:") ? String(label.pick_key).slice(6) : null,
       selectionKey: label.selection_key,
       market: label.market,
       pick: label.selection,
@@ -449,11 +451,11 @@ apiRouter.post("/fixtures/:fixtureId/audit", requireLiveMode, asyncRoute(async (
 
 apiRouter.post("/fixtures/:fixtureId/evidence", requireLiveMode, asyncRoute(async (req, res) => {
   const fixtureId = parseFixtureId(req.params.fixtureId);
-  const dataset = await getFixtureDataset(fixtureId, { forceRefresh: true });
+  const dataset = await getFixtureDataset(fixtureId, { forceRefresh: true, includeHistorical: true });
   if (dataset.fixture.status !== "scheduled") throw new AppError("La evidencia solo puede capturarse antes del inicio.", 409, "EVIDENCE_FIXTURE_STARTED");
   res.json({
     source: "api-football-server-snapshot",
-    snapshot: createServerEvidenceSnapshot(dataset, new Date(), { captureMode: "manual_server", targetLeadMinutes: null })
+    snapshot: await createServerMultiOriginEvidenceSnapshot(dataset, new Date(), { captureMode: "manual_server", targetLeadMinutes: null })
   });
 }));
 

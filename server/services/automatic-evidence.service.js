@@ -1,7 +1,7 @@
 import { env } from "../config/env.js";
 import { calculateCornersModel } from "./corners-model.service.js";
 import { generateDataPicks } from "./data-picks.service.js";
-import { getFixtureDataset } from "./api-football.service.js";
+import { getFixtureDataset, getFixtureEvents, getPreviousFixturesForTeam } from "./api-football.service.js";
 import {
   evidenceAutomationConfigured,
   listDueEvidenceWatchlist,
@@ -10,6 +10,10 @@ import {
 } from "./cloud-sync.service.js";
 import { calculatePoissonModel } from "./poisson-model.service.js";
 import { calculateTeamGoalProbability } from "./team-goal-probability.service.js";
+import { calculateYellowCardsModel } from "./yellow-cards-model.service.js";
+import { calculateGoalHalfModel } from "./goal-half-model.service.js";
+import { buildOutcomeScenarios } from "./outcome-scenarios.service.js";
+import { buildMultiOriginEvidence } from "./audit/multi-origin-evidence.service.js";
 import { isInvalidEvidenceFixtureStatus, isValidEvidenceSnapshot } from "../../public/evidence-validity.js";
 
 const fallback = (warning) => ({ status: "not_available", warning, picks: [], suggestedMarkets: [] });
@@ -24,7 +28,7 @@ export function buildEvidenceCaptureManifest(dataset, modules) {
   const quality = dataset?.dataQuality || dataset?.fixture?.dataQuality || {};
   const coverage = Array.isArray(dataset?.researchData?.sourceCoverage) ? dataset.researchData.sourceCoverage : [];
   return {
-    schemaVersion: "pre-match-evidence-v3",
+    schemaVersion: "pre-match-evidence-v4",
     qualityScore: Number.isFinite(Number(quality?.score)) ? Number(quality.score) : null,
     qualityLevel: quality?.level || null,
     missingFields: Array.isArray(quality?.missing) ? [...quality.missing] : [],
@@ -32,7 +36,11 @@ export function buildEvidenceCaptureManifest(dataset, modules) {
       dataPicks: { status: modules.dataPicks?.status || "not_available", itemCount: moduleItemCount(modules.dataPicks, ["picks"]) },
       poisson: { status: modules.poisson?.status || "not_available", itemCount: moduleItemCount(modules.poisson, ["suggestedMarkets", "likelyScores"]) },
       teamGoals: { status: modules.teamGoals?.status || "not_available", itemCount: moduleItemCount(modules.teamGoals, ["picks", "suggestedMarkets"]) },
-      corners: { status: modules.corners?.status || "not_available", itemCount: moduleItemCount(modules.corners, ["picks", "suggestedMarkets"]) }
+      corners: { status: modules.corners?.status || "not_available", itemCount: moduleItemCount(modules.corners, ["picks", "suggestedMarkets"]) },
+      outcomeScenarios: { status: modules.outcomeScenarios?.status || "not_available", itemCount: moduleItemCount(modules.outcomeScenarios, ["scenarios"]) },
+      yellowCards: { status: modules.yellowCards?.status || "not_available", itemCount: modules.yellowCards?.projection ? 1 : 0 },
+      goalHalf: { status: modules.goalHalf?.status || "not_available", itemCount: modules.goalHalf?.projection ? 1 : 0 },
+      auditRecommendations: { status: modules.auditRecommendations?.status || "not_available", itemCount: moduleItemCount(modules.auditRecommendations, ["picks"]) }
     },
     sources: coverage.map((row) => ({
       module: row?.module || row?.label || row?.moduleKey || "unknown",
@@ -48,14 +56,18 @@ export function createServerEvidenceSnapshot(dataset, now = new Date(), { captur
   const fixture = dataset?.fixture;
   if (!fixture?.id) throw new TypeError("La evidencia automatica requiere fixtureId.");
   if (fixture.status !== "scheduled") throw new TypeError("La evidencia automatica solo se captura antes del inicio.");
-  let dataPicks, poisson, teamGoals, corners;
+  let dataPicks, poisson, teamGoals, corners, outcomeScenarios, yellowCards;
   try { dataPicks = generateDataPicks(dataset); } catch { dataPicks = fallback("Picks basados en datos no disponibles al capturar."); }
   try { poisson = dataset.poissonModel || calculatePoissonModel(dataset); } catch { poisson = fallback("Poisson no disponible al capturar."); }
   try { teamGoals = dataset.teamGoalProbability || calculateTeamGoalProbability(dataset); } catch { teamGoals = fallback("Gol por equipo no disponible al capturar."); }
   try { corners = dataset.cornersModel || calculateCornersModel(dataset); } catch { corners = fallback("Corners no disponibles al capturar."); }
-  const modules = { dataPicks, poisson, teamGoals, corners };
+  try { outcomeScenarios = dataset.outcomeScenarios || buildOutcomeScenarios(dataset); } catch { outcomeScenarios = fallback("Selector 1X2 no disponible al capturar."); }
+  try { yellowCards = dataset.yellowCardsModel || calculateYellowCardsModel(dataset); } catch { yellowCards = fallback("Tarjetas amarillas no disponibles al capturar."); }
+  const goalHalf = dataset.goalHalfModel || fallback("Gol por mitad no disponible al capturar.");
+  const modules = { dataPicks, poisson, teamGoals, corners, outcomeScenarios, yellowCards, goalHalf };
+  modules.auditRecommendations = buildMultiOriginEvidence(dataset, modules, now);
   const snapshot = structuredClone({
-    version: 3,
+    version: 4,
     id: `${fixture.id}:${now.getTime()}`,
     capturedAt: now.toISOString(),
     timezone: "America/Tijuana",
@@ -96,6 +108,7 @@ export function createServerEvidenceSnapshot(dataset, now = new Date(), { captur
       dataSource: dataset.source || "api-football",
       dataPicksModelVersion: dataPicks?.modelVersion || null,
       adjustmentsVersion: dataPicks?.adjustmentsVersion || null,
+      multiOriginModelVersion: modules.auditRecommendations.schemaVersion,
       probabilityScale: "percent_0_100",
       calibrationEligible: true
     },
@@ -108,6 +121,19 @@ export function createServerEvidenceSnapshot(dataset, now = new Date(), { captur
 
 export function createAutomaticEvidenceSnapshot(dataset, now = new Date()) {
   return createServerEvidenceSnapshot(dataset, now, { captureMode: "automatic_one_hour", targetLeadMinutes: 60 });
+}
+
+export async function createServerMultiOriginEvidenceSnapshot(dataset, now = new Date(), options = {}) {
+  let goalHalfModel;
+  try {
+    goalHalfModel = dataset.goalHalfModel || await calculateGoalHalfModel(dataset.fixture, {
+      getPreviousFixtures: options.getPreviousFixtures || getPreviousFixturesForTeam,
+      getFixtureEvents: options.getFixtureEvents || getFixtureEvents
+    });
+  } catch {
+    goalHalfModel = fallback("Gol por mitad no disponible al capturar.");
+  }
+  return createServerEvidenceSnapshot({ ...dataset, goalHalfModel }, now, options);
 }
 
 export function evidenceWindowStatus(fixtureDate, now = new Date()) {
@@ -140,7 +166,9 @@ async function processWatchRow(row, now, dependencies) {
       return { fixtureId: String(row.fixture_id), status: "skipped", reason: "invalid_fixture_status" };
     }
     if (dataset?.fixture?.status !== "scheduled") throw new TypeError("El fixture ya no esta programado.");
-    const snapshot = createAutomaticEvidenceSnapshot(dataset, now);
+    const snapshot = dependencies.buildSnapshot
+      ? await dependencies.buildSnapshot(dataset, now)
+      : createAutomaticEvidenceSnapshot(dataset, now);
     await dependencies.saveEvidence(row, snapshot, now);
     return { fixtureId: String(row.fixture_id), status: "captured", snapshot };
   } catch (error) {
@@ -166,7 +194,10 @@ export async function runAutomaticEvidenceCycle(options = {}) {
     listDue: options.listDue || listDueEvidenceWatchlist,
     getDataset: options.getDataset || getFixtureDataset,
     saveEvidence: options.saveEvidence || saveAutomaticEvidence,
-    updateWatch: options.updateWatch || updateEvidenceWatchlist
+    updateWatch: options.updateWatch || updateEvidenceWatchlist,
+    buildSnapshot: options.buildSnapshot || (options.getDataset
+      ? createAutomaticEvidenceSnapshot
+      : (dataset, capturedAt) => createServerMultiOriginEvidenceSnapshot(dataset, capturedAt, { captureMode: "automatic_one_hour", targetLeadMinutes: 60 }))
   };
   activeCycle = (async () => {
     // Cada expediente puede requerir varios endpoints. Un lote pequeño evita que

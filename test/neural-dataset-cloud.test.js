@@ -35,6 +35,17 @@ test("no persiste etiquetas si fixture y snapshot no coinciden", () => {
   assert.deepEqual(cloudSyncInternals.evidenceAuditLabelPayload("11111111-1111-1111-1111-111111111111", evidence(), { fixtureId: "999", records: [{ outcome: "HIT" }] }), []);
 });
 
+test("la persistencia separa una misma selección por origen", () => {
+  const rows = cloudSyncInternals.evidenceAuditLabelPayload("11111111-1111-1111-1111-111111111111", evidence(), {
+    fixtureId: "100",
+    records: [
+      { auditPickKey: "h2h:over_1_5", selectionKey: "over_1_5", market: "Total", pick: "Más de 1.5", outcome: "HIT" },
+      { auditPickKey: "recent_form:over_1_5", selectionKey: "over_1_5", market: "Total", pick: "Más de 1.5", outcome: "MISS" }
+    ]
+  });
+  assert.deepEqual(rows.map((row) => row.pick_key), ["audit:h2h:over_1_5", "audit:recent_form:over_1_5"]);
+});
+
 test("la migración protege etiquetas por usuario y limita estados", () => {
   assert.match(migration, /primary key \(user_id, snapshot_id, pick_key\)/);
   assert.match(migration, /auth\.uid\(\)\) = user_id/);

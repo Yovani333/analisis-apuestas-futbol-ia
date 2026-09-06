@@ -476,6 +476,8 @@ function normalizedAuditOutcome(value) {
 }
 
 function normalizedPickKey(row = {}) {
+  const auditPickKey = String(row.auditPickKey || "").trim();
+  if (auditPickKey) return `audit:${auditPickKey}`;
   const selectionKey = String(row.selectionKey || "").trim();
   if (selectionKey) return `key:${selectionKey}`;
   const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
@@ -570,6 +572,7 @@ export async function listCloudNeuralEvidenceSnapshots(authorization, snapshotId
   const select = [
     "fixture_id", "captured_at", "snapshot_id:snapshot->>id", "snapshot_version:snapshot->version",
     "fixture:snapshot->fixture", "data_quality:snapshot->dataQuality", "data_picks:snapshot->modules->dataPicks",
+    "audit_recommendations:snapshot->modules->auditRecommendations",
     "audit_metadata:snapshot->auditMetadata", "current_fixture_statistics_used:snapshot->currentFixtureStatisticsUsed",
     "open_ai_used:snapshot->openAiUsed"
   ].join(",");
@@ -597,7 +600,7 @@ export async function listCloudNeuralEvidenceSnapshots(authorization, snapshotId
     capturedAt: row.captured_at || null,
     fixture: row.fixture || null,
     dataQuality: row.data_quality || null,
-    modules: { dataPicks: row.data_picks || null },
+    modules: { dataPicks: row.data_picks || null, auditRecommendations: row.audit_recommendations || null },
     auditMetadata: row.audit_metadata || null,
     currentFixtureStatisticsUsed: row.current_fixture_statistics_used,
     openAiUsed: row.open_ai_used
