@@ -506,10 +506,13 @@ export class CloudSyncClient {
     return requestJson("/api/audit/neural-dataset", { token });
   }
 
-  async neuralDatasetExploratoryReport() {
+  async neuralDatasetExploratoryReport({ year = null, month = null } = {}) {
     const token = await this.accessToken();
     if (!token) throw new Error("Inicia sesión para auditar el dataset neuronal.");
-    return requestJson("/api/audit/neural-dataset/exploratory-report", { token });
+    const query = Number.isInteger(Number(year)) && Number.isInteger(Number(month))
+      ? `?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`
+      : "";
+    return requestJson(`/api/audit/neural-dataset/exploratory-report${query}`, { token });
   }
 
   async backfillNeuralDataset({ limit = 5, dryRun = false } = {}) {

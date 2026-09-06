@@ -4672,6 +4672,22 @@ function exploratoryGroupRows(groups = [], labelBuilder) {
   return groups.map((row) => `<tr><td>${escapeHtml(labelBuilder(row))}</td><td>${escapeHtml(row.samples || 0)}</td><td>${escapeHtml(row.hits || 0)}</td><td>${escapeHtml(row.misses || 0)}</td><td>${exploratoryMetric(row.hitRatePct, "%")}</td><td>${exploratoryMetric(row.confidenceInterval95Pct?.lowPct, "%")}–${exploratoryMetric(row.confidenceInterval95Pct?.highPct, "%")}</td><td>${exploratoryMetric(row.calibration?.brierScore)}</td><td>${exploratoryMetric(row.theoreticalRoi?.roiPct, "%")}</td></tr>`).join("");
 }
 
+function exploratoryMatrixRows(groups = []) {
+  return groups.map((row) => `<tr>
+    <td>${escapeHtml(row.leagueName || "Competición")}${row.season ? `<small>${escapeHtml(row.season)}</small>` : ""}</td>
+    <td>${escapeHtml(pickOriginLabel({ sourceModule: row.sourceModule }))}</td>
+    <td><strong>${escapeHtml(row.selection || row.market || "Mercado")}</strong><small>${escapeHtml(row.market || "")}</small></td>
+    <td>${escapeHtml(row.uniqueFixtures || 0)}</td><td>${escapeHtml(row.samples || 0)}</td><td>${escapeHtml(row.hits || 0)}</td><td>${escapeHtml(row.misses || 0)}</td>
+    <td><strong>${exploratoryMetric(row.hitRatePct, "%")}</strong><small>IC ${exploratoryMetric(row.confidenceInterval95Pct?.lowPct, "%")}–${exploratoryMetric(row.confidenceInterval95Pct?.highPct, "%")}</small></td>
+    <td><span class="matrix-maturity matrix-maturity--${escapeHtml(row.sampleMaturity?.key || "insufficient")}">${escapeHtml(row.sampleMaturity?.label || "Insuficiente")}</span></td>
+    <td>${escapeHtml(row.modelVersion || "Sin versión")}</td>
+  </tr>`).join("");
+}
+
+function exploratoryPeriodOptions(period = {}) {
+  return (period.available || []).map((item) => `<option value="${escapeHtml(item.key)}" ${item.key === period.key ? "selected" : ""}>${escapeHtml(String(item.month).padStart(2, "0"))}/${escapeHtml(item.year)} · ${escapeHtml(item.samples)} filas</option>`).join("");
+}
+
 function renderNeuralExploratoryReport(report = {}) {
   if (!elements.neuralExploratoryReport) return;
   const overall = report.overall || {};
@@ -4681,6 +4697,8 @@ function renderNeuralExploratoryReport(report = {}) {
   const leagueRows = exploratoryGroupRows(report.byLeague || [], (row) => `${row.leagueName || "Competición"}${row.season ? ` · ${row.season}` : ""}`);
   const originRows = exploratoryGroupRows(report.byOrigin || [], (row) => `${pickOriginLabel({ sourceModule: row.sourceModule })} · ${row.modelVersion || "Sin versión"}`);
   const confidenceRows = exploratoryGroupRows(report.byConfidence || [], (row) => row.confidenceBand || "No disponible");
+  const matrixRows = exploratoryMatrixRows(report.performanceMatrix || []);
+  const periodOptions = exploratoryPeriodOptions(report.period || {});
   const missingRows = (report.missingFeatures || []).slice(0, 12).map((row) => `<li><span>${escapeHtml(String(row.feature || "Dato").replaceAll(/([A-Z])/g, " $1"))}</span><strong>${escapeHtml(row.count || 0)} · ${exploratoryMetric(row.ratePct, "%")}</strong></li>`).join("");
   const warnings = (report.warnings || []).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
   const temporalContent = temporal.status === "available" ? `<div class="neural-temporal-comparison"><div><span>Bloque inicial 70%</span><strong>${exploratoryMetric(temporal.training?.hitRatePct, "%")}</strong><small>${escapeHtml(temporal.training?.samples || 0)} muestras</small></div><div><span>Bloque reciente 30%</span><strong>${exploratoryMetric(temporal.validation?.hitRatePct, "%")}</strong><small>${escapeHtml(temporal.validation?.samples || 0)} muestras</small></div></div>` : '<p class="market-disclaimer">La muestra temporal todavía es insuficiente.</p>';
@@ -4690,16 +4708,23 @@ function renderNeuralExploratoryReport(report = {}) {
     <div class="neural-exploratory-metrics"><div><span>HIT / MISS</span><strong>${escapeHtml(overall.hits || 0)} / ${escapeHtml(overall.misses || 0)}</strong></div><div><span>Acierto global</span><strong>${exploratoryMetric(overall.hitRatePct, "%")}</strong><small>IC 95% ${exploratoryMetric(overall.confidenceInterval95Pct?.lowPct, "%")}–${exploratoryMetric(overall.confidenceInterval95Pct?.highPct, "%")}</small></div><div><span>Brier Score</span><strong>${exploratoryMetric(overall.calibration?.brierScore)}</strong></div><div><span>Log Loss</span><strong>${exploratoryMetric(overall.calibration?.logLoss)}</strong></div><div><span>ECE</span><strong>${exploratoryMetric(overall.calibration?.expectedCalibrationErrorPct, "%")}</strong></div><div><span>ROI teórico</span><strong>${exploratoryMetric(overall.theoreticalRoi?.roiPct, "%")}</strong><small>${escapeHtml(overall.theoreticalRoi?.samples || 0)} cuotas válidas</small></div></div>
     <section><h3>Selecciones concretas</h3><div class="table-scroll"><table><thead><tr><th>Selección</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>IC 95%</th><th>Brier</th><th>ROI teórico</th></tr></thead><tbody>${selectionRows}</tbody></table></div></section>
     <section><h3>Estabilidad temporal</h3>${temporalContent}</section>
+    <section class="historical-performance-matrix" aria-labelledby="historical-performance-matrix-title">
+      <header><div><p class="eyebrow">Cruce auditable</p><h3 id="historical-performance-matrix-title">Matriz de rendimiento histórico</h3><p>Combina competición, origen y mercado usando una observación predictiva única por evidencia congelada.</p></div><span class="status-badge status-badge--${report.period?.mode === "month" ? "partial" : "available"}">${report.period?.mode === "month" ? escapeHtml(report.period.key) : "Todo el historial"}</span></header>
+      <div class="matrix-period-filter"><label>Periodo<select data-audit-matrix-period><option value="all" ${report.period?.mode === "all" ? "selected" : ""}>Todo el historial · ${escapeHtml(report.dataset?.totalSamples || 0)} filas</option>${periodOptions}</select></label><button class="button button--secondary button--compact" type="button" data-apply-audit-matrix-period>Aplicar</button></div>
+      <div class="matrix-sample-legend" aria-label="Madurez de la muestra"><span>0–9 Insuficiente</span><span>10–19 Preliminar</span><span>20–39 Útil</span><span>40–69 Sólida</span><span>70+ Amplia</span></div>
+      ${matrixRows ? `<div class="table-scroll"><table><thead><tr><th>Competición</th><th>Origen</th><th>Mercado / selección</th><th>Fixtures</th><th>Evaluados</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>Muestra</th><th>Versión</th></tr></thead><tbody>${matrixRows}</tbody></table></div>` : '<div class="research-empty"><strong>Sin observaciones para este periodo</strong><p>Selecciona otro mes o todo el historial.</p></div>'}
+      <p class="market-disclaimer">${escapeHtml(report.matrixPolicy?.note || "Las exposiciones en picks individuales y parlays no se mezclan con las evidencias predictivas.")} La madurez indica volumen, no garantiza rendimiento.</p>
+    </section>
     <details><summary>Ver competiciones, orígenes y confianza</summary><div class="neural-exploratory-details"><section><h3>Por competición</h3><div class="table-scroll"><table><thead><tr><th>Competición</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>IC 95%</th><th>Brier</th><th>ROI</th></tr></thead><tbody>${leagueRows}</tbody></table></div></section><section><h3>Por origen</h3><div class="table-scroll"><table><thead><tr><th>Origen</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>IC 95%</th><th>Brier</th><th>ROI</th></tr></thead><tbody>${originRows}</tbody></table></div></section><section><h3>Por confianza</h3><div class="table-scroll"><table><thead><tr><th>Confianza</th><th>Muestra</th><th>HIT</th><th>MISS</th><th>Acierto</th><th>IC 95%</th><th>Brier</th><th>ROI</th></tr></thead><tbody>${confidenceRows}</tbody></table></div></section></div></details>
     <section class="neural-dataset-detail-grid">${missingRows ? `<div><h3>Datos faltantes</h3><ul>${missingRows}</ul></div>` : ""}<div><h3>Conclusiones prudentes</h3><ul class="neural-warning-list">${warnings}</ul></div></section>`;
 }
 
-async function runNeuralExploratoryAudit() {
+async function runNeuralExploratoryAudit({ year = null, month = null } = {}) {
   if (!elements.runNeuralExploratoryAudit || elements.runNeuralExploratoryAudit.disabled) return;
   elements.runNeuralExploratoryAudit.disabled = true;
   elements.runNeuralExploratoryAudit.textContent = "Analizando…";
   try {
-    const report = await cloudSyncClient.neuralDatasetExploratoryReport();
+    const report = await cloudSyncClient.neuralDatasetExploratoryReport({ year, month });
     renderNeuralExploratoryReport(report);
   } catch (error) {
     elements.neuralExploratoryReport.hidden = false;
@@ -6531,7 +6556,14 @@ elements.auditFixture.addEventListener("change", () => {
 });
 elements.runAudit.addEventListener("click", runSelectedAudit);
 elements.prepareNeuralDataset.addEventListener("click", prepareNextNeuralDatasetBatch);
-elements.runNeuralExploratoryAudit.addEventListener("click", runNeuralExploratoryAudit);
+elements.runNeuralExploratoryAudit.addEventListener("click", () => runNeuralExploratoryAudit());
+elements.neuralExploratoryReport?.addEventListener("click", (event) => {
+  if (!event.target.closest("[data-apply-audit-matrix-period]")) return;
+  const value = elements.neuralExploratoryReport.querySelector("[data-audit-matrix-period]")?.value || "all";
+  if (value === "all") return runNeuralExploratoryAudit();
+  const [year, month] = value.split("-").map(Number);
+  runNeuralExploratoryAudit({ year, month });
+});
 elements.evidenceReadinessList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-evaluate-evidence]");
   if (button) void evaluateCompetitionEvidence(button.dataset.evaluateEvidence);

@@ -89,14 +89,71 @@ test("el reporte es determinista salvo la fecha explícita y no modifica filas",
   assert.equal(neuralExploratoryInternals.temporalValidation(rows).samples, 25);
 });
 
+test("la matriz cruza competición, origen, mercado, selección y versión sin mezclar grupos", () => {
+  const rows = [
+    row(1, { selection: "Más de 2.5", selectionKey: "over_2_5" }),
+    row(2, { selection: "Más de 2.5", selectionKey: "over_2_5" }),
+    row(3, { selection: "Más de 2.5", selectionKey: "over_2_5", sourceModule: "h2h" }),
+    row(4, { leagueId: 262, leagueName: "Liga MX", selection: "Más de 1.5", selectionKey: "over_1_5", market: "Total de goles 1.5", marketKey: "total_de_goles_1_5" })
+  ];
+  const report = buildNeuralDatasetExploratoryReport(dataset(rows));
+  assert.equal(report.performanceMatrix.length, 3);
+  const mlsDataPicks = report.performanceMatrix.find((group) => group.leagueId === 253 && group.sourceModule === "data_picks");
+  assert.equal(mlsDataPicks.samples, 2);
+  assert.equal(mlsDataPicks.uniqueFixtures, 2);
+  assert.equal(mlsDataPicks.sampleMaturity.key, "insufficient");
+  assert.equal(report.matrixPolicy.exposureCountsIncluded, false);
+  assert.equal(mlsDataPicks.individualPicks, null);
+  assert.equal(mlsDataPicks.parlaySelections, null);
+});
+
+test("clasifica la madurez de cada celda sin confundirla con el porcentaje de acierto", () => {
+  const cases = [[9, "insufficient"], [10, "preliminary"], [20, "useful"], [40, "solid"], [70, "broad"]];
+  for (const [samples, expected] of cases) {
+    const rows = Array.from({ length: samples }, (_, index) => row(index, { selection: "Más de 1.5", selectionKey: "over_1_5", market: "Total de goles 1.5", marketKey: "total_de_goles_1_5" }));
+    const report = buildNeuralDatasetExploratoryReport(dataset(rows));
+    assert.equal(report.performanceMatrix.reduce((largest, group) => group.samples > largest.samples ? group : largest).sampleMaturity.key, expected);
+  }
+});
+
+test("filtra por mes de kickoff y conserva los periodos disponibles", () => {
+  const rows = [
+    row(1, { kickoffAt: "2026-07-10T18:00:00.000Z" }),
+    row(2, { kickoffAt: "2026-08-10T18:00:00.000Z" }),
+    row(3, { kickoffAt: "2026-08-12T18:00:00.000Z" })
+  ];
+  const report = buildNeuralDatasetExploratoryReport(dataset(rows), { period: { year: 2026, month: 8 } });
+  assert.equal(report.period.key, "2026-08");
+  assert.equal(report.overall.samples, 2);
+  assert.equal(report.dataset.totalSamples, 3);
+  assert.deepEqual(report.period.available.map((period) => period.key), ["2026-08", "2026-07"]);
+});
+
+test("un periodo inválido usa todo el historial sin alterar las filas", () => {
+  const rows = [row(1), row(2)];
+  const before = structuredClone(rows);
+  const report = buildNeuralDatasetExploratoryReport(dataset(rows), { period: { year: "x", month: 30 } });
+  assert.equal(report.period.mode, "all");
+  assert.equal(report.overall.samples, 2);
+  assert.deepEqual(rows, before);
+});
+
 test("la auditoría exploratoria es manual, autenticada y no consulta API-Football", () => {
   assert.match(routes, /apiRouter\.get\("\/audit\/neural-dataset\/exploratory-report"/);
-  assert.match(routes, /buildNeuralDatasetExploratoryReport\(dataset\)/);
+  assert.match(routes, /buildNeuralDatasetExploratoryReport\(dataset, \{/);
   assert.match(routes, /apiFootballRequests: 0/);
-  assert.match(cloud, /neuralDatasetExploratoryReport\(\)/);
+  assert.match(cloud, /neuralDatasetExploratoryReport\(\{ year = null, month = null \} = \{\}\)/);
   assert.match(html, /id="run-neural-exploratory-audit"/);
-  assert.match(app, /runNeuralExploratoryAudit\.addEventListener\("click", runNeuralExploratoryAudit\)/);
+  assert.match(app, /runNeuralExploratoryAudit\.addEventListener\("click", \(\) => runNeuralExploratoryAudit\(\)\)/);
   assert.doesNotMatch(app, /setInterval\([^)]*runNeuralExploratoryAudit/);
+});
+
+test("la matriz reutiliza la ruta exploratoria y no agrega consultas a API-Football", () => {
+  assert.match(routes, /period: \{ year: req\.query\.year, month: req\.query\.month \}/);
+  assert.match(routes, /apiFootballRequests: 0/);
+  assert.match(app, /Matriz de rendimiento histórico/);
+  assert.match(app, /data-apply-audit-matrix-period/);
+  assert.match(app, /Las exposiciones en picks individuales y parlays no se mezclan/);
 });
 
 test("la auditoria exploratoria carga solo etiquetas decisivas y snapshots minimos", () => {

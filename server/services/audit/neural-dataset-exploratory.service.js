@@ -88,6 +88,83 @@ function groupRows(rows, keyBuilder, limit = 50) {
     .sort((a, b) => b.samples - a.samples || String(a.key).localeCompare(String(b.key))).slice(0, limit);
 }
 
+function matrixSampleMaturity(samples) {
+  if (samples >= 70) return { key: "broad", label: "Amplia" };
+  if (samples >= 40) return { key: "solid", label: "Sólida" };
+  if (samples >= 20) return { key: "useful", label: "Útil" };
+  if (samples >= 10) return { key: "preliminary", label: "Preliminar" };
+  return { key: "insufficient", label: "Insuficiente" };
+}
+
+function normalizedPeriod(period = {}) {
+  const year = Number(period.year);
+  const month = Number(period.month);
+  if (!Number.isInteger(year) || year < 2000 || year > 2200 || !Number.isInteger(month) || month < 1 || month > 12) {
+    return { mode: "all", year: null, month: null, key: "all" };
+  }
+  return { mode: "month", year, month, key: `${year}-${String(month).padStart(2, "0")}` };
+}
+
+function rowPeriodKey(row) {
+  const date = new Date(row.kickoffAt || "");
+  if (!Number.isFinite(date.getTime())) return null;
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function availablePeriods(rows) {
+  const counts = new Map();
+  for (const row of rows) {
+    const key = rowPeriodKey(row);
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()].map(([key, samples]) => {
+    const [year, month] = key.split("-").map(Number);
+    return { key, year, month, samples };
+  }).sort((a, b) => b.key.localeCompare(a.key));
+}
+
+function performanceMatrix(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const leagueKey = row.leagueId || normalizedTextKey(row.leagueName);
+    const sourceModule = row.sourceModule || "unknown";
+    const selectionKey = row.selectionKey || normalizedTextKey(row.selection);
+    const marketKey = row.marketKey || normalizedTextKey(row.market);
+    const key = `${leagueKey}:${row.season ?? "unknown"}:${sourceModule}:${marketKey}:${selectionKey}:${row.modelVersion}`;
+    if (!groups.has(key)) groups.set(key, { descriptor: {
+      key,
+      leagueId: row.leagueId,
+      leagueName: row.leagueName,
+      season: row.season,
+      sourceModule,
+      market: row.market,
+      marketKey,
+      selection: row.selection,
+      selectionKey,
+      modelVersion: row.modelVersion
+    }, rows: [], fixtures: new Set() });
+    const group = groups.get(key);
+    group.rows.push(row);
+    group.fixtures.add(row.fixtureId);
+  }
+  return [...groups.values()].map((group) => {
+    const metrics = metricSummary(group.rows);
+    return {
+      ...group.descriptor,
+      ...metrics,
+      uniqueFixtures: group.fixtures.size,
+      sampleMaturity: matrixSampleMaturity(metrics.samples),
+      individualPicks: null,
+      parlaySelections: null
+    };
+  }).sort((a, b) => b.samples - a.samples || String(a.key).localeCompare(String(b.key)));
+}
+
+function normalizedTextKey(value) {
+  return String(value || "unknown").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
+}
+
 function temporalValidation(rows) {
   const ordered = [...rows].filter((row) => Number.isFinite(Date.parse(row.kickoffAt || "")))
     .sort((a, b) => Date.parse(a.kickoffAt) - Date.parse(b.kickoffAt) || String(a.rowId).localeCompare(String(b.rowId)));
@@ -120,8 +197,11 @@ function reportWarnings(report, dataset) {
   return warnings;
 }
 
-export function buildNeuralDatasetExploratoryReport(dataset, { now = new Date() } = {}) {
-  const rows = Array.isArray(dataset?.rows) ? dataset.rows : [];
+export function buildNeuralDatasetExploratoryReport(dataset, { now = new Date(), period: requestedPeriod = {} } = {}) {
+  const allRows = Array.isArray(dataset?.rows) ? dataset.rows : [];
+  const period = normalizedPeriod(requestedPeriod);
+  const periods = availablePeriods(allRows);
+  const rows = period.mode === "month" ? allRows.filter((row) => rowPeriodKey(row) === period.key) : allRows;
   const overall = metricSummary(rows);
   const report = {
     reportVersion: "neural-exploratory-audit-v1",
@@ -130,6 +210,7 @@ export function buildNeuralDatasetExploratoryReport(dataset, { now = new Date() 
       schemaVersion: dataset?.schemaVersion || null,
       fingerprint: dataset?.fingerprint || null,
       samples: rows.length,
+      totalSamples: allRows.length,
       snapshotsSelected: Number(dataset?.summary?.snapshotsSelected || 0),
       exclusions: Number(dataset?.summary?.exclusions || 0),
       targetPolicy: dataset?.policy?.target || "HIT=1, MISS=0",
@@ -153,6 +234,14 @@ export function buildNeuralDatasetExploratoryReport(dataset, { now = new Date() 
       return { key: band, confidenceBand: band };
     }),
     byVersion: groupRows(rows, (row) => ({ key: row.modelVersion, modelVersion: row.modelVersion })),
+    performanceMatrix: performanceMatrix(rows),
+    period: { ...period, available: periods },
+    matrixPolicy: {
+      source: "unique_frozen_pre_match_evidence_rows",
+      target: "HIT/MISS only",
+      exposureCountsIncluded: false,
+      note: "Individuales y selecciones en parlays son exposiciones posteriores y no se mezclan con observaciones predictivas únicas."
+    },
     temporalValidation: temporalValidation(rows),
     missingFeatures: missingFeatureSummary(rows),
     checks: {

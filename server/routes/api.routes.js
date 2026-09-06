@@ -192,7 +192,9 @@ apiRouter.get("/audit/neural-dataset", asyncRoute(async (req, res) => {
 
 apiRouter.get("/audit/neural-dataset/exploratory-report", asyncRoute(async (req, res) => {
   const { dataset, evidenceLibrary, storedLabels } = await loadCloudNeuralExploratoryDataset(req.headers.authorization);
-  const report = buildNeuralDatasetExploratoryReport(dataset);
+  const report = buildNeuralDatasetExploratoryReport(dataset, {
+    period: { year: req.query.year, month: req.query.month }
+  });
   res.json({
     ...report,
     source: "frozen_pre_match_snapshots_and_saved_audits",
