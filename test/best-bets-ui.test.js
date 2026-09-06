@@ -33,13 +33,33 @@ test("filtra candidatos por clasificación, liga y mercado", () => {
   assert.deepEqual(filterBestBetCandidates(report, { classification: "APTO", league: "MLS", market: "btts" }).map((row) => row.id), ["a"]);
 });
 
+test("permite combinar varias clasificaciones, ligas y mercados", () => {
+  const report = { candidates: [
+    { id: "a", classification: "APTO", leagueName: "MLS", marketKey: "btts" },
+    { id: "b", classification: "OBSERVAR", leagueName: "Liga MX", marketKey: "match_winner" },
+    { id: "c", classification: "DESCARTADO", leagueName: "Premier League", marketKey: "over_under_2_5" }
+  ] };
+  const filtered = filterBestBetCandidates(report, {
+    classification: ["APTO", "OBSERVAR"],
+    league: ["MLS", "Liga MX"],
+    market: ["btts", "match_winner"]
+  });
+  assert.deepEqual(filtered.map((row) => row.id), ["a", "b"]);
+});
+
 test("convierte un candidato al contrato existente del cupón", () => {
   const leg = bestBetCandidateToLeg({
     id: "candidate", fixtureId: "12", leagueId: 1, leagueName: "Liga", country: "MX", homeTeam: "A", awayTeam: "B",
     kickoffTime: "2026-08-06T18:00:00Z", market: "Resultado", marketKey: "match_winner", selection: "A gana", selectionKey: "home_win",
-    odds: 2.1, modelProbabilityPct: 55, normalizedImpliedProbabilityPct: 48, expectedValuePct: 15.5, classification: "APTO", selectorScore: 80, riskScore: 30
+    odds: 2.1, modelProbabilityPct: 55, normalizedImpliedProbabilityPct: 48, expectedValuePct: 15.5, classification: "APTO", selectorScore: 80, riskScore: 30,
+    originModule: "xg_btts", reasons: ["Coinciden xG y forma."], warnings: ["Alineación pendiente."]
   });
   assert.equal(leg.sourceModule, "best_bets_selector");
+  assert.equal(leg.originModule, "best_bets_selector");
+  assert.equal(leg.sourceLabel, "Mejores apuestas");
+  assert.equal(leg.backingOriginModule, "xg_btts");
+  assert.deepEqual(leg.supportingData, ["Coinciden xG y forma."]);
+  assert.deepEqual(leg.contradictingData, ["Alineación pendiente."]);
   assert.equal(leg.decimalOdds, 2.1);
   assert.equal(leg.fixtureId, "12");
   assert.equal(leg.result, undefined);
@@ -50,9 +70,25 @@ test("el Dashboard expone ejecución manual y no la dispara al inicializar", () 
   const app = fs.readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
   assert.match(html, /id="best-bets-panel"/);
   assert.match(html, /id="generate-best-bets"/);
+  assert.match(html, /id="best-bets-classification"[\s\S]*best-bets-filter__options/);
+  assert.match(html, /id="best-bets-league"[\s\S]*best-bets-filter__options/);
+  assert.match(html, /id="best-bets-market"[\s\S]*best-bets-filter__options/);
   assert.match(app, /generateBestBets\.addEventListener\("click"/);
+  assert.match(app, /input\[type="checkbox"\]/);
+  assert.match(app, /data-add-best-bet/);
   const initializeBody = app.slice(app.indexOf("async function initializeApp()"));
   assert.doesNotMatch(initializeBody, /generateBestBetsReport\(\)/);
+});
+
+test("los picks de Mejores apuestas alimentan el historial con ese origen", () => {
+  const leg = bestBetCandidateToLeg({
+    id: "history", fixtureId: 99, leagueId: 253, market: "Ambos anotan", marketKey: "btts",
+    selection: "Sí", selectionKey: "btts_yes", originModule: "xg_btts", classification: "APTO"
+  });
+  const rows = buildBestBetsHistoryRecords([{ ...leg, result: "won" }], []);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].originModule, "best_bets_selector");
+  assert.equal(rows[0].result, "WON");
 });
 
 test("el historial de mejores apuestas excluye picks individuales de prueba", () => {

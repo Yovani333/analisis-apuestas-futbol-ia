@@ -37,10 +37,15 @@ export function buildBestBetsHistoryRecords(savedPicks = [], savedParlays = []) 
 
 export function filterBestBetCandidates(report = {}, filters = {}) {
   const candidates = Array.isArray(report.candidates) ? report.candidates : [];
+  const selected = (value) => new Set((Array.isArray(value) ? value : [value])
+    .map((item) => String(item || "")).filter((item) => item && item !== "all"));
+  const classifications = selected(filters.classification);
+  const leagues = selected(filters.league);
+  const markets = selected(filters.market);
   return candidates.filter((candidate) => {
-    if (filters.classification && filters.classification !== "all" && candidate.classification !== filters.classification) return false;
-    if (filters.league && filters.league !== "all" && candidate.leagueName !== filters.league) return false;
-    if (filters.market && filters.market !== "all" && candidate.marketKey !== filters.market) return false;
+    if (classifications.size && !classifications.has(candidate.classification)) return false;
+    if (leagues.size && !leagues.has(candidate.leagueName)) return false;
+    if (markets.size && !markets.has(candidate.marketKey)) return false;
     return true;
   });
 }
@@ -68,10 +73,16 @@ export function bestBetCandidateToLeg(candidate = {}) {
     confidence: candidate.classification || "OBSERVAR",
     confidenceScore: candidate.selectorScore ?? null,
     risk: candidate.riskScore === null || candidate.riskScore === undefined ? "No disponible" : `${candidate.riskScore}/100`,
-    explanation: candidate.inclusionReason || candidate.reasons?.[0] || "SelecciÃ³n ordenada por el Selector inteligente de mejores apuestas.",
+    explanation: candidate.inclusionReason || candidate.reasons?.[0] || "Selección ordenada por el Selector inteligente de mejores apuestas.",
     sourceModule: "best_bets_selector",
-    originModule: candidate.originModule || null,
+    originModule: "best_bets_selector",
+    backingOriginModule: candidate.originModule || null,
     sourceLabel: "Mejores apuestas",
+    supportingData: Array.isArray(candidate.reasons) ? [...candidate.reasons] : [],
+    contradictingData: [
+      ...(Array.isArray(candidate.warnings) ? candidate.warnings : []),
+      ...(Array.isArray(candidate.exclusionReasons) ? candidate.exclusionReasons : [])
+    ],
     modelVersion: candidate.modelVersion || null,
     configVersion: candidate.configVersion || null,
     generatedAt: candidate.generatedAt || new Date().toISOString(),

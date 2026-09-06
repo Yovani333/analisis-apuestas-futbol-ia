@@ -20,7 +20,7 @@ import { evaluateH2HRecommendation } from "./h2h-recommendation.js?v=20260719-h2
 import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.js?v=20260722-recent-form-v1";
 import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=20260725-xg-btts-v2";
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
-import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260816-individual-test-mode-v1";
+import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260906-best-bets-multiselect-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -55,7 +55,7 @@ const state = {
   playerGoalByFixture: new Map(),
   pickCollectionByFixture: new Map(Object.entries(readLocalJson(PICK_COLLECTION_CACHE_KEY, {}))),
   bestBetsReport: null,
-  bestBetsFilters: { classification: "all", league: "all", market: "all" },
+  bestBetsFilters: { classification: [], league: [], market: [] },
   favoriteTeamStatsById: new Map(),
   favoriteTeamLoadingIds: new Set(),
   parlayDraft: loadParlayDraft(),
@@ -1449,13 +1449,36 @@ function bestBetsHistoryLabel(reliability = {}) {
 function populateBestBetsFilters(report) {
   const leagues = [...new Set((report.candidates || []).map((candidate) => candidate.leagueName).filter(Boolean))].sort();
   const markets = [...new Map((report.candidates || []).filter((candidate) => candidate.marketKey).map((candidate) => [candidate.marketKey, candidate.market || candidate.marketKey])).entries()];
-  elements.bestBetsLeague.innerHTML = '<option value="all">Todas</option>' + leagues.map((league) => `<option value="${escapeHtml(league)}">${escapeHtml(league)}</option>`).join("");
-  elements.bestBetsMarket.innerHTML = '<option value="all">Todos</option>' + markets.map(([key, label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`).join("");
-  elements.bestBetsClassification.value = state.bestBetsFilters.classification;
-  elements.bestBetsLeague.value = leagues.includes(state.bestBetsFilters.league) ? state.bestBetsFilters.league : "all";
-  elements.bestBetsMarket.value = markets.some(([key]) => key === state.bestBetsFilters.market) ? state.bestBetsFilters.market : "all";
-  state.bestBetsFilters.league = elements.bestBetsLeague.value;
-  state.bestBetsFilters.market = elements.bestBetsMarket.value;
+  const renderGroup = (element, options, selectedValues, allLabel) => {
+    const available = new Set(options.map(([value]) => value));
+    const selected = new Set((Array.isArray(selectedValues) ? selectedValues : [selectedValues]).filter((value) => available.has(value)));
+    element.innerHTML = `<label><input type="checkbox" value="all" ${selected.size ? "" : "checked"}> <span>${escapeHtml(allLabel)}</span></label>`
+      + options.map(([value, label]) => `<label><input type="checkbox" value="${escapeHtml(value)}" ${selected.has(value) ? "checked" : ""}> <span>${escapeHtml(label)}</span></label>`).join("");
+    return [...selected];
+  };
+  state.bestBetsFilters.classification = renderGroup(elements.bestBetsClassification, [
+    ["APTO", "Apto"], ["APTO CON PRECAUCIÓN", "Apto con precaución"], ["OBSERVAR", "Observar"], ["DESCARTADO", "Descartado"]
+  ], state.bestBetsFilters.classification, "Todas");
+  state.bestBetsFilters.league = renderGroup(elements.bestBetsLeague, leagues.map((league) => [league, league]), state.bestBetsFilters.league, "Todas");
+  state.bestBetsFilters.market = renderGroup(elements.bestBetsMarket, markets, state.bestBetsFilters.market, "Todos");
+  updateBestBetsFilterSummaries();
+}
+
+function updateBestBetsFilterSummaries() {
+  for (const element of [elements.bestBetsClassification, elements.bestBetsLeague, elements.bestBetsMarket]) {
+    const summary = element.closest("details")?.querySelector("summary");
+    if (!summary) continue;
+    const label = summary.dataset.filterLabel;
+    const checked = [...element.querySelectorAll('input:not([value="all"]):checked')];
+    const selection = checked.length === 0 ? (label === "Mercado" ? "Todos" : "Todas")
+      : checked.length === 1 ? checked[0].nextElementSibling?.textContent || checked[0].value
+        : `${checked.length} seleccionados`;
+    summary.textContent = `${label}: ${selection}`;
+  }
+}
+
+function selectedBestBetsFilters(element) {
+  return [...element.querySelectorAll('input:not([value="all"]):checked')].map((input) => input.value);
 }
 
 function renderBestBets({ refreshFilters = false } = {}) {
@@ -1488,10 +1511,9 @@ function renderBestBets({ refreshFilters = false } = {}) {
   elements.bestBetsControls.hidden = false;
   const filtered = filterBestBetCandidates(report, state.bestBetsFilters);
   const best = report.bestBet;
-  const highlight = best ? `<div class="best-bets-highlight"><div><span class="eyebrow">Mejor apuesta general</span><strong>${escapeHtml(best.selection)}</strong><p>${escapeHtml(best.homeTeam)} vs ${escapeHtml(best.awayTeam)} · ${escapeHtml(best.leagueName)} · puntuación ${escapeHtml(best.selectorScore)}/100</p></div><button class="button button--primary button--compact" type="button" data-add-best-bet="${escapeHtml(best.id)}">Agregar</button></div>`
+  const highlight = best ? `<div class="best-bets-highlight"><div><span class="eyebrow">Mejor apuesta general</span><strong>${escapeHtml(best.selection)}</strong><p>${escapeHtml(best.homeTeam)} vs ${escapeHtml(best.awayTeam)} · ${escapeHtml(best.leagueName)} · puntuación ${escapeHtml(best.selectorScore)}/100</p></div><button class="pick-add-icon" type="button" data-add-best-bet="${escapeHtml(best.id)}" aria-label="Agregar ${escapeHtml(best.selection)} al cupón" title="Agregar pick">+</button></div>`
     : `<div class="best-bets-highlight"><div><strong>No existe una apuesta recomendable</strong><p>${escapeHtml(report.warnings?.[0] || "Ningún candidato superó simultáneamente los filtros de valor, calidad, riesgo e historial.")}</p></div></div>`;
   const rows = filtered.map((candidate) => {
-    const approved = ["APTO", "APTO CON PRECAUCIÓN"].includes(candidate.classification);
     const detailId = `best-bet-detail-${String(candidate.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const evidence = [
       ...(candidate.reasons || []).map((reason) => `<li>${escapeHtml(reason)}</li>`),
@@ -1506,7 +1528,7 @@ function renderBestBets({ refreshFilters = false } = {}) {
       <td><strong>${candidate.odds ? escapeHtml(Number(candidate.odds).toFixed(2)) : "No disponible"}</strong><small>Justa ${candidate.fairOdds ? escapeHtml(Number(candidate.fairOdds).toFixed(2)) : "—"} · ${escapeHtml(candidate.bookmaker || "Casa no indicada")}</small></td>
       <td><strong>Edge ${escapeHtml(bestBetsPercent(candidate.edgePct))}</strong><small>EV ${escapeHtml(bestBetsPercent(candidate.expectedValuePct))}</small></td>
       <td><strong>Calidad ${escapeHtml(candidate.dataQualityScore)}/100</strong><small>Riesgo ${escapeHtml(candidate.riskScore)}/100 · ${escapeHtml(bestBetsHistoryLabel(candidate.historicalReliability))}</small></td>
-      <td class="best-bets-table__actions"><button class="button button--secondary button--compact" type="button" data-view-best-bet="${escapeHtml(detailId)}" aria-expanded="false">Ver evidencia</button>${approved ? `<button class="button button--primary button--compact" type="button" data-add-best-bet="${escapeHtml(candidate.id)}">Agregar</button>` : ""}<div id="${escapeHtml(detailId)}" class="best-bets-evidence" hidden><strong>Desglose</strong><ul>${evidence}</ul><small>Fiabilidad: ${escapeHtml(candidate.historicalReliability?.status || "insuficiente")} · ${escapeHtml(bestBetsHistoryLabel(candidate.historicalReliability))} · configuración ${escapeHtml(candidate.configVersion || "no disponible")}</small></div></td>
+      <td class="best-bets-table__actions"><button class="button button--secondary button--compact" type="button" data-view-best-bet="${escapeHtml(detailId)}" aria-expanded="false">Ver evidencia</button><button class="pick-add-icon pick-add-icon--table" type="button" data-add-best-bet="${escapeHtml(candidate.id)}" aria-label="Agregar ${escapeHtml(candidate.selection)} al cupón" title="Agregar pick">+</button><div id="${escapeHtml(detailId)}" class="best-bets-evidence" hidden><strong>Desglose</strong><ul>${evidence}</ul><small>Fiabilidad: ${escapeHtml(candidate.historicalReliability?.status || "insuficiente")} · ${escapeHtml(bestBetsHistoryLabel(candidate.historicalReliability))} · configuración ${escapeHtml(candidate.configVersion || "no disponible")}</small></div></td>
     </tr>`;
   }).join("");
   elements.bestBetsContent.innerHTML = highlight + (rows ? `<table class="best-bets-table"><thead><tr><th>Partido</th><th>Selección</th><th>Estado</th><th>Probabilidades</th><th>Cuota</th><th>Valor</th><th>Control</th><th>Acciones</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="best-bets-empty">No hay candidatos para los filtros seleccionados.</div>');
@@ -5958,7 +5980,7 @@ async function searchFixtures(event) {
     const filteredResults = filterPastTodayFixtures(searchResults, filters);
     state.fixtures = filteredResults.fixtures;
     state.bestBetsReport = null;
-    state.bestBetsFilters = { classification: "all", league: "all", market: "all" };
+    state.bestBetsFilters = { classification: [], league: [], market: [] };
     purgeInvalidEvidenceSnapshots({ sync: true, render: false });
     const source = state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "simulación";
     const validCount = state.fixtures.length;
@@ -6475,14 +6497,24 @@ elements.matchesList.addEventListener("click", async (event) => {
   }
 });
 elements.generateBestBets.addEventListener("click", () => void generateBestBetsReport());
-[elements.bestBetsClassification, elements.bestBetsLeague, elements.bestBetsMarket].forEach((control) => control.addEventListener("change", () => {
+elements.bestBetsControls.addEventListener("change", (event) => {
+  const input = event.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  const group = input.closest(".best-bets-filter__options");
+  if (!group) return;
+  const all = group.querySelector('input[value="all"]');
+  const specifics = [...group.querySelectorAll('input:not([value="all"])')];
+  if (input.value === "all" && input.checked) specifics.forEach((item) => { item.checked = false; });
+  if (input.value !== "all" && input.checked && all) all.checked = false;
+  if (!specifics.some((item) => item.checked) && all) all.checked = true;
   state.bestBetsFilters = {
-    classification: elements.bestBetsClassification.value,
-    league: elements.bestBetsLeague.value,
-    market: elements.bestBetsMarket.value
+    classification: selectedBestBetsFilters(elements.bestBetsClassification),
+    league: selectedBestBetsFilters(elements.bestBetsLeague),
+    market: selectedBestBetsFilters(elements.bestBetsMarket)
   };
+  updateBestBetsFilterSummaries();
   renderBestBets();
-}));
+});
 elements.bestBetsContent.addEventListener("click", (event) => {
   const evidenceButton = event.target.closest("[data-view-best-bet]");
   if (evidenceButton) {
@@ -6497,8 +6529,8 @@ elements.bestBetsContent.addEventListener("click", (event) => {
   const addButton = event.target.closest("[data-add-best-bet]");
   if (!addButton || !state.bestBetsReport) return;
   const candidate = (state.bestBetsReport.candidates || []).find((item) => String(item.id) === String(addButton.dataset.addBestBet));
-  if (!candidate || !["APTO", "APTO CON PRECAUCIÓN"].includes(candidate.classification)) return;
-  appendPickToParlay(bestBetCandidateToLeg(candidate), "Mejor apuesta agregada a Mi parlay.");
+  if (!candidate) return;
+  appendPickToParlay(bestBetCandidateToLeg(candidate), `Pick de Mejores apuestas agregado (${candidate.classification}).`);
 });
 elements.favoriteTeamsList.addEventListener("click", (event) => {
   const refresh = event.target.closest("[data-refresh-favorite-team]");

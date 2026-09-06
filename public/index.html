@@ -167,9 +167,9 @@
           Busca partidos programados y pulsa &ldquo;Analizar partidos&rdquo;.
         </div>
         <div id="best-bets-controls" class="best-bets-controls" hidden>
-          <label>Clasificaci&oacute;n<select id="best-bets-classification"><option value="all">Todas</option><option value="APTO">Apto</option><option value="APTO CON PRECAUCI&Oacute;N">Apto con precauci&oacute;n</option><option value="OBSERVAR">Observar</option><option value="DESCARTADO">Descartado</option></select></label>
-          <label>Liga<select id="best-bets-league"><option value="all">Todas</option></select></label>
-          <label>Mercado<select id="best-bets-market"><option value="all">Todos</option></select></label>
+          <details class="best-bets-filter"><summary data-filter-label="Clasificaci&oacute;n">Clasificaci&oacute;n: Todas</summary><div id="best-bets-classification" class="best-bets-filter__options" role="group" aria-label="Filtrar por clasificaci&oacute;n"></div></details>
+          <details class="best-bets-filter"><summary data-filter-label="Liga">Liga: Todas</summary><div id="best-bets-league" class="best-bets-filter__options" role="group" aria-label="Filtrar por liga"></div></details>
+          <details class="best-bets-filter"><summary data-filter-label="Mercado">Mercado: Todos</summary><div id="best-bets-market" class="best-bets-filter__options" role="group" aria-label="Filtrar por mercado"></div></details>
         </div>
         <div id="best-bets-content" class="best-bets-content"></div>
       </section>
@@ -709,6 +709,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260816-individual-test-mode-v1"></script>
+    <script type="module" src="app.js?v=20260906-best-bets-multiselect-v1"></script>
   </body>
 </html>
