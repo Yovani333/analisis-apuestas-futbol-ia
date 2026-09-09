@@ -552,9 +552,17 @@ export function normalizeFixture(item, league) {
 }
 
 function matchesConfiguredRound(item, league) {
-  if (!league.roundIncludes?.length) return true;
   const round = String(item.league?.round || "").toLowerCase();
-  return league.roundIncludes.some((value) => round.includes(String(value).toLowerCase()));
+  if (league.roundIncludes?.length
+    && !league.roundIncludes.some((value) => round.includes(String(value).toLowerCase()))) return false;
+  if (league.roundExcludes?.some((value) => round.includes(String(value).toLowerCase()))) return false;
+  return true;
+}
+
+export function resolveConfiguredLeagueForFixture(item) {
+  const candidates = ALLOWED_LEAGUES.filter((league) => league.apiId === item?.league?.id
+    || league.apiNames.some((name) => name.toLowerCase() === item?.league?.name?.toLowerCase()));
+  return candidates.find((league) => matchesConfiguredRound(item, league)) || candidates[0] || null;
 }
 
 async function mapWithConcurrency(items, limit, worker) {
@@ -952,7 +960,7 @@ export async function getPlayerGoalFixtureDataset(fixtureId) {
   const fixtureRows = await apiRequest("/fixtures", { id: fixtureId, timezone: PACIFIC_TIME_ZONE }, LIVE_CACHE_TTL);
   const base = fixtureRows[0];
   if (!base) throw new AppError("Fixture no encontrado.", 404, "FIXTURE_NOT_FOUND");
-  const leagueConfigBase = ALLOWED_LEAGUES.find((league) => league.apiId === base.league?.id || league.apiNames.some((name) => name.toLowerCase() === base.league?.name?.toLowerCase()));
+  const leagueConfigBase = resolveConfiguredLeagueForFixture(base);
   const resolvedLeague = leagueConfigBase ? cachedLeague(leagueConfigBase.slug) : null;
   const leagueConfig = leagueConfigBase ? { ...leagueConfigBase, seasons: resolvedLeague?.seasons || [] } : null;
   if (!leagueConfig) throw new AppError("El fixture no pertenece a una liga permitida.", 403, "FIXTURE_LEAGUE_NOT_ALLOWED");
@@ -985,10 +993,7 @@ async function buildFixtureDataset(fixtureId, { forceRefresh = false, includeHis
     };
   }
 
-  const leagueConfigBase = ALLOWED_LEAGUES.find((league) =>
-    league.country.toLowerCase() === base.league.country?.toLowerCase() &&
-    league.apiNames.some((name) => name.toLowerCase() === base.league.name?.toLowerCase())
-  );
+  const leagueConfigBase = resolveConfiguredLeagueForFixture(base);
   const resolvedLeague = leagueConfigBase ? cachedLeague(leagueConfigBase.slug) : null;
   const leagueConfig = leagueConfigBase ? { ...leagueConfigBase, apiId: base.league.id, seasons: resolvedLeague?.seasons || [] } : null;
   if (!leagueConfig) throw new AppError("El fixture no pertenece a una liga permitida.", 403, "FIXTURE_LEAGUE_NOT_ALLOWED");

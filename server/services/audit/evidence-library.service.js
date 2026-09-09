@@ -16,7 +16,8 @@ function reportSnapshot(report) {
   const [home = "Local", away = "Visitante"] = String(report.match || "").split(/\s+vs\s+/i);
   const leagueId = Number(String(report.competition || "").match(/ID\s+(\d+)/i)?.[1]) || null;
   const leagueName = String(report.competition || "").replace(/\s*\(ID\s+\d+\)\s*$/i, "").trim() || "No disponible";
-  const leagueSlug = ALLOWED_LEAGUES.find((league) => Number(league.apiId) === leagueId)?.slug || "";
+  const leagueSlug = (ALLOWED_LEAGUES.find((league) => league.name.toLowerCase() === leagueName.toLowerCase())
+    || ALLOWED_LEAGUES.find((league) => Number(league.apiId) === leagueId))?.slug || "";
   return {
     version: 2,
     id: `library:${report.fixtureId}:${Date.parse(report.capturedAt || "") || 0}`,

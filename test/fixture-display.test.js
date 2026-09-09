@@ -6,6 +6,7 @@ import {
   chooseSeason,
   isCoverageAvailable,
   resolveApiResponseCacheTtl,
+  resolveConfiguredLeagueForFixture,
   resolveFixtureOddsRequest,
   searchFixtures,
   scheduledDatasetNeedsRevalidation,
@@ -213,6 +214,31 @@ test("filtra únicamente rondas clasificatorias para los selectores UEFA", async
   });
   assert.equal(fixtures.length, 1);
   assert.equal(fixtures[0].id, "77");
+});
+
+test("Champions League principal excluye clasificatorias y conserva la fase de liga", async () => {
+  const qualifying = providerFixture();
+  qualifying.league = { id: 2, season: 2026, round: "1st Qualifying Round" };
+  const leagueStage = providerFixture();
+  leagueStage.fixture = { ...leagueStage.fixture, id: 78 };
+  leagueStage.league = { id: 2, season: 2026, round: "League Stage - 1" };
+  const fixtures = await searchFixtures({ leagues: ["uefa-champions-league"], season: 2026, dateFrom: "2026-09-08", dateTo: "2026-09-08", status: "all" }, {
+    request: async () => [qualifying, leagueStage],
+    leagueResolver: async () => ({ slug: "uefa-champions-league", name: "Champions League", countryLabel: "UEFA", apiId: 2, competitionType: "cup", roundExcludes: ["Qualifying Round", "Preliminary Round"], seasons: [] })
+  });
+  assert.equal(fixtures.length, 1);
+  assert.equal(fixtures[0].id, "78");
+  assert.equal(fixtures[0].leagueName, "Champions League");
+  assert.equal(fixtures[0].competitionScope, "cup");
+});
+
+test("resuelve correctamente el detalle de Champions según su ronda", () => {
+  const qualifying = providerFixture();
+  qualifying.league = { id: 2, name: "UEFA Champions League", season: 2026, round: "2nd Qualifying Round" };
+  const leagueStage = providerFixture();
+  leagueStage.league = { id: 2, name: "UEFA Champions League", season: 2026, round: "League Stage - 1" };
+  assert.equal(resolveConfiguredLeagueForFixture(qualifying)?.slug, "uefa-champions-qualifying");
+  assert.equal(resolveConfiguredLeagueForFixture(leagueStage)?.slug, "uefa-champions-league");
 });
 
 test("la matriz de cobertura permite degradar endpoints sin inventar datos", () => {

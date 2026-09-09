@@ -16,6 +16,7 @@ export const ALLOWED_LEAGUES = Object.freeze([
   { slug: "eliteserien", name: "Eliteserien", country: "Noruega", code: "NOR", region: "Europe", confederation: "UEFA", competitionType: "league" },
   { slug: "conmebol-libertadores", name: "Copa Libertadores", country: "CONMEBOL", code: "LIB", region: "International Clubs", confederation: "CONMEBOL", competitionType: "cup" },
   { slug: "conmebol-sudamericana", name: "Copa Sudamericana", country: "CONMEBOL", code: "SUD", region: "International Clubs", confederation: "CONMEBOL", competitionType: "cup" },
+  { slug: "uefa-champions-league", name: "Champions League", country: "UEFA", code: "UCL", region: "International Clubs", confederation: "UEFA", competitionType: "cup" },
   { slug: "uefa-champions-qualifying", name: "Clasificación Champions League", country: "UEFA", code: "UCL-Q", region: "International Clubs", confederation: "UEFA", competitionType: "qualifying" },
   { slug: "uefa-europa-qualifying", name: "Clasificación Europa League", country: "UEFA", code: "UEL-Q", region: "International Clubs", confederation: "UEFA", competitionType: "qualifying" },
   { slug: "uefa-conference-qualifying", name: "Clasificación Conference League", country: "UEFA", code: "UECL-Q", region: "International Clubs", confederation: "UEFA", competitionType: "qualifying" }

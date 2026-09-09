@@ -1,4 +1,4 @@
-import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260712-expanded-competitions-v1";
+import { ALLOWED_LEAGUES, DATA_CATEGORIES, MOCK_FIXTURES } from "./mock-data.js?v=20260908-champions-league-v1";
 import { footballDataService } from "./services.js?v=20260805-best-bets-v1";
 import { applyAnalysisTiming, resolveAnalysisTiming } from "./analysis-timing.js?v=20260630-timing";
 import {
@@ -917,6 +917,7 @@ function handleGuideModuleToggle(details) {
 function competitionLeagues(value = elements.competition.value) {
   if (value === "world-cup") return ["world-cup"];
   if (value === "liga-mx") return ["liga-mx"];
+  if (value === "uefa-champions-league") return ["uefa-champions-league"];
   if (value === "americas") return ALLOWED_LEAGUES.filter((league) => league.region === "Americas").map((league) => league.slug);
   if (value === "europe") return ALLOWED_LEAGUES.filter((league) => league.region === "Europe").map((league) => league.slug);
   if (value === "international-clubs") return ALLOWED_LEAGUES.filter((league) => league.region === "International Clubs").map((league) => league.slug);

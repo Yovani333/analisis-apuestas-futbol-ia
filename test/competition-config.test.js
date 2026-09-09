@@ -8,11 +8,11 @@ import { buildPickAnalysisCollection } from "../server/services/pick-analysis-co
 const expected = new Map([
   ["mls", 253], ["brasileirao-serie-a", 71], ["liga-profesional-argentina", 128], ["liga-mx-femenil", 673],
   ["liga-expansion-mx", 263], ["eredivisie", 88], ["allsvenskan", 113], ["eliteserien", 103],
-  ["conmebol-libertadores", 13], ["conmebol-sudamericana", 11], ["uefa-champions-qualifying", 2],
+  ["conmebol-libertadores", 13], ["conmebol-sudamericana", 11], ["uefa-champions-league", 2], ["uefa-champions-qualifying", 2],
   ["uefa-europa-qualifying", 3], ["uefa-conference-qualifying", 848]
 ]);
 
-test("registra los trece IDs oficiales sin duplicar slugs", () => {
+test("registra los IDs oficiales sin duplicar slugs", () => {
   assert.equal(new Set(BACKEND_LEAGUES.map((league) => league.slug)).size, BACKEND_LEAGUES.length);
   for (const [slug, apiId] of expected) {
     const league = BACKEND_LEAGUES.find((item) => item.slug === slug);
@@ -34,6 +34,13 @@ test("clasificatorias UEFA comparten ID oficial pero exigen filtro de ronda", ()
     assert.equal(league.competitionType, "qualifying");
     assert.deepEqual(league.roundIncludes, ["Qualifying Round"]);
   }
+});
+
+test("Champions League principal comparte ID y excluye rondas clasificatorias", () => {
+  const league = BACKEND_LEAGUES.find((item) => item.slug === "uefa-champions-league");
+  assert.equal(league.apiId, 2);
+  assert.equal(league.competitionType, "cup");
+  assert.deepEqual(league.roundExcludes, ["Qualifying Round", "Preliminary Round"]);
 });
 
 test("cada competición nueva entra al buscador y a la recopilación genérica", async (context) => {
