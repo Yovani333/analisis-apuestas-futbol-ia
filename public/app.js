@@ -21,6 +21,7 @@ import { evaluateRecentFormRecommendation } from "./recent-form-recommendation.j
 import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=20260725-xg-btts-v2";
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
 import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260906-best-bets-multiselect-v1";
+import { buildStatisticalAssistantReport, calculateOutcome1x2Performance } from "./betting-insights.js?v=20260910-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -70,7 +71,7 @@ const state = {
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
-  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [] }),
+  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [], favoriteLeagues: [], sidebarCollapsed: false }),
   currentView: "dashboard",
   hasSearched: false,
   isSearching: false,
@@ -245,6 +246,18 @@ const elements = {
   testParlaysSection: document.querySelector("#test-parlays-section"),
   trashResultsSection: document.querySelector("#trash-results-section")
 };
+
+Object.assign(elements, {
+  saveFavoriteLeagues: document.querySelector("#save-favorite-leagues"),
+  applyFavoriteLeagues: document.querySelector("#apply-favorite-leagues"),
+  favoriteLeagueCount: document.querySelector("#favorite-league-count"),
+  outcome1x2Section: document.querySelector("#outcome-1x2-section"),
+  outcome1x2Performance: document.querySelector("#outcome-1x2-performance"),
+  assistantMonth: document.querySelector("#assistant-month"),
+  assistantAllHistory: document.querySelector("#assistant-all-history"),
+  runStatisticalAssistant: document.querySelector("#run-statistical-assistant"),
+  statisticalAssistantOutput: document.querySelector("#statistical-assistant-output")
+});
 
 Object.assign(elements, {
   simulationCompetition: document.querySelector("#simulation-competition"),
@@ -721,7 +734,7 @@ function clearLocalAccountData() {
     state.evidenceSnapshots = [];
     state.evidenceLibrary = [];
     state.alerts = [];
-    state.preferences = { theme: state.preferences.theme || "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, parlayDraftIsTest: false };
+    state.preferences = { theme: state.preferences.theme || "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [], favoriteLeagues: [], sidebarCollapsed: false, parlayDraftIsTest: false };
     saveParlayDraft([]);
     saveSavedPicks([]);
     saveSavedParlays([]);
@@ -731,6 +744,8 @@ function clearLocalAccountData() {
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(state.preferences));
     elements.accountName.value = "";
     elements.accountDailyLimit.value = "none";
+    updateFavoriteLeagueControls();
+    setDesktopSidebarCollapsed(false, { persist: false });
     renderParlayDraft(); renderSavedPicks(); renderSavedParlays(); renderTestParlays(); renderAuditFixtureOptions();
   } finally { state.cloudApplying = false; }
 }
@@ -845,6 +860,36 @@ function selectedLeagueSlugs() {
   return [...elements.form.querySelectorAll('input[name="league"]:checked')].map((input) => input.value);
 }
 
+function favoriteLeagueSlugs() {
+  const allowed = new Set(ALLOWED_LEAGUES.map((league) => league.slug));
+  return [...new Set(Array.isArray(state.preferences.favoriteLeagues) ? state.preferences.favoriteLeagues : [])].filter((slug) => allowed.has(slug));
+}
+
+function updateFavoriteLeagueControls() {
+  const count = favoriteLeagueSlugs().length;
+  elements.favoriteLeagueCount.textContent = `${count} favorita${count === 1 ? "" : "s"}`;
+  elements.applyFavoriteLeagues.disabled = count === 0;
+}
+
+function saveFavoriteLeagueSelection() {
+  const selected = selectedLeagueSlugs();
+  if (!selected.length) return showNotice("Selecciona al menos una liga antes de guardar tus favoritas.");
+  state.preferences.favoriteLeagues = selected;
+  state.preferences.favoriteLeaguesUpdatedAt = new Date().toISOString();
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
+  updateFavoriteLeagueControls();
+  showNotice(`${selected.length} liga${selected.length === 1 ? "" : "s"} guardada${selected.length === 1 ? "" : "s"} como favoritas.`);
+}
+
+function applyFavoriteLeagueSelection() {
+  const favorites = new Set(favoriteLeagueSlugs());
+  if (!favorites.size) return showNotice("Todavía no hay ligas favoritas guardadas.");
+  elements.competition.value = "favorite-leagues";
+  elements.form.querySelectorAll('input[name="league"]').forEach((input) => { input.checked = favorites.has(input.value); });
+  updateLeagueCount();
+  showNotice("Filtro de ligas favoritas aplicado.");
+}
+
 function pickSignalClass(pick = {}) {
   const odds = Number(pick.decimalOdds ?? pick.cuota_decimal);
   const ev = Number(pick.expectedValuePct ?? pick.valor_esperado);
@@ -915,6 +960,7 @@ function handleGuideModuleToggle(details) {
 }
 
 function competitionLeagues(value = elements.competition.value) {
+  if (value === "favorite-leagues") return favoriteLeagueSlugs();
   if (value === "world-cup") return ["world-cup"];
   if (value === "liga-mx") return ["liga-mx"];
   if (value === "uefa-champions-league") return ["uefa-champions-league"];
@@ -3318,6 +3364,12 @@ function updateSavedDateFilterStatus() {
   elements.clearSavedDateFilter.textContent = state.savedDateFilter ? "Mostrar todas" : "Ocultar";
 }
 
+function outcomeProbabilitySnapshotHtml(pick = {}) {
+  const probabilities = pick.outcomeProbabilities;
+  if (pick.sourceModule !== "outcome_1x2" || !probabilities) return "";
+  return `<small class="outcome-probability-snapshot"><b>1X2 congelado:</b> ${escapeHtml(pick.home || "Local")} ${displayValue(probabilities.home)}% · Empate ${displayValue(probabilities.draw)}% · ${escapeHtml(pick.away || "Visitante")} ${displayValue(probabilities.away)}%</small>`;
+}
+
 function renderSavedPicks() {
   const activePicks = activeSavedPicks();
   const visiblePicks = filterPicksByFixtureDate(activePicks, state.savedDateFilter);
@@ -3336,7 +3388,7 @@ function renderSavedPicks() {
     <div><span>${escapeHtml(pick.league || "Competición")}</span><strong>${escapeHtml(pick.home)} vs ${escapeHtml(pick.away)}</strong><small>${escapeHtml(pick.date || "Fecha no disponible")} · ${escapeHtml(normalizedSavedStatus(pick.fixtureStatus))}${savedLegScoreHtml(pick)}</small></div>
     <div><span>Selección</span><strong>${escapeHtml(pick.selection)}</strong><small>${escapeHtml(pick.market)}</small></div>
     <div class="saved-market-metrics"><span>Cuota<strong>${displayValue(pick.originalOdds ?? pick.decimalOdds)}</strong></span><span>Actualizada${oddsUpdateHtml(pick)}</span><span>Implícita<strong>${displayValue(pick.impliedProbability)}%</strong></span><span>Modelo<strong>${displayValue(pick.modelProbability ?? pick.estimatedProbability)}%</strong></span><span>EV<strong>${displayValue(pick.expectedValue)}%</strong></span></div>
-    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong>${favoriteOrigin ? '<span class="favorite-origin-badge" title="Origen favorito por su historial evaluado" aria-label="Origen favorito por su historial evaluado">⚽ Origen favorito</span>' : ""}<label class="saved-pick-test-toggle" title="Los picks de prueba no afectan los históricos reales"><input type="checkbox" data-pick-test-toggle ${isTestPick(pick) ? "checked" : ""} /><span><strong>Prueba</strong><small>Excluir de estadísticas reales</small></span></label><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick))} ${infoTooltip("pick_origin")}</small><small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
+    <div><span>Resultado</span><strong class="result-badge result-badge--${escapeHtml(pick.result || "pending")}">${escapeHtml(resultLabels[pick.result] || "Pendiente")}</strong>${favoriteOrigin ? '<span class="favorite-origin-badge" title="Origen favorito por su historial evaluado" aria-label="Origen favorito por su historial evaluado">⚽ Origen favorito</span>' : ""}<label class="saved-pick-test-toggle" title="Los picks de prueba no afectan los históricos reales"><input type="checkbox" data-pick-test-toggle ${isTestPick(pick) ? "checked" : ""} /><span><strong>Prueba</strong><small>Excluir de estadísticas reales</small></span></label><label class="saved-pick__result-control">Modificar resultado<select data-pick-result><option value="pending" ${pick.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${pick.result === "won" ? "selected" : ""}>Ganado</option><option value="lost" ${pick.result === "lost" ? "selected" : ""}>Perdido</option><option value="void" ${pick.result === "void" ? "selected" : ""}>Anulado</option></select></label><small>Confianza: ${pick.effectiveConfidenceScore === null ? escapeHtml(pick.confidence || "No disponible") : `${escapeHtml(pick.effectiveConfidenceScore)}% efectiva`} · Origen: ${escapeHtml(pickOriginLabel(pick))} ${infoTooltip("pick_origin")}</small>${outcomeProbabilitySnapshotHtml(pick)}<small class="timing-label">${escapeHtml(pick.analysisTiming.label)}</small>${pick.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(pick.analysisTiming.warning)}</small>` : ""}${pick.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(pick.oddsMovement.warning)}</small>` : ""}</div>
     <button class="button button--danger button--compact" type="button" data-delete-pick>Eliminar</button>
   </article>`; }).join("");
 }
@@ -3486,9 +3538,27 @@ function renderHistoricalValidator() {
     <section class="historical-validator__active"><header><h4>Validación de picks activos</h4><small>La coincidencia exacta exige el mismo origen, mercado y competición.</small></header><div class="historical-validator__list">${activeHtml}</div></section>`;
 }
 
+function renderOutcome1x2Performance() {
+  if (!elements.outcome1x2Performance) return;
+  const rows = calculateOutcome1x2Performance(state.savedPicks, state.savedParlays, { month: state.performanceMonthFilter });
+  elements.outcome1x2Performance.innerHTML = rows.length
+    ? `<header><div><span>${escapeHtml(performanceMonthLabel())}</span><h3>Probabilidad congelada y rendimiento</h3></div><small>Ordenado por respaldo conservador, no por porcentaje bruto.</small></header><div class="origin-performance__table-wrap"><table class="origin-performance__table"><thead><tr><th>Rango</th><th>Individuales</th><th>En parlays</th><th>Ganados</th><th>Perdidos</th><th>Evaluados</th><th>Acierto</th><th>Wilson 95%</th><th>Muestra</th></tr></thead><tbody>${rows.map((row) => `<tr><td data-label="Rango"><strong>${escapeHtml(row.label)}</strong></td><td data-label="Individuales">${row.individual}</td><td data-label="En parlays">${row.parlay}</td><td data-label="Ganados" class="value-positive">${row.won}</td><td data-label="Perdidos" class="value-negative">${row.lost}</td><td data-label="Evaluados">${row.evaluated}</td><td data-label="Acierto">${row.hitRate}%</td><td data-label="Wilson 95%"><strong>${row.conservativeRate}%</strong></td><td data-label="Muestra">${escapeHtml(row.evidenceLevel)}</td></tr>`).join("")}</tbody></table></div>`
+    : '<div class="saved-empty"><h3>Sin muestra 1X2 evaluada</h3><p>Los rangos aparecerán cuando se liquiden picks nuevos del Selector obligatorio 1X2 con su probabilidad congelada.</p></div>';
+}
+
+function renderStatisticalAssistant() {
+  const sections = [...document.querySelectorAll('input[name="assistant-section"]:checked')].map((input) => input.value);
+  if (!sections.length) return showNotice("Selecciona al menos un apartado para analizar.");
+  const month = elements.assistantAllHistory.checked ? "" : elements.assistantMonth.value;
+  const report = buildStatisticalAssistantReport({ picks: state.savedPicks, parlays: state.savedParlays, sections, month });
+  const sectionHtml = report.sections.map((section) => `<section class="assistant-result"><h3>${escapeHtml(section.title)}</h3>${section.rows.length ? `<ol>${section.rows.map((row) => `<li><div><strong>${escapeHtml(row.label)}</strong><small>${row.won} ganados · ${row.lost} perdidos · ${row.evaluated} evaluados</small></div><span><b>${row.hitRate}%</b><small>respaldo ${row.conservativeRate}%</small></span></li>`).join("")}</ol>` : '<p>No existe todavía una muestra mínima de 3 resultados para este cruce.</p>'}${section.insufficient > 0 ? `<small>${section.insufficient} grupo(s) omitidos por muestra insuficiente.</small>` : ""}</section>`).join("");
+  elements.statisticalAssistantOutput.innerHTML = `<div class="assistant-message assistant-message--user"><strong>Consulta</strong><p>${month ? `Periodo ${escapeHtml(month)}` : "Todo el historial"} · ${sections.length} apartado(s).</p></div><div class="assistant-message assistant-message--system"><strong>Lectura histórica</strong><p>Se evaluaron ${report.evaluated} selecciones concluidas. El orden usa el límite inferior de Wilson al 95%, de modo que una muestra pequeña no domina por tener 100% bruto.</p>${sectionHtml}<p class="assistant-caution">Estos resultados ayudan a localizar patrones históricos; no son garantía ni modifican el cálculo de picks.</p></div>`;
+}
+
 function renderOriginPerformance() {
   if (!elements.originPerformance || !elements.originLostPerformance || !elements.originRecommendations || !elements.competitionPerformance) return;
   renderHistoricalValidator();
+  renderOutcome1x2Performance();
   const history = performanceHistoryData();
   const rows = calculateOriginPerformance(history.picks, history.parlays);
   const competitionRows = calculateCompetitionPerformance(history.picks, history.parlays);
@@ -3576,7 +3646,7 @@ function renderSavedParlays() {
       <div class="saved-parlay__legs" ${expanded ? "" : "hidden"}>${parlay.legs.map((storedLeg, index) => { const leg = applyAnalysisTiming(storedLeg); const favoriteOrigin = isActiveSavedPick(leg) && preferredOrigins.has(pickOriginKey(leg)); const countryLabel = leg.country ? ` · ${escapeHtml(leg.country)}` : ""; return `
         <section class="saved-leg saved-leg--${escapeHtml(leg.result)}" data-leg-id="${escapeHtml(leg.id)}">
           <div class="saved-leg__index">${index + 1}</div>
-          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span>${favoriteOrigin ? '<span class="favorite-origin-badge" title="Origen favorito por su historial evaluado" aria-label="Origen favorito por su historial evaluado">⚽ Origen favorito</span>' : ""}<small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}${countryLabel} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${savedLegScoreHtml(leg)}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)} · Origen ${escapeHtml(pickOriginLabel(leg))} ${infoTooltip("pick_origin")}</small>${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
+          <div class="saved-leg__content"><strong>${escapeHtml(leg.selection)}</strong><span>${escapeHtml(leg.market)}</span>${favoriteOrigin ? '<span class="favorite-origin-badge" title="Origen favorito por su historial evaluado" aria-label="Origen favorito por su historial evaluado">⚽ Origen favorito</span>' : ""}<small>${escapeHtml(leg.home)} vs ${escapeHtml(leg.away)} · ${escapeHtml(leg.date)}${countryLabel} · ${escapeHtml(normalizedSavedStatus(leg.fixtureStatus))}${savedLegScoreHtml(leg)}</small><small>Cuota ${displayValue(leg.originalOdds ?? leg.decimalOdds)} · Actualizada ${leg.updatedOdds ?? "Sin actualización"} · Implícita ${displayValue(leg.impliedProbability)}% · Modelo ${displayValue(leg.modelProbability ?? leg.estimatedProbability)}% · EV ${displayValue(leg.expectedValue)}%</small><small>Confianza efectiva: ${leg.effectiveConfidenceScore === null ? escapeHtml(leg.confidence) : `${escapeHtml(leg.effectiveConfidenceScore)}%`} · ${escapeHtml(leg.analysisTiming.label)} · Origen ${escapeHtml(pickOriginLabel(leg))} ${infoTooltip("pick_origin")}</small>${outcomeProbabilitySnapshotHtml(leg)}${leg.analysisTiming.warning ? `<small class="timing-warning">${escapeHtml(leg.analysisTiming.warning)}</small>` : ""}${leg.oddsMovement.changed ? `<small class="timing-warning">${escapeHtml(leg.oddsMovement.warning)}</small>` : ""}</div>
           <div class="saved-leg__controls"><label>Resultado<select data-leg-result><option value="pending" ${leg.result === "pending" ? "selected" : ""}>Pendiente</option><option value="won" ${leg.result === "won" ? "selected" : ""}>Ganada</option><option value="lost" ${leg.result === "lost" ? "selected" : ""}>Perdida</option><option value="void" ${leg.result === "void" ? "selected" : ""}>Anulada</option></select></label><div><button class="button button--secondary button--compact" type="button" data-save-parlay-leg>Guardar</button><button class="button button--danger button--compact" type="button" data-remove-parlay-leg aria-label="Quitar ${escapeHtml(leg.selection)} del parlay">Quitar</button></div></div>
         </section>`; }).join("")}</div>
       <div class="saved-parlay__notes" ${expanded ? "" : "hidden"}><label for="notes-${escapeHtml(parlay.id)}">Notas del resultado</label><textarea id="notes-${escapeHtml(parlay.id)}" data-parlay-notes maxlength="500">${escapeHtml(parlay.notes || "")}</textarea></div>
@@ -3839,6 +3909,7 @@ async function updateSavedParlayResults({ automatic = false, testOnly = false } 
 const sidebar = document.querySelector("#app-sidebar");
 const sidebarToggle = document.querySelector("#sidebar-toggle");
 const sidebarClose = document.querySelector("#sidebar-close");
+const sidebarCollapse = document.querySelector("#sidebar-collapse");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
 
 function setSidebarOpen(open, { restoreFocus = false } = {}) {
@@ -3848,6 +3919,17 @@ function setSidebarOpen(open, { restoreFocus = false } = {}) {
   document.body.classList.toggle("sidebar-open", open);
   if (open) sidebar.querySelector(".main-nav__item--active")?.focus();
   else if (restoreFocus) sidebarToggle.focus();
+}
+
+function setDesktopSidebarCollapsed(collapsed, { persist = true } = {}) {
+  document.body.classList.toggle("sidebar-collapsed", collapsed);
+  sidebarCollapse?.setAttribute("aria-label", collapsed ? "Mostrar menú" : "Ocultar menú");
+  sidebarCollapse?.setAttribute("title", collapsed ? "Mostrar menú" : "Ocultar menú");
+  if (persist) {
+    state.preferences.sidebarCollapsed = collapsed;
+    state.preferences.sidebarCollapsedUpdatedAt = new Date().toISOString();
+    writeLocalJson(PREFERENCES_KEY, state.preferences);
+  }
 }
 
 function switchView(view) {
@@ -4950,6 +5032,7 @@ function outcomeScenarioLeg(key) {
   const scenario = result?.scenarios?.find((item) => item.key === key);
   if (!fixture || !scenario) return null;
   const selectionCodes = { home: "home_win", draw: "draw", away: "away_win" };
+  const probabilityFor = (scenarioKey) => result.scenarios.find((item) => item.key === scenarioKey)?.probabilityPct ?? null;
   return {
     id: `${fixture.id}:outcome:${key}`, fixtureId: fixture.id, league: fixture.leagueName,
     home: fixture.home, away: fixture.away, date: fixture.date, market: "Resultado 1X2",
@@ -4961,6 +5044,8 @@ function outcomeScenarioLeg(key) {
     confidence: `${scenario.footballConfidenceScore}%`, confidenceScore: scenario.footballConfidenceScore,
     risk: scenario.risk, reasoning: scenario.notSelectedReason, requiresReview: scenario.decision !== "apuesta_recomendada",
     sourceModule: "outcome_1x2", source: result.source,
+    outcomeProbabilities: { home: probabilityFor("home"), draw: probabilityFor("draw"), away: probabilityFor("away") },
+    probabilitySnapshotAt: result.generatedAt || new Date().toISOString(),
     supportingData: scenario.supportingData, contradictingData: scenario.contradictingData
   };
 }
@@ -6208,6 +6293,10 @@ elements.clearPerformanceMonthFilter.addEventListener("click", () => {
   elements.performanceMonthFilter.value = "";
   renderOriginPerformance();
 });
+elements.saveFavoriteLeagues.addEventListener("click", saveFavoriteLeagueSelection);
+elements.applyFavoriteLeagues.addEventListener("click", applyFavoriteLeagueSelection);
+elements.runStatisticalAssistant.addEventListener("click", renderStatisticalAssistant);
+elements.assistantAllHistory.addEventListener("change", () => { elements.assistantMonth.disabled = elements.assistantAllHistory.checked; });
 elements.refreshTeamGoalInsights.addEventListener("click", () => {
   renderTeamGoalInsights();
   showNotice("Análisis de equipos goleadores y goleados actualizado con los parlays guardados.");
@@ -6431,6 +6520,7 @@ document.addEventListener("click", (event) => {
     if (["parlays", "tests"].includes(state.savedTab)) state.expandedParlays.clear();
     document.querySelectorAll("[data-saved-tab]").forEach((button) => button.classList.toggle("saved-tab--active", button === savedTab));
     elements.savedIndividualSection.hidden = state.savedTab !== "individual";
+    elements.outcome1x2Section.hidden = state.savedTab !== "outcome-1x2";
     elements.originResultsSection.hidden = state.savedTab !== "origins-won";
     elements.originLostResultsSection.hidden = state.savedTab !== "origins-lost";
     elements.competitionResultsSection.hidden = state.savedTab !== "competitions";
@@ -6443,12 +6533,17 @@ document.addEventListener("click", (event) => {
     elements.testParlaysSection.hidden = state.savedTab !== "tests";
     elements.trashResultsSection.hidden = state.savedTab !== "trash";
     elements.savedDateFilterPanel.hidden = !["individual", "parlays", "tests"].includes(state.savedTab);
-    elements.performanceMonthFilterPanel.hidden = !["origins-won", "origins-lost", "competitions", "types-won", "types-lost", "historical-validator"].includes(state.savedTab);
+    elements.performanceMonthFilterPanel.hidden = !["outcome-1x2", "origins-won", "origins-lost", "competitions", "types-won", "types-lost", "historical-validator"].includes(state.savedTab);
+    if (state.savedTab === "outcome-1x2") renderOutcome1x2Performance();
   }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);
 });
-sidebarToggle.addEventListener("click", () => setSidebarOpen(sidebarToggle.getAttribute("aria-expanded") !== "true"));
+sidebarToggle.addEventListener("click", () => {
+  if (!window.matchMedia("(max-width: 980px)").matches && document.body.classList.contains("sidebar-collapsed")) return setDesktopSidebarCollapsed(false);
+  setSidebarOpen(sidebarToggle.getAttribute("aria-expanded") !== "true");
+});
+sidebarCollapse.addEventListener("click", () => setDesktopSidebarCollapsed(true));
 sidebarClose.addEventListener("click", () => setSidebarOpen(false, { restoreFocus: true }));
 sidebarBackdrop.addEventListener("click", () => setSidebarOpen(false, { restoreFocus: true }));
 document.addEventListener("keydown", (event) => {
@@ -6689,9 +6784,12 @@ async function initializeApp() {
   elements.dateTo.value ||= today;
   elements.savedDateFilter.value = state.savedDateFilter;
   elements.performanceMonthFilter.value = state.performanceMonthFilter;
+  elements.assistantMonth.value = state.performanceMonthFilter;
   elements.competition.value = "all";
   elements.season.value = "auto";
   syncCompetitionCheckboxes();
+  updateFavoriteLeagueControls();
+  setDesktopSidebarCollapsed(Boolean(state.preferences.sidebarCollapsed), { persist: false });
   elements.accountName.value = state.preferences.name || "";
   elements.accountDailyLimit.value = state.preferences.dailyLimit || "none";
   applyTheme(state.preferences.theme || "dark");
@@ -6701,6 +6799,8 @@ async function initializeApp() {
   renderTestParlays();
   applyTeamPerformanceVisibility(teamPerformanceVisible());
   await initializeCloudAccount();
+  updateFavoriteLeagueControls();
+  setDesktopSidebarCollapsed(Boolean(state.preferences.sidebarCollapsed), { persist: false });
   const runtime = await footballDataService.getRuntime();
   if (runtime.mode === "live") await loadEvidenceLibrary();
   const releaseElement = document.querySelector("#site-last-update");

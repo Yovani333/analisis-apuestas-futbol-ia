@@ -30,11 +30,12 @@ const PICK_SYNC_KEYS = new Set([
   "finalScore", "liveScore", "liveMinute", "score", "notes", "addedAt", "savedAt",
   "createdAt", "updatedAt", "lastCheckedAt", "resolvedAt", "trashed", "deletedAt",
   "deletedPermanently", "restoredAt", "removedFromParlayAt", "restoredToParlayAt",
-  "purgedAt", "analysisTiming", "oddsMovement", "goalThreatScore"
+  "purgedAt", "analysisTiming", "oddsMovement", "goalThreatScore", "isTest",
+  "outcomeProbabilities", "probabilitySnapshotAt"
 ]);
 const PARLAY_SYNC_KEYS = new Set([
   "id", "name", "createdAt", "updatedAt", "result", "notes", "collapsed",
-  "lastCheckedAt", "trashed", "deletedAt", "deletedPermanently", "restoredAt"
+  "lastCheckedAt", "trashed", "deletedAt", "deletedPermanently", "restoredAt", "isTest"
 ]);
 const AUDIT_SUMMARY_KEYS = new Set([
   "evaluablePicks", "decisivePicks", "discardedPicks", "counterfactualAssessable",

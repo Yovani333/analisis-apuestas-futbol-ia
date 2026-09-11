@@ -9,7 +9,7 @@ const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "u
 
 test("el menu lateral agrupa las vistas en un orden profesional", () => {
   assert.match(html, /id="app-sidebar"[\s\S]*id="nav-main-title">Principal<[\s\S]*id="nav-intelligence-title">Inteligencia<[\s\S]*id="nav-tracking-title">Seguimiento<[\s\S]*id="nav-account-title">Cuenta</);
-  const views = ["dashboard", "simulation", "live", "transparency", "guide", "markets", "pick-collection", "saved", "favorite-teams", "audit", "account"];
+  const views = ["dashboard", "simulation", "live", "transparency", "guide", "markets", "pick-collection", "statistical-assistant", "saved", "favorite-teams", "audit", "account"];
   const positions = views.map((view) => html.indexOf(`data-view="${view}"`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((a, b) => a - b), positions);
@@ -29,10 +29,12 @@ test("el menu lateral es fijo en escritorio y funciona como cajon accesible en m
   assert.match(html, /id="sidebar-toggle"[^>]+aria-controls="app-sidebar"[^>]+aria-expanded="false"/);
   assert.match(html, /id="sidebar-backdrop"[^>]+hidden/);
   assert.match(styles, /--sidebar-width:\s*252px/);
-  assert.match(styles, /@media \(min-width: 981px\)[\s\S]*body \{ padding-left: var\(--sidebar-width\); \}[\s\S]*\.app-header \{[\s\S]*position: fixed/);
+  assert.match(styles, /@media \(min-width: 981px\)[\s\S]*body \{ padding-left: var\(--sidebar-width\);[\s\S]*\.app-header \{[\s\S]*position: fixed/);
   assert.match(styles, /@media \(max-width: 980px\)[\s\S]*transform: translateX\(-104%\)[\s\S]*\.app-header\.sidebar-open \{ transform: translateX\(0\); \}/);
   assert.match(app, /function setSidebarOpen\(open/);
   assert.match(app, /event\.key === "Escape"/);
+  assert.match(html, /id="sidebar-collapse"[^>]+aria-label="Ocultar menú"/);
+  assert.match(styles, /body\.sidebar-collapsed \.app-header \{ transform: translateX\(-105%\); \}/);
   assert.match(html, /id="theme-toggle"[\s\S]*class="nav-label">Modo oscuro/);
   assert.match(app, /themeToggle\.querySelector\("\.nav-label"\)\.textContent/);
 });
@@ -246,7 +248,7 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260816-goal-interval-half-v1/);
+  assert.match(html, /styles\.css\?v=20260910-insights-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
 });
@@ -304,6 +306,16 @@ test("Mis apuestas incluye parlays de prueba aislados", () => {
   assert.match(app, /Postergado/);
   assert.match(app, /Cancelado/);
   assert.doesNotMatch(app, /data-test-fixture-status/);
+});
+
+test("ligas favoritas, asistente y rendimiento 1X2 quedan conectados sin consultas nuevas", () => {
+  assert.match(html, /id="save-favorite-leagues"[\s\S]*id="apply-favorite-leagues"/);
+  assert.match(html, /option value="favorite-leagues">Ligas favoritas/);
+  assert.match(html, /data-view-panel="statistical-assistant"[\s\S]*id="run-statistical-assistant"/);
+  assert.match(html, /data-saved-tab="outcome-1x2"[\s\S]*id="outcome-1x2-performance"/);
+  assert.match(app, /outcomeProbabilities: \{ home: probabilityFor\("home"\), draw: probabilityFor\("draw"\), away: probabilityFor\("away"\) \}/);
+  assert.match(app, /buildStatisticalAssistantReport\(\{ picks: state\.savedPicks, parlays: state\.savedParlays/);
+  assert.doesNotMatch(app.slice(app.indexOf("function renderStatisticalAssistant"), app.indexOf("function renderOriginPerformance")), /footballDataService|fetch\(/);
 });
 
 test("Picks individuales permite marcar cada selección como prueba", () => {

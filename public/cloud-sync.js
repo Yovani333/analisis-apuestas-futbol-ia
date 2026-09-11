@@ -38,7 +38,8 @@ const PICK_SYNC_KEYS = new Set([
   "finalScore", "liveScore", "liveMinute", "score", "notes", "addedAt", "savedAt",
   "createdAt", "updatedAt", "lastCheckedAt", "resolvedAt", "trashed", "deletedAt",
   "deletedPermanently", "restoredAt", "removedFromParlayAt", "restoredToParlayAt",
-  "purgedAt", "analysisTiming", "oddsMovement", "goalThreatScore", "isTest"
+  "purgedAt", "analysisTiming", "oddsMovement", "goalThreatScore", "isTest",
+  "outcomeProbabilities", "probabilitySnapshotAt"
 ]);
 const PARLAY_SYNC_KEYS = new Set([
   "id", "name", "createdAt", "updatedAt", "result", "notes", "collapsed",
@@ -155,6 +156,14 @@ function mergePreferences(local = {}, remote = {}) {
   if (local.theme && (localThemeUpdatedAt > remoteThemeUpdatedAt || (localThemeUpdatedAt > 0 && localThemeUpdatedAt === remoteThemeUpdatedAt))) {
     merged.theme = local.theme;
     merged.themeUpdatedAt = local.themeUpdatedAt || remote.themeUpdatedAt || null;
+  }
+  if (timestamp(local.favoriteLeaguesUpdatedAt) >= timestamp(remote.favoriteLeaguesUpdatedAt) && local.favoriteLeaguesUpdatedAt) {
+    merged.favoriteLeagues = Array.isArray(local.favoriteLeagues) ? [...local.favoriteLeagues] : [];
+    merged.favoriteLeaguesUpdatedAt = local.favoriteLeaguesUpdatedAt;
+  }
+  if (timestamp(local.sidebarCollapsedUpdatedAt) >= timestamp(remote.sidebarCollapsedUpdatedAt) && local.sidebarCollapsedUpdatedAt) {
+    merged.sidebarCollapsed = Boolean(local.sidebarCollapsed);
+    merged.sidebarCollapsedUpdatedAt = local.sidebarCollapsedUpdatedAt;
   }
   if (timestamp(local.parlayDraftUpdatedAt) >= timestamp(remote.parlayDraftUpdatedAt) && local.parlayDraftUpdatedAt) {
     merged.parlayDraftUpdatedAt = local.parlayDraftUpdatedAt;
