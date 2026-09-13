@@ -22,7 +22,7 @@ import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=2026
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
 import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260906-best-bets-multiselect-v1";
 import { buildStatisticalAssistantReport, calculateOutcome1x2Performance } from "./betting-insights.js?v=20260910-v1";
-import { calculateVenueFormSignal } from "./venue-form-signal.js?v=20260913-v1";
+import { calculateVenueFormSignal } from "./venue-form-signal.js?v=20260913-h2h-context-v2";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -1663,12 +1663,22 @@ function venueFormSignalHtml(fixture, league, side) {
     side,
     leagueId: fixture.leagueId ?? fixture.league?.id ?? null,
     leagueName: fixture.leagueName || league.name,
-    competitionType: league.competitionType
+    competitionType: league.competitionType,
+    h2hMatches: fixture.researchData?.h2h?.matches || [],
+    currentFixtureId: fixture.id,
+    currentFixtureDate: fixture.utcDateTime || fixture.date,
+    currentHomeTeam: { id: fixture.homeTeamId, name: fixture.home },
+    currentAwayTeam: { id: fixture.awayTeamId, name: fixture.away }
   });
   if (!['positive', 'negative'].includes(signal.signal)) return "";
   const favorable = signal.signal === "positive";
   const venueLabel = side === "home" ? "como local" : "como visitante";
-  const title = `${favorable ? "Tendencia favorable" : "Tendencia desfavorable"} ${venueLabel}: ${signal.weightedWinRatePct}% victorias, ${signal.weightedDrawRatePct}% empates y ${signal.weightedLossRatePct}% derrotas ponderadas en ${signal.sampleSize} partidos de ${signal.competitionScope}.`;
+  const h2hEffectLabel = signal.h2hEffect === "confirms" ? "confirma"
+    : signal.h2hEffect === "contradicts" ? "contradice" : "no confirma ni contradice";
+  const h2hNote = signal.h2hApplied
+    ? ` H2H comparable (${signal.h2hSampleSize}): ${signal.h2hWeightedWinRatePct}% victorias y ${signal.h2hWeightedLossRatePct}% derrotas; ${h2hEffectLabel} la forma por sede. Mezcla: 75% sede y 25% H2H.`
+    : " H2H no aplicado por falta de muestra comparable; la lectura usa 100% la forma por sede.";
+  const title = `${favorable ? "Tendencia favorable" : "Tendencia desfavorable"} ${venueLabel}: ${signal.venueWeightedWinRatePct}% victorias, ${signal.venueWeightedDrawRatePct}% empates y ${signal.venueWeightedLossRatePct}% derrotas ponderadas en ${signal.sampleSize} partidos de ${signal.competitionScope}.${h2hNote}`;
   return `<span class="venue-form-signal venue-form-signal--${favorable ? "positive" : "negative"}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"></span>`;
 }
 
@@ -1756,7 +1766,7 @@ function renderMatches() {
       <span>Mostrando ${state.fixtures.length} de ${state.fixtures.length} partidos</span>
       <span>Fuente: ${state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "demostración sintética"} · Horario del Pacífico (PT)</span>
       ${state.fixtures.some((fixture) => fixture.favorite) ? "<span>Etiqueta Favorito 1X2 = favorito estadístico del proveedor; no es una votación pública.</span>" : ""}
-      <span class="venue-form-legend"><i class="venue-form-signal venue-form-signal--positive"></i>Gana con frecuencia en esta sede <i class="venue-form-signal venue-form-signal--negative"></i>Pierde con frecuencia. Solo misma competición y muestra suficiente.</span>
+      <span class="venue-form-legend"><i class="venue-form-signal venue-form-signal--positive"></i>Gana con frecuencia en esta sede <i class="venue-form-signal venue-form-signal--negative"></i>Pierde con frecuencia. Misma competición; un H2H comparable aporta como máximo 25%.</span>
     </div>`;
 }
 
