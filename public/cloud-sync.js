@@ -161,6 +161,10 @@ function mergePreferences(local = {}, remote = {}) {
     merged.favoriteLeagues = Array.isArray(local.favoriteLeagues) ? [...local.favoriteLeagues] : [];
     merged.favoriteLeaguesUpdatedAt = local.favoriteLeaguesUpdatedAt;
   }
+  if (timestamp(local.favoriteLeagueFiltersUpdatedAt) >= timestamp(remote.favoriteLeagueFiltersUpdatedAt) && local.favoriteLeagueFiltersUpdatedAt) {
+    merged.favoriteLeagueFilters = Array.isArray(local.favoriteLeagueFilters) ? local.favoriteLeagueFilters.map((filter) => ({ ...filter, leagues: [...(filter.leagues || [])] })) : [];
+    merged.favoriteLeagueFiltersUpdatedAt = local.favoriteLeagueFiltersUpdatedAt;
+  }
   if (timestamp(local.sidebarCollapsedUpdatedAt) >= timestamp(remote.sidebarCollapsedUpdatedAt) && local.sidebarCollapsedUpdatedAt) {
     merged.sidebarCollapsed = Boolean(local.sidebarCollapsed);
     merged.sidebarCollapsedUpdatedAt = local.sidebarCollapsedUpdatedAt;

@@ -258,6 +258,10 @@ button { touch-action: manipulation; }
 .match-card__team:first-child { text-align: right; justify-items: end; }
 .match-card__team:last-child { text-align: left; justify-items: start; }
 .match-card__team--favorite { color: #087f5b; }
+.venue-form-signal { display: block; width: 9px; height: 9px; margin: 0 0 4px; border: 1px solid rgb(255 255 255 / 75%); border-radius: 50%; box-shadow: 0 0 0 2px rgb(15 23 42 / 10%); }
+.match-card__team:first-child .venue-form-signal { margin-left: auto; }
+.venue-form-signal--positive { background: #12a36d; }
+.venue-form-signal--negative { background: #dc3545; }
 .favorite-badge { width: fit-content; padding: 2px 6px; color: #087f5b; font-size: .57rem; font-weight: 800; background: #e8f7f1; border: 1px solid #bde6d6; border-radius: 999px; }
 .match-card__versus { display: grid; min-width: 54px; place-items: center; color: var(--muted); font-size: .62rem; font-weight: 700; text-align: center; text-transform: uppercase; }
 .match-score { color: var(--text); font-size: .86rem; white-space: nowrap; }
@@ -268,6 +272,8 @@ button { touch-action: manipulation; }
 .match-card__actions .button { min-height: 36px; padding: 7px 9px; font-size: .7rem; }
 .match-card__actions .button:disabled { cursor: not-allowed; filter: grayscale(.25); }
 .matches-footer { display: flex; justify-content: space-between; gap: 15px; padding: 13px 3px 0; color: var(--muted); font-size: .72rem; border-top: 1px solid var(--border); }
+.venue-form-legend { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.venue-form-legend .venue-form-signal { display: inline-block; margin: 0 2px 0 6px; flex: 0 0 9px; }
 
 .status-badge { display: inline-flex; align-items: center; width: fit-content; padding: 5px 9px; font-size: .7rem; font-weight: 800; border-radius: 999px; white-space: nowrap; }
 .status-badge--available, .status-badge--complete { color: var(--success); background: var(--success-soft); }
@@ -2848,8 +2854,16 @@ body {
   .app-notice { top: 48px; }
 }
 
-.league-favorites-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.league-favorites-actions { display: grid; grid-template-columns: minmax(150px, 1fr) auto auto; align-items: end; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.league-favorites-actions label { display: grid; gap: 4px; color: var(--muted); font-size: .65rem; font-weight: 800; }
 .league-favorites-actions span { margin-left: auto; color: var(--muted); font-size: .7rem; font-weight: 800; }
+.favorite-league-filters { display: grid; gap: 5px; margin-top: 7px; }
+.favorite-league-filters > small { color: var(--muted); font-size: .66rem; }
+.favorite-league-filter { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 5px; }
+.favorite-league-filter > button:first-child { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; color: var(--text); text-align: left; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.favorite-league-filter strong { overflow: hidden; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+.favorite-league-filter small { flex: 0 0 auto; color: var(--muted); font-size: .62rem; }
+.favorite-league-filter__delete { display: grid; width: 30px; height: 30px; place-items: center; align-self: center; color: var(--danger); background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border)); border-radius: 5px; cursor: pointer; }
 .statistical-assistant-view { display: grid; align-content: start; gap: 12px; }
 .statistical-assistant-view[hidden] { display: none; }
 .assistant-workspace { display: grid; grid-template-columns: minmax(220px, 290px) minmax(0, 1fr); gap: 12px; }
@@ -2873,6 +2887,8 @@ body {
 .outcome-probability-snapshot { display: block; margin-top: 5px; color: var(--accent); }
 
 @media (max-width: 760px) {
+  .league-favorites-actions { grid-template-columns: 1fr 1fr; }
+  .league-favorites-actions label { grid-column: 1 / -1; }
   .assistant-workspace { grid-template-columns: 1fr; }
   .assistant-message--user { margin-left: 0; }
 }

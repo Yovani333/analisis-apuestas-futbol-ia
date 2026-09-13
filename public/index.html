@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Dashboard de análisis responsable de apuestas de fútbol con datos, API-Football y modelos internos." />
     <title>Análisis de Apuestas de Fútbol con Datos</title>
-  <link rel="stylesheet" href="styles.css?v=20260910-insights-v1" />
+  <link rel="stylesheet" href="styles.css?v=20260913-filters-signals-v1" />
   </head>
   <body>
     <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
@@ -83,7 +83,8 @@
           <fieldset class="league-selector">
             <legend>Ligas</legend>
             <div id="league-options"></div>
-            <div class="league-favorites-actions"><button id="save-favorite-leagues" class="button button--secondary button--compact" type="button">Guardar selección</button><button id="apply-favorite-leagues" class="button button--secondary button--compact" type="button">Usar favoritas</button><span id="favorite-league-count">0 favoritas</span></div>
+            <div class="league-favorites-actions"><label for="favorite-league-filter-name">Nombre del filtro<input id="favorite-league-filter-name" type="text" maxlength="40" placeholder="Ej. Ligas del fin de semana" /></label><button id="save-favorite-leagues" class="button button--secondary button--compact" type="button">Guardar filtro</button><span id="favorite-league-count">0 filtros</span></div>
+            <div id="favorite-league-filters" class="favorite-league-filters" aria-label="Filtros de ligas favoritos guardados"><small>Todavía no hay filtros guardados.</small></div>
           </fieldset>
 
           <div class="form-divider"></div>
@@ -728,6 +729,6 @@
       Mi parlay <span id="parlay-fab-count">0</span>
     </button>
 
-    <script type="module" src="app.js?v=20260910-insights-v1"></script>
+    <script type="module" src="app.js?v=20260913-filters-signals-v1"></script>
   </body>
 </html>

@@ -22,6 +22,7 @@ import { evaluateXgBttsRecommendation } from "./xg-btts-recommendation.js?v=2026
 import { buildPerformanceOddsView } from "./performance-odds.js?v=20260724-performance-odds-v1";
 import { bestBetCandidateToLeg, buildBestBetsHistoryRecords, filterBestBetCandidates } from "./best-bets.js?v=20260906-best-bets-multiselect-v1";
 import { buildStatisticalAssistantReport, calculateOutcome1x2Performance } from "./betting-insights.js?v=20260910-v1";
+import { calculateVenueFormSignal } from "./venue-form-signal.js?v=20260913-v1";
 
 const ALERTS_KEY = "football-ai.alerts.v1";
 const PREFERENCES_KEY = "football-ai.preferences.v1";
@@ -71,7 +72,7 @@ const state = {
   expandedParlays: new Set(),
   expandedMatchGroups: new Set(),
   alerts: readLocalJson(ALERTS_KEY, []),
-  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [], favoriteLeagues: [], sidebarCollapsed: false }),
+  preferences: readLocalJson(PREFERENCES_KEY, { theme: "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [], favoriteLeagues: [], favoriteLeagueFilters: [], sidebarCollapsed: false }),
   currentView: "dashboard",
   hasSearched: false,
   isSearching: false,
@@ -249,7 +250,8 @@ const elements = {
 
 Object.assign(elements, {
   saveFavoriteLeagues: document.querySelector("#save-favorite-leagues"),
-  applyFavoriteLeagues: document.querySelector("#apply-favorite-leagues"),
+  favoriteLeagueFilterName: document.querySelector("#favorite-league-filter-name"),
+  favoriteLeagueFilters: document.querySelector("#favorite-league-filters"),
   favoriteLeagueCount: document.querySelector("#favorite-league-count"),
   outcome1x2Section: document.querySelector("#outcome-1x2-section"),
   outcome1x2Performance: document.querySelector("#outcome-1x2-performance"),
@@ -734,7 +736,7 @@ function clearLocalAccountData() {
     state.evidenceSnapshots = [];
     state.evidenceLibrary = [];
     state.alerts = [];
-    state.preferences = { theme: state.preferences.theme || "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [], favoriteLeagues: [], sidebarCollapsed: false, parlayDraftIsTest: false };
+    state.preferences = { theme: state.preferences.theme || "dark", dailyLimit: "none", name: "", alertLive: true, alertScore: true, alertData: true, favoriteTeams: [], favoriteLeagues: [], favoriteLeagueFilters: [], sidebarCollapsed: false, parlayDraftIsTest: false };
     saveParlayDraft([]);
     saveSavedPicks([]);
     saveSavedParlays([]);
@@ -865,29 +867,77 @@ function favoriteLeagueSlugs() {
   return [...new Set(Array.isArray(state.preferences.favoriteLeagues) ? state.preferences.favoriteLeagues : [])].filter((slug) => allowed.has(slug));
 }
 
+function savedFavoriteLeagueFilters() {
+  const allowed = new Set(ALLOWED_LEAGUES.map((league) => league.slug));
+  const filters = (Array.isArray(state.preferences.favoriteLeagueFilters) ? state.preferences.favoriteLeagueFilters : [])
+    .map((filter) => ({
+      id: String(filter.id || ""),
+      name: String(filter.name || "").trim().slice(0, 40),
+      leagues: [...new Set(Array.isArray(filter.leagues) ? filter.leagues : [])].filter((slug) => allowed.has(slug)),
+      updatedAt: filter.updatedAt || null
+    }))
+    .filter((filter) => filter.id && filter.name && filter.leagues.length)
+    .slice(-30);
+  if (!filters.length && favoriteLeagueSlugs().length) return [{ id: "legacy-favorites", name: "Favoritas", leagues: favoriteLeagueSlugs(), updatedAt: state.preferences.favoriteLeaguesUpdatedAt || null }];
+  return filters;
+}
+
 function updateFavoriteLeagueControls() {
-  const count = favoriteLeagueSlugs().length;
-  elements.favoriteLeagueCount.textContent = `${count} favorita${count === 1 ? "" : "s"}`;
-  elements.applyFavoriteLeagues.disabled = count === 0;
+  const filters = savedFavoriteLeagueFilters();
+  elements.favoriteLeagueCount.textContent = `${filters.length} filtro${filters.length === 1 ? "" : "s"}`;
+  elements.favoriteLeagueFilters.innerHTML = filters.length
+    ? filters.map((filter) => `<div class="favorite-league-filter"><button type="button" data-apply-favorite-league-filter="${escapeHtml(filter.id)}"><strong>${escapeHtml(filter.name)}</strong><small>${filter.leagues.length} liga${filter.leagues.length === 1 ? "" : "s"}</small></button><button class="favorite-league-filter__delete" type="button" data-delete-favorite-league-filter="${escapeHtml(filter.id)}" aria-label="Eliminar filtro ${escapeHtml(filter.name)}" title="Eliminar filtro">×</button></div>`).join("")
+    : "<small>Todavía no hay filtros guardados.</small>";
 }
 
 function saveFavoriteLeagueSelection() {
   const selected = selectedLeagueSlugs();
-  if (!selected.length) return showNotice("Selecciona al menos una liga antes de guardar tus favoritas.");
+  const name = elements.favoriteLeagueFilterName.value.trim();
+  if (!name) return showNotice("Escribe un nombre para identificar el filtro.");
+  if (!selected.length) return showNotice("Selecciona al menos una liga antes de guardar el filtro.");
+  const now = new Date().toISOString();
+  const current = savedFavoriteLeagueFilters().filter((filter) => filter.id !== "legacy-favorites");
+  const existing = current.find((filter) => filter.name.toLocaleLowerCase("es") === name.toLocaleLowerCase("es"));
+  const saved = { id: existing?.id || `league-filter-${Date.now()}`, name: name.slice(0, 40), leagues: selected, updatedAt: now };
+  state.preferences.favoriteLeagueFilters = [...current.filter((filter) => filter.id !== saved.id), saved].slice(-30);
   state.preferences.favoriteLeagues = selected;
-  state.preferences.favoriteLeaguesUpdatedAt = new Date().toISOString();
+  state.preferences.favoriteLeaguesUpdatedAt = now;
+  state.preferences.favoriteLeagueFiltersUpdatedAt = now;
   writeLocalJson(PREFERENCES_KEY, state.preferences);
+  elements.favoriteLeagueFilterName.value = "";
   updateFavoriteLeagueControls();
-  showNotice(`${selected.length} liga${selected.length === 1 ? "" : "s"} guardada${selected.length === 1 ? "" : "s"} como favoritas.`);
+  showNotice(`Filtro “${saved.name}” guardado con ${selected.length} liga${selected.length === 1 ? "" : "s"}.`);
 }
 
-function applyFavoriteLeagueSelection() {
-  const favorites = new Set(favoriteLeagueSlugs());
-  if (!favorites.size) return showNotice("Todavía no hay ligas favoritas guardadas.");
+function applyFavoriteLeagueSelection(filterId = "") {
+  const filter = savedFavoriteLeagueFilters().find((item) => item.id === filterId) || savedFavoriteLeagueFilters().at(-1);
+  if (!filter) return showNotice("Todavía no hay filtros de ligas guardados.");
+  const favorites = new Set(filter.leagues);
   elements.competition.value = "favorite-leagues";
   elements.form.querySelectorAll('input[name="league"]').forEach((input) => { input.checked = favorites.has(input.value); });
+  state.preferences.favoriteLeagues = [...favorites];
+  state.preferences.favoriteLeaguesUpdatedAt = new Date().toISOString();
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
   updateLeagueCount();
-  showNotice("Filtro de ligas favoritas aplicado.");
+  showNotice(`Filtro “${filter.name}” aplicado.`);
+}
+
+function deleteFavoriteLeagueFilter(filterId) {
+  const filters = savedFavoriteLeagueFilters();
+  const removed = filters.find((filter) => filter.id === filterId);
+  if (!removed) return;
+  const remaining = filters.filter((filter) => filter.id !== filterId && filter.id !== "legacy-favorites");
+  const sameLeagueSet = (first = [], second = []) => [...first].sort().join("|") === [...second].sort().join("|");
+  const now = new Date().toISOString();
+  state.preferences.favoriteLeagueFilters = remaining;
+  if (filterId === "legacy-favorites" || sameLeagueSet(favoriteLeagueSlugs(), removed.leagues)) {
+    state.preferences.favoriteLeagues = remaining.at(-1)?.leagues || [];
+    state.preferences.favoriteLeaguesUpdatedAt = now;
+  }
+  state.preferences.favoriteLeagueFiltersUpdatedAt = now;
+  writeLocalJson(PREFERENCES_KEY, state.preferences);
+  updateFavoriteLeagueControls();
+  showNotice(`Filtro “${removed.name}” eliminado.`);
 }
 
 function pickSignalClass(pick = {}) {
@@ -1004,7 +1054,11 @@ function applyCompetitionMetadataFilters() {
 }
 
 function syncCompetitionCheckboxes() {
-  if (elements.competition.value === "custom") return;
+  if (elements.competition.value === "custom") {
+    elements.form.querySelectorAll('input[name="league"]').forEach((input) => { input.checked = false; });
+    updateLeagueCount();
+    return;
+  }
   elements.competitionCountry.value = "all";
   elements.competitionConfederation.value = "all";
   elements.competitionType.value = "all";
@@ -1603,6 +1657,21 @@ async function generateBestBetsReport() {
   }
 }
 
+function venueFormSignalHtml(fixture, league, side) {
+  const matches = fixture.preMatch?.[side]?.matches || [];
+  const signal = calculateVenueFormSignal(matches, {
+    side,
+    leagueId: fixture.leagueId ?? fixture.league?.id ?? null,
+    leagueName: fixture.leagueName || league.name,
+    competitionType: league.competitionType
+  });
+  if (!['positive', 'negative'].includes(signal.signal)) return "";
+  const favorable = signal.signal === "positive";
+  const venueLabel = side === "home" ? "como local" : "como visitante";
+  const title = `${favorable ? "Tendencia favorable" : "Tendencia desfavorable"} ${venueLabel}: ${signal.weightedWinRatePct}% victorias, ${signal.weightedDrawRatePct}% empates y ${signal.weightedLossRatePct}% derrotas ponderadas en ${signal.sampleSize} partidos de ${signal.competitionScope}.`;
+  return `<span class="venue-form-signal venue-form-signal--${favorable ? "positive" : "negative"}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"></span>`;
+}
+
 function renderMatches() {
   elements.matchCount.textContent = `${state.fixtures.length} ${state.fixtures.length === 1 ? "partido" : "partidos"}`;
   elements.refreshFixtureStatuses.disabled = state.isRefreshingStatuses || !state.fixtures.some((fixture) => fixture.dataSource === "api-football");
@@ -1653,7 +1722,7 @@ function renderMatches() {
         const favoriteTitle = fixture.favorite ? `${fixture.favorite.note}${probabilitySummary}` : "";
         const teamName = (name, logo, teamId, side, favorite) => {
           const savedFavorite = isFavoriteTeam(state.preferences.favoriteTeams, teamId);
-          return `<div class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${teamCrest(name, logo)}<div><span class="match-card__team-name"><strong>${escapeHtml(name)}</strong><button class="team-favorite-toggle${savedFavorite ? " team-favorite-toggle--active" : ""}" type="button" data-favorite-side="${side}" aria-pressed="${savedFavorite}" aria-label="${savedFavorite ? "Quitar" : "Agregar"} ${escapeHtml(name)} ${savedFavorite ? "de" : "a"} equipos favoritos" title="${savedFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}">★</button></span>${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2${fixture.favorite.percent !== null ? ` · ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</div></div>`;
+          return `<div class="match-card__team${favorite ? " match-card__team--favorite" : ""}">${teamCrest(name, logo)}<div>${venueFormSignalHtml(fixture, league, side)}<span class="match-card__team-name"><strong>${escapeHtml(name)}</strong><button class="team-favorite-toggle${savedFavorite ? " team-favorite-toggle--active" : ""}" type="button" data-favorite-side="${side}" aria-pressed="${savedFavorite}" aria-label="${savedFavorite ? "Quitar" : "Agregar"} ${escapeHtml(name)} ${savedFavorite ? "de" : "a"} equipos favoritos" title="${savedFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}">★</button></span>${favorite ? `<span class="favorite-badge" title="${escapeHtml(favoriteTitle)}">Favorito 1X2${fixture.favorite.percent !== null ? ` · ${escapeHtml(fixture.favorite.percent)}%` : ""}</span>` : ""}</div></div>`;
         };
         const quality = fixtureQualityView(fixture);
         return `
@@ -1686,7 +1755,8 @@ function renderMatches() {
     <div class="matches-footer">
       <span>Mostrando ${state.fixtures.length} de ${state.fixtures.length} partidos</span>
       <span>Fuente: ${state.fixtures.some((fixture) => fixture.dataSource === "api-football") ? "API-Football" : "demostración sintética"} · Horario del Pacífico (PT)</span>
-      ${state.fixtures.some((fixture) => fixture.favorite) ? "<span>Verde = favorito estadístico del proveedor; no es una votación pública.</span>" : ""}
+      ${state.fixtures.some((fixture) => fixture.favorite) ? "<span>Etiqueta Favorito 1X2 = favorito estadístico del proveedor; no es una votación pública.</span>" : ""}
+      <span class="venue-form-legend"><i class="venue-form-signal venue-form-signal--positive"></i>Gana con frecuencia en esta sede <i class="venue-form-signal venue-form-signal--negative"></i>Pierde con frecuencia. Solo misma competición y muestra suficiente.</span>
     </div>`;
 }
 
@@ -3932,6 +4002,21 @@ function setDesktopSidebarCollapsed(collapsed, { persist = true } = {}) {
   }
 }
 
+function focusSelectedFixtureOnDashboard() {
+  const fixture = selectedFixture();
+  if (!fixture) return false;
+  if (fixture.leagueSlug && !state.expandedMatchGroups.has(fixture.leagueSlug)) {
+    state.expandedMatchGroups.add(fixture.leagueSlug);
+    renderMatches();
+  }
+  window.requestAnimationFrame(() => {
+    const card = [...elements.matchesList.querySelectorAll("[data-fixture-id]")]
+      .find((item) => String(item.dataset.fixtureId) === String(fixture.id));
+    card?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  });
+  return true;
+}
+
 function switchView(view) {
   state.currentView = view;
   document.querySelectorAll("[data-view-panel]").forEach((panel) => { panel.hidden = panel.dataset.viewPanel !== view; });
@@ -3961,7 +4046,7 @@ function switchView(view) {
     renderPickCollection(state.pickCollectionByFixture.get(selectedFixture()?.id));
   }
   if (window.matchMedia("(max-width: 980px)").matches) setSidebarOpen(false);
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (view !== "dashboard" || !focusSelectedFixtureOnDashboard()) window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 const PICK_COLLECTION_MODEL_VERSION = "pick-analysis-snapshot-v1";
@@ -6294,7 +6379,15 @@ elements.clearPerformanceMonthFilter.addEventListener("click", () => {
   renderOriginPerformance();
 });
 elements.saveFavoriteLeagues.addEventListener("click", saveFavoriteLeagueSelection);
-elements.applyFavoriteLeagues.addEventListener("click", applyFavoriteLeagueSelection);
+elements.favoriteLeagueFilters.addEventListener("click", async (event) => {
+  const apply = event.target.closest("[data-apply-favorite-league-filter]");
+  if (apply) return applyFavoriteLeagueSelection(apply.dataset.applyFavoriteLeagueFilter);
+  const remove = event.target.closest("[data-delete-favorite-league-filter]");
+  if (!remove) return;
+  const filter = savedFavoriteLeagueFilters().find((item) => item.id === remove.dataset.deleteFavoriteLeagueFilter);
+  if (!filter || !await confirmDeletion(`El filtro “${filter.name}” se eliminará. Las ligas y los partidos no se modificarán.`, "¿Eliminar filtro favorito?")) return;
+  deleteFavoriteLeagueFilter(filter.id);
+});
 elements.runStatisticalAssistant.addEventListener("click", renderStatisticalAssistant);
 elements.assistantAllHistory.addEventListener("change", () => { elements.assistantMonth.disabled = elements.assistantAllHistory.checked; });
 elements.refreshTeamGoalInsights.addEventListener("click", () => {

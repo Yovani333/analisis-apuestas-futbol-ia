@@ -248,7 +248,7 @@ test("la capa movil final adapta controles, pestañas y ventanas al telefono", (
 });
 
 test("Mis apuestas distribuye sus pestañas sin desbordar y renueva la cache movil", () => {
-  assert.match(html, /styles\.css\?v=20260910-insights-v1/);
+  assert.match(html, /styles\.css\?v=20260913-filters-signals-v1/);
   assert.match(styles, /\.saved-tabs \{[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(min\(180px, 100%\), 1fr\)\)/);
   assert.match(styles, /\.saved-tabs \.button \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*white-space: normal;/);
 });
@@ -309,13 +309,23 @@ test("Mis apuestas incluye parlays de prueba aislados", () => {
 });
 
 test("ligas favoritas, asistente y rendimiento 1X2 quedan conectados sin consultas nuevas", () => {
-  assert.match(html, /id="save-favorite-leagues"[\s\S]*id="apply-favorite-leagues"/);
+  assert.match(html, /id="favorite-league-filter-name"[\s\S]*id="save-favorite-leagues"[\s\S]*id="favorite-league-filters"/);
   assert.match(html, /option value="favorite-leagues">Ligas favoritas/);
   assert.match(html, /data-view-panel="statistical-assistant"[\s\S]*id="run-statistical-assistant"/);
   assert.match(html, /data-saved-tab="outcome-1x2"[\s\S]*id="outcome-1x2-performance"/);
   assert.match(app, /outcomeProbabilities: \{ home: probabilityFor\("home"\), draw: probabilityFor\("draw"\), away: probabilityFor\("away"\) \}/);
   assert.match(app, /buildStatisticalAssistantReport\(\{ picks: state\.savedPicks, parlays: state\.savedParlays/);
   assert.doesNotMatch(app.slice(app.indexOf("function renderStatisticalAssistant"), app.indexOf("function renderOriginPerformance")), /footballDataService|fetch\(/);
+});
+
+test("los filtros nombrados, selección personalizada y retorno al encuentro están conectados", () => {
+  assert.match(app, /state\.preferences\.favoriteLeagueFilters/);
+  assert.match(app, /data-apply-favorite-league-filter/);
+  assert.match(app, /elements\.competition\.value === "custom"[\s\S]*input\.checked = false/);
+  assert.match(app, /function focusSelectedFixtureOnDashboard\(\)[\s\S]*scrollIntoView/);
+  assert.match(app, /calculateVenueFormSignal\(matches/);
+  assert.match(styles, /\.venue-form-signal--positive \{ background: #12a36d; \}/);
+  assert.match(styles, /\.venue-form-signal--negative \{ background: #dc3545; \}/);
 });
 
 test("Picks individuales permite marcar cada selección como prueba", () => {

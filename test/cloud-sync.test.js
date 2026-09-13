@@ -472,3 +472,11 @@ test("sincroniza altas y bajas de equipos favoritos por la revision mas reciente
   assert.equal(merged.preferences.favoriteTeams.find((team) => team.id === "10").active, false);
   assert.equal(merged.preferences.favoriteTeams.find((team) => team.id === "20").active, true);
 });
+
+test("sincroniza la lista completa de filtros de ligas por su revision", () => {
+  const merged = mergeCloudState(
+    { preferences: { favoriteLeagueFiltersUpdatedAt: "2026-09-13T12:00:00Z", favoriteLeagueFilters: [{ id: "local", name: "Europa", leagues: ["la-liga"] }] } },
+    { preferences: { favoriteLeagueFiltersUpdatedAt: "2026-09-13T10:00:00Z", favoriteLeagueFilters: [{ id: "remote", name: "Viejo", leagues: ["mls"] }] } }
+  );
+  assert.deepEqual(merged.preferences.favoriteLeagueFilters, [{ id: "local", name: "Europa", leagues: ["la-liga"] }]);
+});
